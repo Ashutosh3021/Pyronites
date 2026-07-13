@@ -1,0 +1,25 @@
+
+[project]
+name = "pyrocore"
+version = "0.1.0"
+description = "Self-hosted SQLite-based backend platform"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.100.0",
+    "pydantic>=2.0.0",
+    "argon2-cffi>=23.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["pyrocore/backend/tests"]
+pythonpath = ["."]
