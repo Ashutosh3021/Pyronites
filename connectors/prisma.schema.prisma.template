@@ -1,0 +1,19 @@
+
+// Prisma Schema for PyroCore
+// Configure datasource to point to your PyroCore SQLite database
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./pyrocore.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Add your own models below this line
+// model User {
+//   id    String @id @default(cuid())
+//   name  String
+//   email String @unique
+// }

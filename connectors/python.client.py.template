@@ -1,0 +1,30 @@
+
+# pyrocore_client.py
+# Minimal Python wrapper for PyroCore API using requests
+
+import os
+import requests
+from typing import Any, Optional
+
+
+class PyroCoreClient:
+    def __init__(self, api_url: Optional[str] = None, api_key: Optional[str] = None):
+        self.api_url = api_url or os.getenv("PYROCORE_API_URL", "http://localhost:8000")
+        self.api_key = api_key or os.getenv("PYROCORE_API_KEY")
+        self.session = requests.Session()
+        if self.api_key:
+            self.session.headers.update({"Authorization": f"Bearer {self.api_key}"})
+    
+    def request(self, method: str, endpoint: str, **kwargs) -> Any:
+        response = self.session.request(method, f"{self.api_url}{endpoint}", **kwargs)
+        response.raise_for_status()
+        return response.json()
+    
+    def list_tables(self) -> list[dict]:
+        return self.request("GET", "/api/tables")
+    
+    def list_files(self, prefix: Optional[str] = None) -> list[dict]:
+        params = {}
+        if prefix:
+            params["prefix"] = prefix
+        return self.request("GET", "/storage", params=params)
