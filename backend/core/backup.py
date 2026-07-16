@@ -175,7 +175,7 @@ def prune_backups(backup_dir: str, keep: int = 10) -> None:
     """
     # Clamp keep to minimum of 1 and log warning if needed
     if keep < 1:
-        logger.warning(f"Prune backups: keep count {keep} is invalid, clamping to 1")
+        logger.warning("Prune backups: keep count %d is invalid, clamping to 1", keep)
         keep = 1
 
     backups = list_backups(backup_dir)
@@ -272,7 +272,7 @@ def restore_from_backup(backup_path: str, target_db_path: str) -> None:
             else:
                 temp_path.rename(target_file)
 
-            logger.info(f"Successfully restored database from {backup_path} to {target_db_path}")
+            logger.info("Successfully restored database from %s to %s", backup_path, target_db_path)
 
         finally:
             # Clean up temp file if it still exists
@@ -306,9 +306,12 @@ async def scheduled_backup_loop(
     while True:
         try:
             logger.info("Performing scheduled backup")
-            backup_now(db_path, backup_dir)
+            # backup_now() does blocking file + SQLite I/O.  Run it in a worker
+            # thread so it never blocks the asyncio event loop that also serves
+            # HTTP requests — otherwise a large backup would stall the API.
+            await asyncio.to_thread(backup_now, db_path, backup_dir)
             # Prune old backups after creating a new one
-            prune_backups(backup_dir)
+            await asyncio.to_thread(prune_backups, backup_dir)
         except Exception as e:
             # Catch any exception to ensure the loop keeps running
             logger.error("Scheduled backup failed: %s", e, exc_info=True)

@@ -1,7 +1,15 @@
 
 """
-IMPORTANT: Never log raw API keys in this file or anywhere else!
-These are sensitive secrets and must never appear in log files or error messages.
+API key creation, validation, revocation, and listing.
+
+Security notes
+--------------
+- Raw keys are **never** stored.  Only a SHA-256 hash is persisted.
+- Raw keys are **never** logged.  Any ``logger.*`` call in this file must not
+  reference ``raw_key`` or any prefix of it.
+- The ``key_hash`` field on the ``ApiKey`` model is the stored hash.  It is
+  returned in list/validate responses so the caller can verify the hash on
+  their own, but it reveals nothing about the original key.
 """
 import hashlib
 import logging
@@ -12,13 +20,17 @@ from typing import List, Optional, Tuple
 
 from pydantic import BaseModel
 
-from backend.auth.passwords import hash_password, verify_password
 from backend.core.db import Database
 
 logger = logging.getLogger(__name__)
 
 ALLOWED_SCOPES = {"read", "write", "admin"}
 API_KEY_PREFIX = "pyro_live_"
+
+# Maximum length for a key name — anything longer is almost certainly a bug
+# or a padding attack; reject it early rather than storing arbitrary data.
+_MAX_NAME_LEN = 128
+_MAX_PROJECT_ID_LEN = 64
 
 
 class ApiKey(BaseModel):
@@ -37,28 +49,49 @@ def create_api_key(
     project_id: str,
     name: str,
     scopes: List[str],
-) -> Tuple[str, ApiKey]:
+) -> Tuple[str, "ApiKey"]:
     """
-    Create a new API key.
+    Create a new API key and persist only its SHA-256 hash.
+
+    The raw key is returned once and is not stored anywhere.  The caller is
+    responsible for showing it to the user exactly once and discarding it.
 
     Args:
-        db: Database instance to use.
-        project_id: Project ID to associate the key with.
-        name: Human-readable name for the API key.
-        scopes: List of scopes to grant (must be subset of ALLOWED_SCOPES).
+        db: Active database connection.
+        project_id: Identifier of the project this key belongs to.
+        name: Human-readable label (1–128 chars, stripped of whitespace).
+        scopes: Non-empty list of scope strings; must be a subset of
+            ``ALLOWED_SCOPES`` (``"read"``, ``"write"``, ``"admin"``).
 
     Returns:
-        Tuple of (raw_api_key, ApiKey model). Raw key only available once at creation!
+        ``(raw_key, ApiKey)`` — the raw key string and its metadata record.
+        The raw key is **not** stored and cannot be recovered after this call.
 
     Raises:
-        ValueError: If any scope is not in ALLOWED_SCOPES.
+        ValueError: If ``scopes`` is empty, contains unknown values, ``name``
+            is blank/too long, or ``project_id`` is too long.
     """
-    # Validate scopes
+    # ── Input validation ───────────────────────────────────────────────────
+    name = name.strip() if name else ""
+    if not name:
+        raise ValueError("API key name must not be blank")
+    if len(name) > _MAX_NAME_LEN:
+        raise ValueError(f"API key name must be {_MAX_NAME_LEN} characters or fewer")
+
+    project_id = project_id.strip() if project_id else ""
+    if not project_id:
+        raise ValueError("project_id must not be blank")
+    if len(project_id) > _MAX_PROJECT_ID_LEN:
+        raise ValueError(f"project_id must be {_MAX_PROJECT_ID_LEN} characters or fewer")
+
     if not scopes:
         raise ValueError("At least one scope must be specified")
     invalid_scopes = set(scopes) - ALLOWED_SCOPES
     if invalid_scopes:
-        raise ValueError(f"Invalid scopes: {', '.join(invalid_scopes)}. Allowed: {', '.join(ALLOWED_SCOPES)}")
+        raise ValueError(
+            f"Invalid scopes: {', '.join(sorted(invalid_scopes))}. "
+            f"Allowed: {', '.join(sorted(ALLOWED_SCOPES))}"
+        )
 
     key_id = str(uuid.uuid4())
     created_at = datetime.now(timezone.utc)
@@ -101,16 +134,23 @@ def create_api_key(
 def validate_api_key(
     db: Database,
     raw_key: str,
-) -> Optional[ApiKey]:
+) -> Optional["ApiKey"]:
     """
-    Validate an API key and return it if valid.
+    Look up and validate an API key by its raw value.
+
+    Hashes ``raw_key`` before any DB access so the plaintext never reaches the
+    query layer.  Updates ``last_used_at`` on success as a side-effect.
 
     Args:
-        db: Database instance to use.
-        raw_key: Raw API key to validate.
+        db: Active database connection.
+        raw_key: The raw ``pyro_live_…`` token from the request header.
+            Empty strings and tokens with no prefix are handled gracefully
+            (they simply won't match any stored hash).
 
     Returns:
-        ApiKey if valid, None otherwise.
+        ``ApiKey`` metadata if the key exists and is not revoked, else ``None``.
+        Returns ``None`` on any DB error rather than propagating — auth failures
+        must never reveal internal state to callers.
     """
     key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
     try:
@@ -169,11 +209,17 @@ def validate_api_key(
 
 def revoke_api_key(db: Database, key_id: str) -> None:
     """
-    Revoke an API key, immediately invalidating it.
+    Mark an API key as revoked so all subsequent validation calls return ``None``.
+
+    This is a soft delete — the row stays in the DB for audit purposes but
+    ``is_revoked = TRUE`` causes ``validate_api_key`` to reject it immediately.
 
     Args:
-        db: Database instance to use.
-        key_id: ID of API key to revoke.
+        db: Active database connection.
+        key_id: UUID of the key to revoke.
+
+    Raises:
+        DatabaseError: Propagated if the UPDATE fails (e.g. disk full).
     """
     try:
         db.execute("UPDATE api_keys SET is_revoked = ? WHERE id = ?", (True, key_id))
@@ -182,15 +228,22 @@ def revoke_api_key(db: Database, key_id: str) -> None:
         raise
 
 
-def list_api_keys(db: Database) -> List[ApiKey]:
+def list_api_keys(db: Database) -> List["ApiKey"]:
     """
-    List all non-revoked API keys.
+    Return all non-revoked API keys ordered newest-first.
+
+    Note: ``key_hash`` is included in each record so callers can verify the
+    stored hash independently.  The raw key is never returned here — it is
+    shown exactly once at creation time.
 
     Args:
-        db: Database instance to use.
+        db: Active database connection.
 
     Returns:
-        List of ApiKey objects.
+        List of ``ApiKey`` objects; empty list if none exist.
+
+    Raises:
+        DatabaseError: Propagated if the SELECT fails.
     """
     try:
         cursor = db.execute(

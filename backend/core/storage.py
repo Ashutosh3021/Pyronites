@@ -1,12 +1,36 @@
 
-import os
+"""
+Local filesystem file storage backed by a SQLite metadata table.
+
+Design
+------
+Files are stored on disk using their UUID as the filename, completely
+decoupled from the original upload name.  The ``storage_files`` table tracks
+the mapping from UUID → (original_filename, content_type, size, timestamps).
+
+This means:
+- Two uploads of a file with the same name never collide on disk.
+- Renaming a file only requires a DB update, not a filesystem move.
+- The on-disk layout reveals nothing about the content being stored.
+
+The ``project_id`` column isolates files between projects sharing the same
+storage root, so a key from project A cannot be used to read files from B.
+
+Timestamp format
+----------------
+All ``uploaded_at`` values are stored in SQLite as ISO 8601 strings with an
+explicit UTC offset (``+00:00``).  They are always read back via
+``datetime.fromisoformat`` and serialised for the API via ``to_utc_iso`` from
+``backend.api.schemas``.
+"""
+
 import io
-import uuid
 import logging
-from datetime import datetime, timezone
+import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, BinaryIO
+from typing import Any, BinaryIO, List, Optional
 
 from backend.core.db import Database
 
@@ -32,6 +56,25 @@ class FileTooLargeError(ValueError):
 
 
 class LocalFileStorage:
+    """
+    File storage backed by the local filesystem and a SQLite metadata table.
+
+    Each instance is scoped to a single ``project_id`` so that operations
+    on one project cannot touch files belonging to another, even if they share
+    the same ``root_dir``.
+
+    Args:
+        db: Active ``Database`` connection — the same one used by the caller's
+            route, so no second connection is opened.
+        root_dir: Filesystem path under which files are stored.  Created
+            automatically on first use if it does not exist.
+        max_file_size: Maximum accepted upload size in bytes (default 10 MiB).
+            Streams are checked incrementally so memory usage is bounded
+            regardless of upload size.
+        project_id: Scopes all DB queries and disk lookups to this project.
+            Defaults to ``"default"`` for single-project deployments.
+    """
+
     def __init__(
         self,
         db: Database,
@@ -74,7 +117,38 @@ class LocalFileStorage:
         filename: str,
         content_type: str = "application/octet-stream",
     ) -> FileRecord:
-        """Save a file to storage, tracking metadata in the database."""
+        """
+        Persist a file to disk and record its metadata in the database.
+
+        The file is stored under a freshly generated UUID filename (not the
+        original name) so two uploads with the same name never collide.  The
+        original name is preserved in the ``storage_files`` table and returned
+        in every metadata response.
+
+        If writing to disk succeeds but the DB INSERT fails, the disk file is
+        cleaned up before re-raising so there are no orphaned files.
+
+        Args:
+            file_bytes_or_stream: Either raw ``bytes`` or any file-like object
+                with a ``read(n)`` method (e.g. ``UploadFile.file``).  Streams
+                are read in 8 KB chunks so large uploads never load fully into
+                memory before the size limit is checked.
+            filename: Original upload filename used for the metadata record and
+                ``Content-Disposition`` headers on download.  Must not be empty
+                or contain path-traversal sequences (``..``, ``/``, ``\\``).
+            content_type: MIME type of the file.
+
+        Returns:
+            ``FileRecord`` with the assigned ``id``, original filename, size,
+            and UTC upload timestamp.
+
+        Raises:
+            InvalidFilenameError: If ``filename`` is empty or contains path
+                traversal characters.
+            FileTooLargeError: If the content exceeds ``max_file_size``.
+            OSError: If the disk write fails (permissions, disk full, etc.).
+            DatabaseError: If the metadata INSERT fails.
+        """
         self._validate_filename(filename)
         
         file_id = str(uuid.uuid4())
@@ -151,7 +225,24 @@ class LocalFileStorage:
         )
     
     def get(self, file_id: str) -> bytes:
-        """Retrieve file bytes by ID."""
+        """
+        Read the raw bytes of a stored file.
+
+        Verifies that ``file_id`` exists in the metadata table (and belongs to
+        this project) before touching the filesystem, so an attacker cannot
+        read arbitrary files by guessing UUIDs from other projects.
+
+        Args:
+            file_id: UUID assigned at upload time.
+
+        Returns:
+            Raw file bytes.
+
+        Raises:
+            FileNotFoundError: If no record exists for ``file_id`` in this
+                project, or if the on-disk file is missing (orphaned metadata).
+            OSError: If the read fails for any other reason.
+        """
         # First get metadata to ensure it exists and belongs to our project
         cursor = self.db.execute(
             """
@@ -173,7 +264,22 @@ class LocalFileStorage:
             raise
     
     def get_record(self, file_id: str) -> FileRecord:
-        """Retrieve file metadata record by ID."""
+        """
+        Fetch the metadata record for a file without reading its bytes.
+
+        Used by the metadata endpoint and the download endpoint (to get the
+        ``Content-Type`` and ``Content-Disposition`` values before streaming).
+
+        Args:
+            file_id: UUID assigned at upload time.
+
+        Returns:
+            ``FileRecord`` with original filename, content type, size, and
+            UTC upload timestamp.
+
+        Raises:
+            FileNotFoundError: If no record exists for ``file_id`` in this project.
+        """
         cursor = self.db.execute(
             """
             SELECT id, original_filename, content_type, size_bytes, uploaded_at, project_id
@@ -205,7 +311,23 @@ class LocalFileStorage:
         )
     
     def delete(self, file_id: str) -> None:
-        """Delete a file from storage and remove metadata."""
+        """
+        Delete a file from disk and remove its metadata record.
+
+        The disk file is removed first.  If the subsequent DB DELETE fails the
+        file is already gone from disk — the caller gets an exception and the
+        metadata row becomes an orphan.  This is a deliberate trade-off: leaking
+        a dead metadata row is recoverable; leaking an unreferenced disk file
+        full of user data is not.
+
+        Args:
+            file_id: UUID assigned at upload time.
+
+        Raises:
+            FileNotFoundError: If no record exists for ``file_id`` in this project.
+            OSError: If the disk deletion fails.
+            DatabaseError: If the DB DELETE fails.
+        """
         # First check if the file exists
         record = self.get_record(file_id)
         
@@ -227,21 +349,45 @@ class LocalFileStorage:
             logger.error("Failed to delete file metadata from database", exc_info=True)
             raise
     
-    def list(self, prefix: Optional[str] = None) -> List[FileRecord]:
-        """List all files, optionally filtered by filename prefix."""
+    def list(
+        self,
+        prefix: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> List[FileRecord]:
+        """
+        Return metadata records for this project, newest-first.
+
+        Args:
+            prefix: Optional filename prefix filter.  When provided, only files
+                whose ``original_filename`` starts with this string are returned.
+                The filter is applied with a SQL ``LIKE`` clause; special SQL
+                wildcard characters in ``prefix`` are not escaped, so callers
+                should avoid user-supplied values containing ``%`` or ``_``.
+            limit: Optional maximum number of records to return.  When ``None``
+                (the default for non-API callers) all matches are returned.
+            offset: Number of records to skip; only applied when ``limit`` is set.
+
+        Returns:
+            List of ``FileRecord`` objects; empty list when no files match.
+        """
         query = """
             SELECT id, original_filename, content_type, size_bytes, uploaded_at, project_id
             FROM storage_files
             WHERE project_id = ?
         """
-        params = [self.project_id]
-        
+        params: List[Any] = [self.project_id]
+
         if prefix:
             query += " AND original_filename LIKE ?"
             params.append(f"{prefix}%")
-        
+
         query += " ORDER BY uploaded_at DESC"
-        
+
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+
         cursor = self.db.execute(query, tuple(params))
         rows = cursor.fetchall()
         

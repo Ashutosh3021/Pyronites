@@ -13,6 +13,8 @@ const GitHubIcon = () => (
 import { AuthShell } from '@/components/auth-shell'
 import { PasswordStrength } from '@/components/password-strength'
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+
 export default function SignUpPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -39,12 +41,26 @@ export default function SignUpPage() {
     }
 
     setLoading(true)
-    // Simulate account creation — replace with real call
-    await new Promise((r) => setTimeout(r, 700))
-    setLoading(false)
-
-    // After signup, send to project wizard
-    router.push('/new-project')
+    try {
+      const res = await fetch(`${API_BASE}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Signup auto-logs the user in, so include credentials to capture the cookie.
+        credentials: 'include',
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+      })
+      if (res.ok) {
+        // Account created and session established — continue to project wizard.
+        router.push('/new-project')
+        return
+      }
+      const body = await res.json().catch(() => ({}))
+      setError(body?.message ?? 'Could not create account. Try again.')
+    } catch {
+      setError('Could not reach the server. Check your connection and try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

@@ -21,10 +21,18 @@ class PyroCoreClient:
         return response.json()
     
     def list_tables(self) -> list[dict]:
-        return self.request("GET", "/api/tables")
+        return self.request("GET", "/tables")
     
     def list_files(self, prefix: Optional[str] = None) -> list[dict]:
         params = {}
         if prefix:
             params["prefix"] = prefix
         return self.request("GET", "/storage", params=params)
+
+    def execute_sql(self, sql: str) -> dict:
+        """Run raw SQL via the SQL editor endpoint (requires an admin-scoped key).
+
+        Before any destructive statement (DROP/DELETE/TRUNCATE/...) the server
+        takes an automatic backup first.  Returns the structured result dict.
+        """
+        return self.request("POST", "/sql/execute", json={"sql": sql})

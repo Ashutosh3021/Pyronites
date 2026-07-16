@@ -52,10 +52,26 @@ class Database:
 
     def connect(self) -> None:
         """
-        Connect to the SQLite database and configure essential pragmas.
-        
+        Open the SQLite connection and configure pragmas required for safe operation.
+
+        Pragmas applied
+        ---------------
+        - ``journal_mode=WAL`` — Write-Ahead Logging lets readers run
+          concurrently with a single writer, which is critical for FastAPI
+          where many async tasks share one connection.
+        - ``synchronous=NORMAL`` — flushes WAL to disk before committing but
+          does not wait for the WAL file header; a good balance of durability
+          vs. throughput for a single-machine deployment.
+        - ``foreign_keys=ON`` — enforces referential integrity on every write.
+          SQLite disables this by default and the setting is per-connection, so
+          it must be re-applied each time we connect.
+
+        Creates the parent directory of ``db_path`` if it does not exist.
+
         Raises:
-            DatabaseOperationalError: If connection fails (disk full, permission denied, etc.)
+            DatabaseOperationalError: If the connection cannot be opened (wrong
+                path permissions, disk full, path is a directory, etc.) or if
+                any PRAGMA fails.
         """
         try:
             # Create directory if it doesn't exist
@@ -91,7 +107,11 @@ class Database:
 
     def close(self) -> None:
         """
-        Close the database connection safely.
+        Close the database connection, suppressing any SQLite errors on close.
+
+        Safe to call multiple times — a second call on an already-closed
+        connection is a no-op.  After this returns, ``self._connection`` is
+        ``None`` and any further ``execute`` call will raise ``DatabaseError``.
         """
         if self._connection is not None:
             try:
@@ -149,16 +169,22 @@ class Database:
 
     def execute_many(self, sql: str, params_list: List[Tuple[Any, ...]]) -> None:
         """
-        Execute a SQL query multiple times with different parameters (batch operation).
-        
+        Execute the same SQL statement for every row in ``params_list`` in one
+        batch operation, then auto-commit.
+
+        Prefer this over calling ``execute`` in a loop — ``executemany`` is
+        substantially faster for bulk inserts or updates because SQLite only
+        parses and plans the statement once.
+
         Args:
-            sql: SQL query string (use ? for placeholders)
-            params_list: List of parameter tuples, one for each execution
-            
+            sql: Parameterised SQL string (use ``?`` placeholders).
+            params_list: One tuple per row; each tuple must have the same
+                arity as the number of ``?`` placeholders in ``sql``.
+
         Raises:
-            DatabaseOperationalError: For operational issues (locked, disk full)
-            DatabaseIntegrityError: For constraint violations
-            DatabaseError: For other database issues
+            DatabaseOperationalError: Disk full, locked file, etc.
+            DatabaseIntegrityError: Constraint violation on any row.
+            DatabaseError: Any other SQLite error.
         """
         self._ensure_connected()
         with self._lock:
@@ -222,10 +248,14 @@ class Database:
 
     def get_journal_mode(self) -> str:
         """
-        Get the current journal mode of the database.
+        Query the current WAL/journal mode directly from SQLite.
+
+        Useful in tests to confirm that ``connect()`` actually enabled WAL.
+        In production code, prefer trusting the ``connect()`` call rather than
+        probing this after every operation.
 
         Returns:
-            Current journal mode string (should be 'wal')
+            Lowercase journal mode string, e.g. ``"wal"``, ``"delete"``.
         """
         self._ensure_connected()
         with self._lock:

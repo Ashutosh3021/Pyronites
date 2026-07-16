@@ -3,29 +3,120 @@
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
 import { Database, Brackets, Archive, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
+import { useState, useEffect, useCallback } from 'react'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+
+interface Stats {
+  table_count: number
+  file_count: number
+  key_count: number
+  db_size_bytes: number
+  last_backup: string | null
+  project: { project_id: string; project_name: string; backup_interval: string } | null
+}
+
+interface LogEntry {
+  id: string
+  timestamp: string
+  level: 'info' | 'success' | 'warning' | 'error'
+  action: string
+  statusCode?: number
+}
+
+function formatBytes(bytes: number): string {
+  if (!bytes) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let size = bytes
+  let unit = 0
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024
+    unit++
+  }
+  return `${size.toFixed(size >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`
+}
+
+function relativeTime(iso: string | null): string {
+  if (!iso) return 'Never'
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return 'Unknown'
+  const diffMs = Date.now() - then
+  const mins = Math.floor(diffMs / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins} min ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`
+  const days = Math.floor(hrs / 24)
+  return `${days} day${days > 1 ? 's' : ''} ago`
+}
+
+function levelColor(level: string): string {
+  switch (level) {
+    case 'success':
+      return 'var(--success)'
+    case 'warning':
+      return 'var(--warning)'
+    case 'error':
+      return 'var(--error)'
+    default:
+      return 'var(--pyro-orange)'
+  }
+}
 
 export default function OverviewPage() {
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [activity, setActivity] = useState<LogEntry[]>([])
+  const [loadErr, setLoadErr] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoadErr(null)
+    try {
+      const [sRes, lRes] = await Promise.all([
+        fetch(`${API_BASE}/api/stats`, { credentials: 'include' }),
+        fetch(`${API_BASE}/api/logs`, { credentials: 'include' }),
+      ])
+      if (!sRes.ok) throw new Error('stats')
+      const stats = (await sRes.json()) as Stats
+      setStats(stats)
+      if (lRes.ok) {
+        const logs = (await lRes.json()) as LogEntry[]
+        setActivity(logs.slice(0, 5))
+      }
+    } catch {
+      setLoadErr('Could not load overview. Is the backend running on :8000?')
+    }
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const tableCount = stats?.table_count ?? 0
+  const fileCount = stats?.file_count ?? 0
+  const keyCount = stats?.key_count ?? 0
+  const dbSize = stats?.db_size_bytes ?? 0
+
   return (
     <PyroCoreLayout>
       <div className="max-w-6xl space-y-6 lg:space-y-8">
-
-        {/* Header */}
         <div>
           <h1 className="text-2xl lg:text-3xl font-semibold text-foreground mb-2">
             Project Overview
           </h1>
           <p className="text-muted-foreground text-sm">
-            Status and quick access to your backend infrastructure
+            {stats?.project?.project_name
+              ? `Status of ${stats.project.project_name}`
+              : 'Status and quick access to your backend infrastructure'}
           </p>
         </div>
 
-        {/* Status Cards
-            Mobile:  1 column
-            Tablet:  2 columns
-            Desktop: 3 columns */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
+        {loadErr && (
+          <p role="alert" className="text-sm" style={{ color: 'var(--error)' }}>
+            {loadErr}
+          </p>
+        )}
 
-          {/* Database Card */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
           <div className="bg-card border border-border p-5 lg:p-6 hover:border-accent/30 transition-colors">
             <div className="flex items-start justify-between mb-4">
               <h3 className="text-sm font-medium text-foreground">Database</h3>
@@ -34,12 +125,12 @@ export default function OverviewPage() {
             <div className="space-y-3">
               <div>
                 <p className="text-xs text-muted-foreground">File Size</p>
-                <p className="text-lg font-semibold text-foreground">4.2 GB</p>
+                <p className="text-lg font-semibold text-foreground">{formatBytes(dbSize)}</p>
               </div>
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div>
                   <p className="text-muted-foreground">Tables</p>
-                  <p className="text-foreground font-medium">12</p>
+                  <p className="text-foreground font-medium">{tableCount}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Mode</p>
@@ -47,12 +138,11 @@ export default function OverviewPage() {
                 </div>
               </div>
               <div className="pt-2 border-t border-border">
-                <p className="text-xs text-muted-foreground">Last backup: 2 hours ago</p>
+                <p className="text-xs text-muted-foreground">Last backup: {relativeTime(stats?.last_backup ?? null)}</p>
               </div>
             </div>
           </div>
 
-          {/* API Card */}
           <div className="bg-card border border-border p-5 lg:p-6 hover:border-accent/30 transition-colors">
             <div className="flex items-start justify-between mb-4">
               <h3 className="text-sm font-medium text-foreground">API</h3>
@@ -60,26 +150,25 @@ export default function OverviewPage() {
             </div>
             <div className="space-y-3">
               <div>
-                <p className="text-xs text-muted-foreground">Requests (24h)</p>
-                <p className="text-lg font-semibold text-foreground">1,247</p>
+                <p className="text-xs text-muted-foreground">API Keys</p>
+                <p className="text-lg font-semibold text-foreground">{keyCount}</p>
               </div>
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div>
-                  <p className="text-muted-foreground">API Keys</p>
-                  <p className="text-foreground font-medium">3</p>
+                  <p className="text-muted-foreground">Project</p>
+                  <p className="text-foreground font-medium truncate">{stats?.project?.project_id ?? '—'}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Uptime</p>
-                  <p className="text-foreground font-medium">99.9%</p>
+                  <p className="text-muted-foreground">Backup</p>
+                  <p className="text-foreground font-medium">{stats?.project?.backup_interval ?? '—'}</p>
                 </div>
               </div>
               <div className="pt-2 border-t border-border">
-                <p className="text-xs text-muted-foreground">Last request: 2 min ago</p>
+                <p className="text-xs text-muted-foreground">Uptime: —</p>
               </div>
             </div>
           </div>
 
-          {/* Storage Card — full-width on mobile when 2-col (sm breakpoint makes it span 2) */}
           <div className="bg-card border border-border p-5 lg:p-6 hover:border-accent/30 transition-colors sm:col-span-2 lg:col-span-1">
             <div className="flex items-start justify-between mb-4">
               <h3 className="text-sm font-medium text-foreground">Storage</h3>
@@ -87,17 +176,17 @@ export default function OverviewPage() {
             </div>
             <div className="space-y-3">
               <div>
-                <p className="text-xs text-muted-foreground">Total Used</p>
-                <p className="text-lg font-semibold text-foreground">18.5 GB</p>
+                <p className="text-xs text-muted-foreground">Files</p>
+                <p className="text-lg font-semibold text-foreground">{fileCount}</p>
               </div>
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div>
-                  <p className="text-muted-foreground">Files</p>
-                  <p className="text-foreground font-medium">47</p>
+                  <p className="text-muted-foreground">Total Used</p>
+                  <p className="text-foreground font-medium">{formatBytes(dbSize)}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Location</p>
-                  <p className="text-foreground font-medium">Local</p>
+                  <p className="text-foreground font-medium capitalize">{stats?.project?.storage_location ?? 'Local'}</p>
                 </div>
               </div>
               <div className="pt-2 border-t border-border">
@@ -107,39 +196,30 @@ export default function OverviewPage() {
           </div>
         </div>
 
-        {/* Recent Activity */}
         <div>
           <h2 className="text-base lg:text-lg font-semibold text-foreground mb-4">Recent Activity</h2>
           <div className="bg-card border border-border divide-y divide-border">
-            {[
-              { time: '14:32', action: 'Table `posts` created', type: 'creation' },
-              { time: '13:15', action: 'Backup completed', type: 'completion' },
-              { time: '12:48', action: 'API key revoked', type: 'failure' },
-              { time: '10:22', action: 'User session created', type: 'creation' },
-            ].map((item, idx) => (
-              <div key={idx} className="flex items-center hover:bg-muted/30 transition-colors overflow-hidden min-h-[52px]">
-                {/* Left-edge color marker */}
-                <div
-                  className="w-1 self-stretch flex-shrink-0"
-                  style={{
-                    backgroundColor:
-                      item.type === 'creation'   ? 'var(--pyro-orange)'
-                    : item.type === 'completion' ? 'var(--success)'
-                    : 'var(--error)',
-                  }}
-                />
-                <div className="flex items-center gap-3 lg:gap-4 px-4 lg:px-5 py-3 flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground font-mono w-10 lg:w-12 flex-shrink-0">{item.time}</p>
-                  <p className="text-sm text-foreground truncate">{item.action}</p>
+            {activity.length === 0 ? (
+              <div className="px-4 py-3 text-sm text-muted-foreground">No recent activity.</div>
+            ) : (
+              activity.map((item) => (
+                <div key={item.id} className="flex items-center hover:bg-muted/30 transition-colors overflow-hidden min-h-[52px]">
+                  <div
+                    className="w-1 self-stretch flex-shrink-0"
+                    style={{ backgroundColor: levelColor(item.level) }}
+                  />
+                  <div className="flex items-center gap-3 lg:gap-4 px-4 lg:px-5 py-3 flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground font-mono w-24 lg:w-32 flex-shrink-0">
+                      {item.timestamp?.replace('T', ' ').slice(0, 19)}
+                    </p>
+                    <p className="text-sm text-foreground truncate">{item.action}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
-        {/* Quick Actions
-            Mobile:  2 columns
-            Desktop: 4 columns */}
         <div>
           <h2 className="text-base lg:text-lg font-semibold text-foreground mb-4">Quick Actions</h2>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

@@ -85,7 +85,6 @@ def validate_session(db: Database, token: str) -> Optional[User]:
     Returns:
         User if session is valid, None otherwise.
     """
-    import hashlib
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     try:
         cursor = db.execute(
@@ -123,7 +122,6 @@ def revoke_session(db: Database, token: str) -> None:
         db: Database instance to use.
         token: Session token to revoke.
     """
-    import hashlib
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     try:
         db.execute("DELETE FROM sessions WHERE token = ?", (token_hash,))

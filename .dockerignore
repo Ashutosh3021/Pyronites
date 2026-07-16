@@ -1,0 +1,26 @@
+# Keep the Docker build context small and avoid leaking local state.
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.git/
+.gitignore
+
+# Local dev database / storage / backups — never bake these into the image.
+*.db
+*.db-wal
+*.db-shm
+pyrocore.db
+storage_files/
+backups/
+
+# Frontend assets (built separately if you deploy the dashboard)
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+frontend/.env.production
+
+# Editor / OS cruft
+.vscode/
+.idea/
+.DS_Store

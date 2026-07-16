@@ -1,0 +1,52 @@
+# Fly.io deployment config for PyroCore
+#
+# Target host chosen because the `fly` CLI was available in the build
+# environment.  Deploy steps (after `fly auth login`):
+#   1. fly launch --no-deploy --copy-config   # or just `fly apps create pyrocore`
+#   2. fly volumes create pyrocore_data --region <region> --size 1
+#   3. fly deploy
+#
+# NOTE: replace <region> below with the region you created the volume in
+# (e.g. iad, lax, fra).  `fly regions list` shows options.
+
+app = "pyrocore"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # Bind inside the container on all interfaces; the platform injects $PORT.
+  HOST = "0.0.0.0"
+  # Do NOT set PORT here — Fly injects it at runtime and the Dockerfile/uvicorn
+  # read $PORT, so the app binds exactly what Fly expects.
+  DATABASE_PATH = "/data/pyrocore.db"
+  MIGRATIONS_DIR = "/app/backend/migrations"
+  STORAGE_ROOT = "/data/storage_files"
+  # CORS: the origin the dashboard is served from.  Comma-separate multiple.
+  # WITHOUT this the backend only allows http://localhost:3000 and every
+  # cross-origin dashboard request is blocked by the browser.
+  FRONTEND_ORIGIN = "https://your-frontend.example.com"
+  # Cookie policy for a cross-origin HTTPS dashboard (credentials: 'include').
+  # SameSite=None REQUIRES Secure; the app forces Secure when samesite=none.
+  SESSION_COOKIE_SECURE = "true"
+  SESSION_COOKIE_SAMESITE = "none"
+  # Backups: immediate on startup, then every hour.  Lower this (e.g. 300) to
+  # verify the scheduled backup loop quickly after first deploy.
+  BACKUP_INTERVAL_SECONDS = "3600"
+
+# Persist the DB / storage / backups across deploys & restarts.
+# The volume name MUST match `fly volumes create pyrocore_data ...` below.
+[mounts]
+  source = "pyrocore_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_redirect_to_https = true
+
+[[vm]]
+  size = "shared-cpu-1x"
+  cpus = 1
+  memory = "256mb"

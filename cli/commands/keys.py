@@ -1,5 +1,4 @@
 
-import os
 import sys
 from pathlib import Path
 
@@ -7,47 +6,7 @@ import click
 
 from backend.core.db import Database
 from backend.auth.api_keys import create_api_key, revoke_api_key, list_api_keys
-
-
-def error(message, verbose=False):
-    """Print an error message and exit with non-zero code."""
-    click.secho(f"Error: {message}", fg="red", err=True)
-    sys.exit(1)
-
-
-def find_pyrocore_config():
-    """Find pyrocore.toml in current or parent directories."""
-    current = Path.cwd()
-    while current != current.parent:
-        config_path = current / "pyrocore.toml"
-        if config_path.exists():
-            return config_path
-        current = current.parent
-    error("Could not find pyrocore.toml in current or parent directories")
-
-
-def read_config(config_path):
-    """Read and parse pyrocore.toml."""
-    config = {"database": {}}
-    try:
-        content = config_path.read_text()
-        for line in content.splitlines():
-            line = line.strip()
-            if line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            key = key.strip()
-            value = value.strip().strip('"').strip("'")
-            if key == "path":
-                config["database"]["path"] = value
-    except Exception as e:
-        error(f"Failed to read config file: {e}")
-    
-    # Default values
-    if "path" not in config["database"]:
-        config["database"]["path"] = "pyrocore.db"
-    
-    return config
+from cli.config import find_pyrocore_config, read_config, error
 
 
 @click.group()

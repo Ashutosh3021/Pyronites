@@ -1,19 +1,13 @@
 
-import os
-import sys
 from pathlib import Path
 
 import click
 
+from cli.config import error
+
 
 # Find the connectors directory relative to this file
 CONNECTORS_DIR = Path(__file__).parent.parent.parent / "connectors"
-
-
-def error(message, verbose=False):
-    """Print an error message and exit with non-zero code."""
-    click.secho(f"Error: {message}", fg="red", err=True)
-    sys.exit(1)
 
 
 def _read_template(path: Path) -> str:

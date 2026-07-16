@@ -1,75 +1,111 @@
+"""
+Database migration runner.
+
+Design
+------
+Migrations are plain ``.sql`` files stored in a ``migrations/`` directory.
+Each file is named with a zero-padded numeric prefix (e.g. ``0001_init.sql``)
+that determines execution order.  Once applied, the migration ID is recorded in
+the ``migrations`` table so it is never re-executed.
+
+All SQL in a single migration file is applied atomically: if any statement
+fails the transaction rolls back and the migration ID is NOT recorded, leaving
+the schema in a consistent pre-migration state.
+
+Thread safety: the caller is responsible for not running two migration passes
+concurrently against the same DB.  In practice this only runs once at startup,
+so it is not a concern.
+"""
 
 import glob
+import logging
 import os
 import re
-from datetime import datetime
 from typing import List, Set
+
 from .db import Database, DatabaseError
+
+logger = logging.getLogger(__name__)
 
 
 def get_migration_files(migrations_dir: str) -> List[str]:
     """
-    Get a list of migration files in the given directory, sorted numerically.
-    
+    Return all ``.sql`` migration files in ``migrations_dir``, sorted by their
+    numeric prefix so they are always applied in the correct order.
+
+    Files without a leading numeric prefix sort to position 0 (before any
+    numbered file) and will trigger a ``ValueError`` in
+    ``extract_migration_id`` — this is intentional to catch misnamed files
+    early rather than silently skipping them.
+
     Args:
-        migrations_dir: Path to directory containing migration files
-        
+        migrations_dir: Filesystem path to the directory containing ``*.sql`` files.
+
     Returns:
-        Sorted list of migration file paths
+        Sorted list of absolute file paths; empty list if the directory does
+        not exist or contains no ``.sql`` files.
     """
     if not os.path.exists(migrations_dir):
         return []
-    
+
     pattern = os.path.join(migrations_dir, "*.sql")
     files = glob.glob(pattern)
-    
-    # Sort migration files numerically based on their ID prefix
-    def migration_sort_key(file_path: str) -> int:
+
+    def _sort_key(file_path: str) -> int:
         filename = os.path.basename(file_path)
         match = re.match(r"^(\d+)", filename)
-        if match:
-            return int(match.group(1))
-        return 0  # Fallback for invalid filenames
-    
-    return sorted(files, key=migration_sort_key)
+        return int(match.group(1)) if match else 0
+
+    return sorted(files, key=_sort_key)
 
 
 def extract_migration_id(file_path: str) -> str:
     """
-    Extract migration ID from a migration file path.
-    
+    Extract the migration ID from a filename.
+
+    The ID is the leading digit sequence before the first underscore, e.g.
+    ``"0001"`` from ``"0001_init.sql"``.  This string is what gets stored in
+    the ``migrations`` table and compared during the pending-check.
+
     Args:
-        file_path: Path to migration file
-        
+        file_path: Path to the migration file.
+
     Returns:
-        Migration ID (e.g., "0001" from "0001_init.sql")
+        The numeric prefix as a string (preserving leading zeros).
+
+    Raises:
+        ValueError: If the filename does not start with one or more digits.
     """
     filename = os.path.basename(file_path)
     match = re.match(r"^(\d+)", filename)
     if match:
         return match.group(1)
-    raise ValueError(f"Invalid migration filename: {filename}")
+    raise ValueError(
+        f"Invalid migration filename: {filename!r}. "
+        "Expected a leading numeric prefix, e.g. '0001_description.sql'."
+    )
 
 
 def get_applied_migrations(db: Database) -> Set[str]:
     """
-    Get set of migrations that have already been applied.
-    
+    Query the ``migrations`` table for IDs that have already been applied.
+
+    Returns an empty set rather than raising if the ``migrations`` table does
+    not yet exist — this is the expected state for a brand-new database before
+    the first migration runs.
+
     Args:
-        db: Database instance
-        
+        db: Active database connection.
+
     Returns:
-        Set of applied migration IDs
+        Set of applied migration ID strings (e.g. ``{"0001", "0002"}``).
     """
     try:
-        # First check if migrations table exists
         cursor = db.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='migrations'"
         )
         if not cursor.fetchone():
             return set()
-        
-        # Get applied migrations
         cursor = db.execute("SELECT id FROM migrations")
         return {row[0] for row in cursor.fetchall()}
     except DatabaseError:
@@ -78,72 +114,43 @@ def get_applied_migrations(db: Database) -> Set[str]:
 
 def apply_migration(db: Database, file_path: str) -> None:
     """
-    Apply a single migration file within a transaction.
-    
+    Read and apply a single migration file inside an atomic transaction.
+
+    The SQL file is split on semicolons (with comment lines stripped) and
+    each statement is executed in order.  If any statement raises, the
+    entire transaction is rolled back and the migration ID is NOT recorded,
+    so the next startup will retry from scratch.
+
     Args:
-        db: Database instance
-        file_path: Path to migration SQL file
-        
+        db: Active database connection.
+        file_path: Absolute or relative path to the ``.sql`` file.
+
     Raises:
-        DatabaseError: If migration fails
+        DatabaseError: Wraps any SQL or I/O error, including the original
+            exception as ``__cause__`` for full traceability.
     """
     migration_id = extract_migration_id(file_path)
     migration_name = os.path.basename(file_path)
-    
+    logger.info("Applying migration %s", migration_name)
+
     try:
-        # Read migration SQL
         with open(file_path, "r", encoding="utf-8") as f:
             sql_content = f.read()
-        
-        # Split into individual statements (basic splitting, handles comments)
-        statements = []
-        current_statement = []
-        in_comment = False
-        
-        for line in sql_content.splitlines():
-            line = line.strip()
-            
-            # Skip empty lines
-            if not line:
-                continue
-                
-            # Skip comment-only lines
-            if line.startswith("--"):
-                continue
-                
-            # Handle multi-line comments (basic support)
-            if "/*" in line:
-                in_comment = True
-            if "*/" in line:
-                in_comment = False
-                line = line.split("*/", 1)[1].strip()
-                if not line:
-                    continue
-            if in_comment:
-                continue
-                
-            current_statement.append(line)
-            
-            # If line ends with semicolon, we have a complete statement
-            if line.endswith(";"):
-                full_statement = " ".join(current_statement).strip()
-                if full_statement:
-                    statements.append(full_statement)
-                current_statement = []
-        
-        # Apply migration in transaction
+
+        statements = _parse_statements(sql_content)
+
         with db.transaction() as conn:
-            # Execute each statement individually
             for statement in statements:
                 conn.execute(statement)
-            
-            # Record migration as applied
             conn.execute(
                 "INSERT INTO migrations (id, name) VALUES (?, ?)",
-                (migration_id, migration_name)
+                (migration_id, migration_name),
             )
-            
+
+        logger.info("Migration %s applied successfully", migration_name)
+
     except Exception as e:
+        logger.error("Migration %s failed: %s", migration_name, e, exc_info=True)
         raise DatabaseError(
             f"Failed to apply migration {migration_name}: {e}"
         ) from e
@@ -151,17 +158,83 @@ def apply_migration(db: Database, file_path: str) -> None:
 
 def run_pending_migrations(db: Database, migrations_dir: str) -> None:
     """
-    Run all pending migrations in order.
-    
+    Apply every migration in ``migrations_dir`` that has not yet been run.
+
+    Migrations are applied in numeric-prefix order.  Already-applied
+    migrations are skipped based on the IDs recorded in the ``migrations``
+    table (see ``get_applied_migrations``).
+
+    This function is called once at server startup (see ``backend/app.py``)
+    and also via ``pyrocore db push``.  It is idempotent: calling it multiple
+    times on an up-to-date database is safe and does nothing.
+
     Args:
-        db: Database instance
-        migrations_dir: Path to directory containing migration files
+        db: Active database connection.
+        migrations_dir: Filesystem path to the directory containing the
+            ``.sql`` migration files.
     """
     migration_files = get_migration_files(migrations_dir)
-    applied_migrations = get_applied_migrations(db)
-    
-    for file_path in migration_files:
-        migration_id = extract_migration_id(file_path)
-        if migration_id not in applied_migrations:
-            apply_migration(db, file_path)
+    applied = get_applied_migrations(db)
+    pending = [f for f in migration_files if extract_migration_id(f) not in applied]
 
+    if not pending:
+        logger.debug("No pending migrations in %s", migrations_dir)
+        return
+
+    logger.info(
+        "Running %d pending migration(s) from %s", len(pending), migrations_dir
+    )
+    for file_path in pending:
+        apply_migration(db, file_path)
+
+    logger.info("All migrations complete")
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+def _parse_statements(sql_content: str) -> List[str]:
+    """
+    Split a SQL file into individual executable statements.
+
+    Rules:
+    - Lines that are empty or start with ``--`` are skipped.
+    - ``/* ... */`` block comments are stripped (single-line only for now).
+    - A statement ends when a line ends with ``;``.
+
+    Args:
+        sql_content: Raw content of a ``.sql`` file.
+
+    Returns:
+        List of non-empty SQL statement strings, each ending with ``;``.
+    """
+    statements: List[str] = []
+    current: List[str] = []
+    in_block_comment = False
+
+    for line in sql_content.splitlines():
+        line = line.strip()
+
+        if not line:
+            continue
+        if line.startswith("--"):
+            continue
+        if "/*" in line:
+            in_block_comment = True
+        if "*/" in line:
+            in_block_comment = False
+            line = line.split("*/", 1)[1].strip()
+            if not line:
+                continue
+        if in_block_comment:
+            continue
+
+        current.append(line)
+        if line.endswith(";"):
+            stmt = " ".join(current).strip()
+            if stmt:
+                statements.append(stmt)
+            current = []
+
+    return statements

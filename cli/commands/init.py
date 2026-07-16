@@ -1,16 +1,9 @@
 
-import os
-import sys
-import shutil
 from pathlib import Path
 
 import click
 
-
-def error(message, verbose=False):
-    """Print an error message and exit with non-zero code."""
-    click.secho(f"Error: {message}", fg="red", err=True)
-    sys.exit(1)
+from cli.config import error
 
 
 @click.command()
@@ -23,6 +16,8 @@ def init(project_name, verbose):
     PROJECT_NAME: Name of the project (and directory to create)
     """
     try:
+        if not project_name or not project_name.strip():
+            error("Project name must not be empty")
         project_path = Path(project_name)
 
         # Check if target directory exists and is not empty
