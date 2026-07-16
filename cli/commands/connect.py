@@ -16,25 +16,36 @@ def error(message, verbose=False):
     sys.exit(1)
 
 
+def _read_template(path: Path) -> str:
+    """Read a connector template file, raising a clean error if it's missing."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            f"Template file not found: {path}. "
+            "Your PyroCore installation may be incomplete."
+        )
+
+
 def get_nextjs_files():
     """Get Next.js template files from connectors dir."""
     return [
-        (".env.local", (CONNECTORS_DIR / "nextjs.env.local.template").read_text()),
-        ("lib/pyrocore.ts", (CONNECTORS_DIR / "nextjs.pyrocore.ts.template").read_text()),
+        (".env.local", _read_template(CONNECTORS_DIR / "nextjs.env.local.template")),
+        ("lib/pyrocore.ts", _read_template(CONNECTORS_DIR / "nextjs.pyrocore.ts.template")),
     ]
 
 
 def get_python_files():
     """Get Python template file from connectors dir."""
     return [
-        ("pyrocore_client.py", (CONNECTORS_DIR / "python.client.py.template").read_text()),
+        ("pyrocore_client.py", _read_template(CONNECTORS_DIR / "python.client.py.template")),
     ]
 
 
 def get_prisma_files():
     """Get Prisma template file from connectors dir."""
     return [
-        ("schema.prisma", (CONNECTORS_DIR / "prisma.schema.prisma.template").read_text()),
+        ("schema.prisma", _read_template(CONNECTORS_DIR / "prisma.schema.prisma.template")),
     ]
 
 

@@ -56,12 +56,14 @@ def verify_password(plain: str, hashed: str) -> bool:
 
     Returns:
         True if the password matches, False otherwise.
+        Returns False (never raises) on malformed hashes or Argon2 errors so
+        callers always get a consistent boolean result.
     """
     try:
         return PH.verify(hashed, plain)
     except argon2.exceptions.VerifyMismatchError:
         return False
-    except argon2.exceptions.Argon2Error as e:
+    except (argon2.exceptions.InvalidHashError, argon2.exceptions.Argon2Error) as e:
         logger.error("Failed to verify password", exc_info=True)
         return False
 

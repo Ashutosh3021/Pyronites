@@ -120,3 +120,28 @@ def test_list_files(storage):
     records = storage.list(prefix="file1")
     assert len(records) == 1
     assert records[0].original_filename == "file1.txt"
+
+
+def test_reject_oversized_bytes(storage):
+    """Direct bytes input exceeding max_file_size must also be rejected."""
+    large_content = b"x" * 2048  # 2 KB > 1 KB limit set in fixture
+    with pytest.raises(FileTooLargeError):
+        storage.save(large_content, "too_big.txt")
+
+
+def test_reject_empty_filename(storage):
+    """An empty filename string should be treated as invalid."""
+    with pytest.raises(InvalidFilenameError):
+        storage.save(b"data", "")
+
+
+def test_get_nonexistent_file_raises(storage):
+    """get() with an unknown id must raise FileNotFoundError."""
+    with pytest.raises(FileNotFoundError):
+        storage.get("00000000-0000-0000-0000-000000000000")
+
+
+def test_delete_nonexistent_file_raises(storage):
+    """delete() with an unknown id must raise FileNotFoundError."""
+    with pytest.raises(FileNotFoundError):
+        storage.delete("00000000-0000-0000-0000-000000000000")

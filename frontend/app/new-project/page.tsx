@@ -68,15 +68,21 @@ interface WizardState {
   showAdminPassword: boolean
   // Step 3
   enablePublicApi: boolean
-  // Derived — generated once
-  initialApiKey: string
 }
+
+// The initial API key is issued by the server on project creation.
+// We show a masked placeholder during the wizard so the user knows a key
+// will be generated — the real value is displayed after the POST succeeds.
+const API_KEY_PLACEHOLDER = 'pyro_live_••••••••••••••••••••'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function NewProjectPage() {
   const router = useRouter()
   const [step, setStep] = useState<StepIndex>(0)
   const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
   const [copiedField, setCopiedField] = useState<string | null>(null)
 
   const [state, setState] = useState<WizardState>(() => ({
@@ -88,7 +94,6 @@ export default function NewProjectPage() {
     adminPasswordMode: 'generated',
     showAdminPassword: false,
     enablePublicApi: true,
-    initialApiKey: `pyro_live_${Math.random().toString(36).slice(2, 20)}`,
   }))
 
   // Keep projectId in sync with projectName
@@ -122,9 +127,32 @@ export default function NewProjectPage() {
   // ── Final submit ─────────────────────────────────────────────────────────
   const handleCreate = async () => {
     setCreating(true)
-    // SQLite file creation is near-instant; minimal simulated round-trip
-    await new Promise((r) => setTimeout(r, 500))
-    router.push('/')
+    setCreateError(null)
+    try {
+      const res = await fetch(`${API_BASE}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          project_id: state.projectId,
+          project_name: state.projectName,
+          storage_location: state.storageLocation,
+          backup_interval: state.backupInterval,
+          admin_password: state.adminPassword,
+          enable_public_api: state.enablePublicApi,
+        }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setCreateError(body?.message ?? `Server error (${res.status}). Please try again.`)
+        return
+      }
+      router.push('/')
+    } catch {
+      setCreateError('Could not reach the server. Check your connection and try again.')
+    } finally {
+      setCreating(false)
+    }
   }
 
   // ── Step header ──────────────────────────────────────────────────────────
@@ -426,31 +454,20 @@ export default function NewProjectPage() {
               <div>
                 <h2 className="text-lg font-semibold text-foreground mb-1">API & access</h2>
                 <p className="text-sm text-muted-foreground">
-                  An initial API key has been generated for your project.
+                  An initial API key will be generated when you create the project.
                 </p>
               </div>
 
-              {/* Initial API key — masked + copy, same pattern as API Keys page */}
+              {/* Initial API key — shown as placeholder until project is created */}
               <div className="space-y-1.5">
                 <label className="block text-sm font-medium text-foreground">
                   Initial API key
                 </label>
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2 bg-background border border-border p-3 min-h-[44px]">
-                    <code className="flex-1 text-sm font-mono text-foreground truncate">
-                      {state.initialApiKey.slice(0, 12)}••••••••••••
+                  <div className="flex items-center gap-2 bg-muted/10 border border-border p-3 min-h-[44px]">
+                    <code className="flex-1 text-sm font-mono text-muted-foreground truncate">
+                      {API_KEY_PLACEHOLDER}
                     </code>
-                    <button
-                      type="button"
-                      onClick={() => copyText(state.initialApiKey, 'apiKey')}
-                      className="p-1.5 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 min-w-[36px] min-h-[36px] flex items-center justify-center"
-                      aria-label="Copy API key"
-                    >
-                      {copiedField === 'apiKey'
-                        ? <Check className="w-3.5 h-3.5" style={{ color: 'var(--success)' }} />
-                        : <Copy className="w-3.5 h-3.5" />
-                      }
-                    </button>
                   </div>
                   {/* Key metadata row */}
                   <div className="flex items-center gap-3 px-1">
@@ -460,7 +477,7 @@ export default function NewProjectPage() {
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  You can create more keys with different scopes anytime from the dashboard.
+                  The full key is shown once after creation. You can create more keys with different scopes anytime from the dashboard.
                 </p>
               </div>
 
@@ -532,8 +549,8 @@ export default function NewProjectPage() {
                   },
                   {
                     label: 'API key',
-                    value: `${state.initialApiKey.slice(0, 12)}••••`,
-                    mono: true,
+                    value: 'Generated on creation',
+                    mono: false,
                   },
                 ].map(({ label, value, mono }) => (
                   <div key={label} className="flex items-baseline gap-4 px-4 py-3">
@@ -549,47 +566,55 @@ export default function NewProjectPage() {
         </div>
 
         {/* ── FOOTER — Back / Next / Create ─────────────────────────── */}
-        <div className="px-6 sm:px-8 py-5 border-t border-border flex items-center justify-between gap-3">
-          {/* Back — ghost style, invisible on step 0 to preserve layout */}
-          <button
-            type="button"
-            onClick={() => setStep((s) => (s - 1) as StepIndex)}
-            disabled={step === 0}
-            className={[
-              'px-4 py-2 text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors min-h-[44px]',
-              step === 0 ? 'invisible' : '',
-            ].join(' ')}
-          >
-            Back
-          </button>
-
-          {/* Next / Create */}
-          {step < 3 ? (
-            <button
-              type="button"
-              onClick={() => setStep((s) => (s + 1) as StepIndex)}
-              disabled={!canAdvance()}
-              className="btn-primary min-h-[44px] px-6 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleCreate}
-              disabled={creating}
-              className="btn-primary min-h-[44px] px-6 flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              {creating ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin flex-shrink-0" />
-                  Creating project…
-                </>
-              ) : (
-                'Create project'
-              )}
-            </button>
+        <div className="px-6 sm:px-8 py-5 border-t border-border flex flex-col gap-3">
+          {/* Server error from the create call */}
+          {createError && (
+            <p role="alert" className="text-sm text-center" style={{ color: 'var(--error)' }}>
+              {createError}
+            </p>
           )}
+          <div className="flex items-center justify-between gap-3">
+            {/* Back — ghost style, invisible on step 0 to preserve layout */}
+            <button
+              type="button"
+              onClick={() => setStep((s) => (s - 1) as StepIndex)}
+              disabled={step === 0}
+              className={[
+                'px-4 py-2 text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors min-h-[44px]',
+                step === 0 ? 'invisible' : '',
+              ].join(' ')}
+            >
+              Back
+            </button>
+
+            {/* Next / Create */}
+            {step < 3 ? (
+              <button
+                type="button"
+                onClick={() => setStep((s) => (s + 1) as StepIndex)}
+                disabled={!canAdvance()}
+                className="btn-primary min-h-[44px] px-6 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={creating}
+                className="btn-primary min-h-[44px] px-6 flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {creating ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin flex-shrink-0" />
+                    Creating project…
+                  </>
+                ) : (
+                  'Create project'
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </AuthShell>

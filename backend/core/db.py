@@ -1,5 +1,6 @@
 
 import sqlite3
+import threading
 from contextlib import contextmanager
 from typing import Any, Iterator, List, Tuple
 import os
@@ -23,18 +24,31 @@ class DatabaseIntegrityError(DatabaseError):
 class Database:
     """
     Wrapper around a single SQLite database connection.
-    Provides safe query execution, transactions, and proper configuration.
+
+    Thread safety
+    -------------
+    A single ``Database`` instance may be shared across threads (e.g. the
+    FastAPI request handler thread and the backup-loop asyncio task).
+    ``check_same_thread=False`` disables SQLite's own thread check, but that
+    only removes the *assertion* — it doesn't make the underlying connection
+    safe.  We protect every public operation with ``self._lock`` so only one
+    caller executes SQL at a time.  The lock is re-entrant so that the
+    ``transaction()`` context manager can safely call helper methods internally
+    without deadlocking.
     """
 
     def __init__(self, db_path: str):
         """
         Initialize the Database wrapper with a path to the SQLite file.
-        
+
         Args:
             db_path: Path to the SQLite database file (will be created if it doesn't exist)
         """
         self.db_path = db_path
         self._connection: sqlite3.Connection | None = None
+        # RLock (re-entrant) lets the same thread acquire the lock multiple times,
+        # which is necessary when transaction() calls execute() internally.
+        self._lock = threading.RLock()
 
     def connect(self) -> None:
         """
@@ -96,37 +110,42 @@ class Database:
     def execute(self, sql: str, params: Tuple[Any, ...] = ()) -> sqlite3.Cursor:
         """
         Execute a single SQL query with parameterized inputs.
-        
+
+        NOTE: This method auto-commits.  For multi-statement atomicity use the
+        transaction() context manager instead.
+
         Args:
             sql: SQL query string (use ? for placeholders)
             params: Tuple of parameters to substitute into placeholders
-            
+
         Returns:
             SQLite cursor with query results
-            
+
         Raises:
             DatabaseOperationalError: For operational issues (locked, disk full)
             DatabaseIntegrityError: For constraint violations
             DatabaseError: For other database issues
         """
         self._ensure_connected()
-        try:
-            cursor = self._connection.cursor()
-            cursor.execute(sql, params)
-            self._connection.commit()
-            return cursor
-        except sqlite3.OperationalError as e:
-            raise DatabaseOperationalError(
-                f"Operational error executing SQL: {e}\nSQL: {sql}"
-            ) from e
-        except sqlite3.IntegrityError as e:
-            raise DatabaseIntegrityError(
-                f"Integrity error executing SQL: {e}\nSQL: {sql}"
-            ) from e
-        except sqlite3.Error as e:
-            raise DatabaseError(
-                f"Database error executing SQL: {e}\nSQL: {sql}"
-            ) from e
+        with self._lock:
+            try:
+                cursor = self._connection.cursor()
+                cursor.execute(sql, params)
+                self._connection.commit()
+                return cursor
+            except sqlite3.OperationalError as e:
+                # Include SQL in the message to aid debugging, but NOT params (may contain secrets)
+                raise DatabaseOperationalError(
+                    f"Operational error executing SQL: {e}\nSQL: {sql}"
+                ) from e
+            except sqlite3.IntegrityError as e:
+                raise DatabaseIntegrityError(
+                    f"Integrity error executing SQL: {e}\nSQL: {sql}"
+                ) from e
+            except sqlite3.Error as e:
+                raise DatabaseError(
+                    f"Database error executing SQL: {e}\nSQL: {sql}"
+                ) from e
 
     def execute_many(self, sql: str, params_list: List[Tuple[Any, ...]]) -> None:
         """
@@ -142,27 +161,31 @@ class Database:
             DatabaseError: For other database issues
         """
         self._ensure_connected()
-        try:
-            cursor = self._connection.cursor()
-            cursor.executemany(sql, params_list)
-            self._connection.commit()
-        except sqlite3.OperationalError as e:
-            raise DatabaseOperationalError(
-                f"Operational error in execute_many: {e}\nSQL: {sql}"
-            ) from e
-        except sqlite3.IntegrityError as e:
-            raise DatabaseIntegrityError(
-                f"Integrity error in execute_many: {e}\nSQL: {sql}"
-            ) from e
-        except sqlite3.Error as e:
-            raise DatabaseError(
-                f"Database error in execute_many: {e}\nSQL: {sql}"
-            ) from e
+        with self._lock:
+            try:
+                cursor = self._connection.cursor()
+                cursor.executemany(sql, params_list)
+                self._connection.commit()
+            except sqlite3.OperationalError as e:
+                raise DatabaseOperationalError(
+                    f"Operational error in execute_many: {e}\nSQL: {sql}"
+                ) from e
+            except sqlite3.IntegrityError as e:
+                raise DatabaseIntegrityError(
+                    f"Integrity error in execute_many: {e}\nSQL: {sql}"
+                ) from e
+            except sqlite3.Error as e:
+                raise DatabaseError(
+                    f"Database error in execute_many: {e}\nSQL: {sql}"
+                ) from e
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
         """
         Context manager for atomic transactions.
+
+        The lock is held for the entire duration of the transaction so no
+        other caller can interleave statements between BEGIN and COMMIT/ROLLBACK.
         
         Yields:
             SQLite connection for use in the transaction
@@ -173,38 +196,39 @@ class Database:
             DatabaseError: For other database issues
         """
         self._ensure_connected()
-        try:
-            # Begin explicit transaction
-            self._connection.execute("BEGIN TRANSACTION")
-            yield self._connection
-            self._connection.commit()
-        except sqlite3.OperationalError as e:
-            self._connection.rollback()
-            raise DatabaseOperationalError(
-                f"Operational error in transaction: {e}"
-            ) from e
-        except sqlite3.IntegrityError as e:
-            self._connection.rollback()
-            raise DatabaseIntegrityError(
-                f"Integrity error in transaction: {e}"
-            ) from e
-        except sqlite3.Error as e:
-            self._connection.rollback()
-            raise DatabaseError(
-                f"Database error in transaction: {e}"
-            ) from e
-        except Exception:
-            self._connection.rollback()
-            raise
+        with self._lock:
+            try:
+                self._connection.execute("BEGIN TRANSACTION")
+                yield self._connection
+                self._connection.commit()
+            except sqlite3.OperationalError as e:
+                self._connection.rollback()
+                raise DatabaseOperationalError(
+                    f"Operational error in transaction: {e}"
+                ) from e
+            except sqlite3.IntegrityError as e:
+                self._connection.rollback()
+                raise DatabaseIntegrityError(
+                    f"Integrity error in transaction: {e}"
+                ) from e
+            except sqlite3.Error as e:
+                self._connection.rollback()
+                raise DatabaseError(
+                    f"Database error in transaction: {e}"
+                ) from e
+            except Exception:
+                self._connection.rollback()
+                raise
 
     def get_journal_mode(self) -> str:
         """
         Get the current journal mode of the database.
-        
+
         Returns:
             Current journal mode string (should be 'wal')
         """
         self._ensure_connected()
-        cursor = self._connection.execute("PRAGMA journal_mode")
-        return cursor.fetchone()[0]
+        with self._lock:
+            cursor = self._connection.execute("PRAGMA journal_mode")
+            return cursor.fetchone()[0]
 

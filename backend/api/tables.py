@@ -5,6 +5,7 @@ IMPORTANT: All user input is untrusted and must be validated before use.
 """
 import logging
 import os
+import uuid
 from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -178,9 +179,9 @@ async def get_table_row(
     db: Database = Depends(get_db),
     auth: Dict[str, Any] = Depends(require_auth({"read"})),
 ):
+    """Fetch a single row by its ``id`` column."""
     allowed_tables = get_allowed_tables(db)
     valid_table = validate_identifier(table, allowed_tables)
-    allowed_columns = get_allowed_columns(db, valid_table)
 
     # Assuming 'id' is the primary key
     cursor = db.execute(f"SELECT * FROM {valid_table} WHERE id = ?", (id,))
@@ -204,6 +205,13 @@ async def create_table_row(
     db: Database = Depends(get_db),
     auth: Dict[str, Any] = Depends(require_auth({"write"})),
 ):
+    """Insert a new row into the table. Returns the inserted row fetched from DB."""
+    if not data:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(code="bad_request", message="Request body must not be empty").model_dump(),
+        )
+
     allowed_tables = get_allowed_tables(db)
     valid_table = validate_identifier(table, allowed_tables)
     allowed_columns = get_allowed_columns(db, valid_table)
@@ -211,6 +219,10 @@ async def create_table_row(
     # Validate all provided columns are allowed
     for col in data.keys():
         validate_identifier(col, allowed_columns)
+
+    # Auto-generate an id if the table has an 'id' column and none was provided
+    if "id" in allowed_columns and "id" not in data:
+        data = {**data, "id": str(uuid.uuid4())}
 
     columns = list(data.keys())
     placeholders = ", ".join(["?"] * len(columns))
@@ -221,13 +233,15 @@ async def create_table_row(
         f"INSERT INTO {valid_table} ({column_names}) VALUES ({placeholders})",
         tuple(values),
     )
-    # Get the inserted row
-    # SQLite last_insert_rowid() gives integer, but our IDs might be text
-    # For simplicity, let's just return the data with a generated ID if not provided
-    if "id" not in data:
-        import uuid
-        data["id"] = str(uuid.uuid4())
-
+    # Fetch the actual inserted row using last_insert_rowid() for reliability
+    row_cursor = db.execute(
+        f"SELECT * FROM {valid_table} WHERE rowid = last_insert_rowid()"
+    )
+    row = row_cursor.fetchone()
+    if row:
+        col_names = [desc[0] for desc in row_cursor.description]
+        return dict(zip(col_names, row))
+    # Fallback: return the data we submitted (should not normally happen)
     return data
 
 
@@ -239,6 +253,13 @@ async def update_table_row(
     db: Database = Depends(get_db),
     auth: Dict[str, Any] = Depends(require_auth({"write"})),
 ):
+    """Update columns of an existing row. At least one field must be provided."""
+    if not data:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(code="bad_request", message="Request body must not be empty").model_dump(),
+        )
+
     allowed_tables = get_allowed_tables(db)
     valid_table = validate_identifier(table, allowed_tables)
     allowed_columns = get_allowed_columns(db, valid_table)

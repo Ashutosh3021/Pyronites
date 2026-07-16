@@ -57,3 +57,28 @@ class TestPasswords:
             password = generate_strong_password(length)
             assert len(password) == length
 
+    def test_hash_password_empty_raises(self):
+        """hash_password must reject empty strings, not silently hash them."""
+        with pytest.raises(ValueError):
+            hash_password("")
+
+    def test_verify_password_empty_plain_returns_false(self):
+        """Verifying an empty string against a real hash must return False."""
+        hashed = hash_password("realpassword123")
+        assert verify_password("", hashed) is False
+
+    def test_verify_password_wrong_type_of_hash_returns_false(self):
+        """A completely bogus hash string must return False, not raise."""
+        result = verify_password("somepassword", "notahash")
+        assert result is False
+
+    def test_generate_strong_password_length_3_raises(self):
+        """generate_strong_password(3) must raise ValueError."""
+        with pytest.raises(ValueError):
+            generate_strong_password(3)
+
+    def test_generate_strong_password_uniqueness(self):
+        """Two calls must never produce the same password."""
+        passwords = {generate_strong_password(20) for _ in range(10)}
+        assert len(passwords) == 10
+

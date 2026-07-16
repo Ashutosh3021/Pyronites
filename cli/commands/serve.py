@@ -128,14 +128,14 @@ def serve(host, port, db_path, backup_interval, verbose):
                 click.echo("  Backup loop stopped")
         
         # Start server
-        config = uvicorn.Config(
+        uvicorn_config = uvicorn.Config(
             app,
             host=final_host,
             port=final_port,
             log_level="info" if verbose else "warning",
             access_log=verbose
         )
-        server = uvicorn.Server(config)
+        server = uvicorn.Server(uvicorn_config)
         
         # Run both tasks
         async def main():

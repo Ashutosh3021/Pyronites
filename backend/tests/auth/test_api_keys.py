@@ -35,8 +35,9 @@ class TestApiKeys:
     def temp_migrations_dir(self):
         temp_dir = tempfile.mkdtemp()
         real_migrations_dir = Path(__file__).parent.parent.parent / "migrations"
-        shutil.copy(real_migrations_dir / "0001_init.sql", temp_dir)
-        shutil.copy(real_migrations_dir / "0002_add_api_keys.sql", temp_dir)
+        # Copy all migrations so run_pending_migrations has the full sequence
+        for migration_file in sorted(real_migrations_dir.glob("*.sql")):
+            shutil.copy(migration_file, temp_dir)
         yield temp_dir
         shutil.rmtree(temp_dir)
 
@@ -99,4 +100,46 @@ class TestApiKeys:
     def test_validate_nonexistent_api_key(self, initialized_db):
         validated = validate_api_key(initialized_db, API_KEY_PREFIX + "invalid-key")
         assert validated is None
+
+    def test_create_api_key_empty_scopes_rejected(self, initialized_db):
+        """Creating a key with no scopes at all should raise ValueError."""
+        with pytest.raises(ValueError):
+            create_api_key(
+                initialized_db,
+                project_id="test-project",
+                name="No Scope Key",
+                scopes=[]
+            )
+
+    def test_validate_revoked_key_returns_none(self, initialized_db):
+        """validate_api_key must return None immediately for revoked keys."""
+        raw_key, api_key = create_api_key(
+            initialized_db,
+            project_id="test-project",
+            name="To Revoke",
+            scopes=["read"]
+        )
+        revoke_api_key(initialized_db, api_key.id)
+        # Validate should treat it as missing
+        result = validate_api_key(initialized_db, raw_key)
+        assert result is None
+
+    def test_list_api_keys_excludes_revoked(self, initialized_db):
+        """list_api_keys must not include revoked keys."""
+        from backend.auth.api_keys import list_api_keys
+        _, key1 = create_api_key(initialized_db, "p", "Key1", ["read"])
+        _, key2 = create_api_key(initialized_db, "p", "Key2", ["write"])
+        revoke_api_key(initialized_db, key1.id)
+        keys = list_api_keys(initialized_db)
+        ids = [k.id for k in keys]
+        assert key1.id not in ids
+        assert key2.id in ids
+
+    def test_raw_key_not_in_key_hash_field(self, initialized_db):
+        """The key_hash field on ApiKey must never equal the raw key."""
+        raw_key, api_key = create_api_key(
+            initialized_db, "p", "HashCheck", ["read"]
+        )
+        assert api_key.key_hash != raw_key
+        assert not api_key.key_hash.startswith(API_KEY_PREFIX)
 

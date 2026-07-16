@@ -54,6 +54,8 @@ def create_api_key(
         ValueError: If any scope is not in ALLOWED_SCOPES.
     """
     # Validate scopes
+    if not scopes:
+        raise ValueError("At least one scope must be specified")
     invalid_scopes = set(scopes) - ALLOWED_SCOPES
     if invalid_scopes:
         raise ValueError(f"Invalid scopes: {', '.join(invalid_scopes)}. Allowed: {', '.join(ALLOWED_SCOPES)}")

@@ -147,6 +147,13 @@ class TestBackup:
         # Verify original database wasn't touched
         assert open(temp_db_path, "rb").read() == original_db_content
 
+        # Explicitly remove the invalid file now so Windows can release any handle
+        # before the fixture teardown calls shutil.rmtree
+        try:
+            invalid_backup.unlink()
+        except OSError:
+            pass
+
     def test_restore_from_nonexistent_backup_fails(self, temp_db_path):
         with pytest.raises(FileNotFoundError):
             restore_from_backup("/nonexistent/path/backup.db", temp_db_path)
@@ -167,4 +174,42 @@ class TestBackup:
             pass
 
         assert len(list_backups(temp_backup_dir)) >= 2
+
+    def test_list_backups_empty_dir(self, temp_backup_dir):
+        """list_backups on an empty directory must return []."""
+        backups = list_backups(temp_backup_dir)
+        assert backups == []
+
+    def test_list_backups_nonexistent_dir(self, temp_backup_dir):
+        """list_backups on a path that doesn't exist must return []."""
+        backups = list_backups(str(Path(temp_backup_dir) / "does_not_exist"))
+        assert backups == []
+
+    def test_backup_now_nonexistent_source(self, temp_backup_dir):
+        """backup_now with a missing source DB must raise, not silently create empty file."""
+        from backend.core.db import DatabaseError
+        with pytest.raises((DatabaseError, Exception)):
+            backup_now("/nonexistent/path/db.sqlite", temp_backup_dir)
+
+    def test_prune_backups_keep_zero_keeps_one(self, temp_db_path, temp_backup_dir):
+        """prune_backups(keep=0) must keep exactly 1 backup (the most recent)."""
+        for _ in range(3):
+            backup_now(temp_db_path, temp_backup_dir)
+            time.sleep(0.01)
+        prune_backups(temp_backup_dir, keep=0)
+        remaining = list_backups(temp_backup_dir)
+        assert len(remaining) == 1
+
+    def test_restore_cleans_up_temp_file(self, temp_db_path, temp_backup_dir):
+        """After a successful restore there must be no leftover .db temp file."""
+        backup_path = backup_now(temp_db_path, temp_backup_dir)
+        target_dir = Path(temp_db_path).parent
+        temp_files_before = set(target_dir.glob("*.db"))
+
+        restore_from_backup(str(backup_path), temp_db_path)
+
+        temp_files_after = set(target_dir.glob("*.db"))
+        # Any new temp files created during restore must be gone
+        new_files = temp_files_after - temp_files_before
+        assert not new_files, f"Leftover temp files after restore: {new_files}"
 

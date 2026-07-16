@@ -34,8 +34,9 @@ def temp_db_path():
 def temp_migrations_dir():
     temp_dir = tempfile.mkdtemp()
     real_migrations_dir = Path(__file__).parent.parent.parent / "migrations"
-    shutil.copy(real_migrations_dir / "0001_init.sql", temp_dir)
-    shutil.copy(real_migrations_dir / "0002_add_api_keys.sql", temp_dir)
+    # Copy all migrations so run_pending_migrations has the full sequence
+    for migration_file in sorted(real_migrations_dir.glob("*.sql")):
+        shutil.copy(migration_file, temp_dir)
     yield temp_dir
     shutil.rmtree(temp_dir)
 
@@ -203,4 +204,53 @@ class TestTablesApi:
             headers={"Authorization": f"Bearer {write_api_key}"}
         )
         assert too_big_response.status_code == 422  # Validation error, not 200
+
+    def test_create_empty_body_rejected(self, client, write_api_key):
+        """POST with empty body must return 400, not a 500 SQL error."""
+        response = client.post(
+            "/tables/test_items",
+            json={},
+            headers={"Authorization": f"Bearer {write_api_key}"}
+        )
+        assert response.status_code == 400
+
+    def test_patch_empty_body_rejected(self, client, write_api_key, initialized_db):
+        """PATCH with empty body must return 400 before hitting SQL."""
+        item_id = str(uuid.uuid4())
+        initialized_db.execute(
+            "INSERT INTO test_items (id, name, value) VALUES (?, ?, ?)",
+            (item_id, "Item", 1)
+        )
+        response = client.patch(
+            f"/tables/test_items/{item_id}",
+            json={},
+            headers={"Authorization": f"Bearer {write_api_key}"}
+        )
+        assert response.status_code == 400
+
+    def test_create_returns_actual_db_row(self, client, write_api_key):
+        """POST must return the row that was actually stored, not a fabricated dict."""
+        response = client.post(
+            "/tables/test_items",
+            json={"name": "Real Row", "value": 7},
+            headers={"Authorization": f"Bearer {write_api_key}"}
+        )
+        assert response.status_code == 200
+        body = response.json()
+        # The returned id must be a real UUID that exists in the DB
+        assert "id" in body
+        assert body["name"] == "Real Row"
+        assert body["value"] == 7
+
+        # Confirm row is actually retrievable
+        get_resp = client.get(
+            f"/tables/test_items/{body['id']}",
+            headers={"Authorization": f"Bearer {write_api_key}"}
+        )
+        assert get_resp.status_code == 200
+
+    def test_unauthenticated_request_returns_401(self, client):
+        """Requests with no auth header must return 401."""
+        response = client.get("/tables/test_items")
+        assert response.status_code == 401
 

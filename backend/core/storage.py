@@ -48,22 +48,25 @@ class LocalFileStorage:
         try:
             self.root_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
-            logger.error(f"Failed to create storage root directory {self.root_dir}", exc_info=True)
+            logger.error("Failed to create storage root directory %s", self.root_dir, exc_info=True)
             raise
     
     def _validate_filename(self, filename: str) -> None:
-        """Validate and sanitize filename, reject path traversal attempts."""
+        """Validate filename — reject empty strings and path traversal attempts."""
+        if not filename or not filename.strip():
+            raise InvalidFilenameError("Filename must not be empty")
+
         # Check for path traversal patterns
         if ".." in filename or "/" in filename or "\\" in filename:
-            raise InvalidFilenameError(f"Invalid filename: {filename} (contains path traversal characters)")
-        
+            raise InvalidFilenameError(
+                f"Invalid filename: {filename!r} (contains path traversal characters)"
+            )
+
         # Check if it's an absolute path
         if Path(filename).is_absolute():
-            raise InvalidFilenameError(f"Invalid filename: {filename} (absolute paths not allowed)")
-        
-        # Sanitize by taking just the basename (though we already checked for separators)
-        # Keep the original name for metadata, but make sure it's safe
-        pass
+            raise InvalidFilenameError(
+                f"Invalid filename: {filename!r} (absolute paths not allowed)"
+            )
     
     def save(
         self,
@@ -110,7 +113,7 @@ class LocalFileStorage:
         try:
             file_path.write_bytes(file_bytes)
         except OSError as e:
-            logger.error(f"Failed to write file to disk: {file_path}", exc_info=True)
+            logger.error("Failed to write file to disk: %s", file_path, exc_info=True)
             raise
         
         # Save metadata to database
@@ -130,12 +133,12 @@ class LocalFileStorage:
                 ),
             )
         except Exception as e:
-            logger.error(f"Failed to write file metadata to database", exc_info=True)
+            logger.error("Failed to write file metadata to database", exc_info=True)
             # Clean up the file we just wrote
             try:
                 file_path.unlink(missing_ok=True)
             except OSError:
-                logger.warning(f"Failed to clean up file after database error: {file_path}")
+                logger.warning("Failed to clean up file after database error: %s", file_path)
             raise
         
         return FileRecord(
@@ -166,7 +169,7 @@ class LocalFileStorage:
         try:
             return file_path.read_bytes()
         except OSError as e:
-            logger.error(f"Failed to read file from disk: {file_path}", exc_info=True)
+            logger.error("Failed to read file from disk: %s", file_path, exc_info=True)
             raise
     
     def get_record(self, file_id: str) -> FileRecord:
@@ -211,7 +214,7 @@ class LocalFileStorage:
         try:
             file_path.unlink(missing_ok=True)
         except OSError as e:
-            logger.error(f"Failed to delete file from disk: {file_path}", exc_info=True)
+            logger.error("Failed to delete file from disk: %s", file_path, exc_info=True)
             raise
         
         # Delete from database
@@ -221,7 +224,7 @@ class LocalFileStorage:
                 (file_id, self.project_id),
             )
         except Exception as e:
-            logger.error(f"Failed to delete file metadata from database", exc_info=True)
+            logger.error("Failed to delete file metadata from database", exc_info=True)
             raise
     
     def list(self, prefix: Optional[str] = None) -> List[FileRecord]:

@@ -61,7 +61,9 @@ def create_user(db: Database, email: str, plain_password: str) -> User:
     # Check if user already exists
     existing = get_user_by_email(db, normalized_email)
     if existing is not None:
-        raise UserAlreadyExistsError(f"User with email {email} already exists")
+        # Do NOT include the email in the exception message — it could be
+        # reflected back in an API response and aid account enumeration.
+        raise UserAlreadyExistsError("A user with that email already exists")
 
     # Create new user
     user_id = str(uuid.uuid4())
@@ -130,26 +132,32 @@ def get_user_by_id(db: Database, user_id: str) -> Optional[User]:
         user_id: User's unique ID.
 
     Returns:
-        User if found, None otherwise.
+        User if found, None if no such user exists.
+
+    Raises:
+        DatabaseError: If a database error occurs (re-raised so callers can
+            distinguish "not found" from "DB down").
     """
     try:
         cursor = db.execute(
-            "SELECT id, email, password_hash, created_at FROM users WHERE id = ?",
+            "SELECT id, email, password_hash, created_at, is_active FROM users WHERE id = ?",
             (user_id,)
         )
         row = cursor.fetchone()
         if row is None:
             return None
+        # is_active is stored as INTEGER (0/1) in SQLite
+        is_active = bool(row[4]) if len(row) > 4 else True
         return User(
             id=row[0],
             email=row[1],
             password_hash=row[2],
             created_at=datetime.fromisoformat(row[3]),
-            is_active=True,
+            is_active=is_active,
         )
     except DatabaseError as e:
         logger.error("Failed to get user by id", exc_info=True)
-        return None
+        raise
 
 
 def get_user_by_email(db: Database, email: str) -> Optional[User]:
@@ -161,25 +169,29 @@ def get_user_by_email(db: Database, email: str) -> Optional[User]:
         email: Email address to look up.
 
     Returns:
-        User if found, None otherwise.
+        User if found, None if no such user exists.
+
+    Raises:
+        DatabaseError: If a database error occurs.
     """
     normalized_email = email.lower()
     try:
         cursor = db.execute(
-            "SELECT id, email, password_hash, created_at FROM users WHERE email = ?",
+            "SELECT id, email, password_hash, created_at, is_active FROM users WHERE email = ?",
             (normalized_email,)
         )
         row = cursor.fetchone()
         if row is None:
             return None
+        is_active = bool(row[4]) if len(row) > 4 else True
         return User(
             id=row[0],
             email=row[1],
             password_hash=row[2],
             created_at=datetime.fromisoformat(row[3]),
-            is_active=True,
+            is_active=is_active,
         )
     except DatabaseError as e:
         logger.error("Failed to get user by email", exc_info=True)
-        return None
+        raise
 

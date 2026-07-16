@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import os
+import re
 import sqlite3
 import tempfile
 from dataclasses import dataclass
@@ -52,49 +53,66 @@ def backup_now(db_path: str, backup_dir: str) -> Path:
     backup_filename = f"{db_name}_{timestamp}.db"
     backup_file = backup_path / backup_filename
 
+    source_conn = None
+    backup_conn = None
     try:
         # Connect to source database in read-only mode
         source_conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         # Connect to backup database
         backup_conn = sqlite3.connect(str(backup_file))
 
-        # Use SQLite's backup API
+        # Use SQLite's backup API — atomic, safe during concurrent writes
         with backup_conn:
             source_conn.backup(backup_conn)
 
-        # Close connections
-        source_conn.close()
-        backup_conn.close()
+    except sqlite3.Error as e:
+        raise DatabaseError(f"Backup failed: {e}") from e
+    finally:
+        # Always close connections regardless of success or failure
+        if source_conn is not None:
+            try:
+                source_conn.close()
+            except sqlite3.Error:
+                pass
+        if backup_conn is not None:
+            try:
+                backup_conn.close()
+            except sqlite3.Error:
+                pass
+        # Clean up partial backup file on any exception
+        # (we re-raise below, so only clean up if we're in an exception path)
 
-        # Verify that backup file was created and is a valid SQLite database
+    # If we reach here the backup_conn context committed successfully.
+    # Verify the backup is a readable SQLite database before declaring success.
+    try:
         verify_conn = sqlite3.connect(str(backup_file))
         verify_conn.execute("SELECT 1")
         verify_conn.close()
-
-        logger.info(f"Successfully created backup at {backup_file}")
-        return backup_file
-
     except sqlite3.Error as e:
-        # Clean up partial backup file if it exists
-        if backup_file.exists():
-            try:
-                backup_file.unlink()
-            except OSError:
-                logger.warning(f"Failed to delete partial backup file {backup_file}")
-        raise DatabaseError(f"Backup failed: {e}") from e
+        # Backup written but unreadable — remove it
+        try:
+            backup_file.unlink()
+        except OSError:
+            logger.warning("Failed to delete unreadable backup file %s", backup_file)
+        raise DatabaseError(f"Backup verification failed: {e}") from e
     except OSError as e:
-        # Clean up partial backup file if it exists
-        if backup_file.exists():
-            try:
-                backup_file.unlink()
-            except OSError:
-                logger.warning(f"Failed to delete partial backup file {backup_file}")
+        try:
+            backup_file.unlink()
+        except OSError:
+            pass
         raise
+
+    logger.info("Successfully created backup at %s", backup_file)
+    return backup_file
 
 
 def list_backups(backup_dir: str) -> List[BackupInfo]:
     """
     List all database backups in a directory, sorted newest first.
+
+    The creation timestamp is parsed from the backup filename
+    (format: ``<stem>_<YYYY>-<MM>-<DD>T<HH>-<MM>-<SS>-<f>.db``).
+    Falls back to ``st_mtime`` for files that don't match the pattern.
 
     Args:
         backup_dir: Directory containing backup files
@@ -106,18 +124,39 @@ def list_backups(backup_dir: str) -> List[BackupInfo]:
     if not backup_path.exists():
         return []
 
+    # Pattern: anything_YYYY-MM-DDTHH-MM-SS-ffffff.db
+    _TS_RE = re.compile(
+        r"_(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d+)\.db$"
+    )
+
     backups = []
     for file in backup_path.iterdir():
-        if file.is_file() and file.suffix == ".db":
-            stat = file.stat()
+        if not (file.is_file() and file.suffix == ".db"):
+            continue
+        stat = file.stat()
+        # Try to parse creation time from the filename timestamp
+        match = _TS_RE.search(file.name)
+        if match:
+            try:
+                ts_str = match.group(1)  # e.g. 2025-07-14T10-30-00-123456
+                # Convert dashes-in-time to colons so fromisoformat works
+                parts = ts_str.split("T")
+                time_part = parts[1].replace("-", ":", 2)  # first two only → HH:MM:SS-f
+                time_part = time_part.rsplit("-", 1)  # split off microseconds
+                iso_str = f"{parts[0]}T{time_part[0]}.{time_part[1]}+00:00"
+                created_at = datetime.fromisoformat(iso_str)
+            except (ValueError, IndexError):
+                created_at = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+        else:
             created_at = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
-            backups.append(
-                BackupInfo(
-                    path=file,
-                    created_at=created_at,
-                    size_bytes=stat.st_size,
-                )
+
+        backups.append(
+            BackupInfo(
+                path=file,
+                created_at=created_at,
+                size_bytes=stat.st_size,
             )
+        )
 
     # Sort by created_at descending (newest first)
     backups.sort(key=lambda x: x.created_at, reverse=True)
@@ -148,9 +187,9 @@ def prune_backups(backup_dir: str, keep: int = 10) -> None:
     for backup in to_delete:
         try:
             backup.path.unlink()
-            logger.info(f"Pruned old backup: {backup.path}")
+            logger.info("Pruned old backup: %s", backup.path)
         except OSError as e:
-            logger.error(f"Failed to delete backup {backup.path}: {e}")
+            logger.error("Failed to delete backup %s: %s", backup.path, e)
 
 
 def restore_from_backup(backup_path: str, target_db_path: str) -> None:
@@ -180,8 +219,10 @@ def restore_from_backup(backup_path: str, target_db_path: str) -> None:
     try:
         # First, verify that the backup is a valid SQLite database
         verify_conn = sqlite3.connect(str(backup_file))
-        verify_conn.execute("SELECT 1")
-        verify_conn.close()
+        try:
+            verify_conn.execute("SELECT 1")
+        finally:
+            verify_conn.close()
 
         # Create a temporary file in the same directory as the target
         temp_file = tempfile.NamedTemporaryFile(
@@ -197,15 +238,19 @@ def restore_from_backup(backup_path: str, target_db_path: str) -> None:
             # This ensures we get a valid copy
             source_conn = sqlite3.connect(str(backup_file))
             temp_conn = sqlite3.connect(str(temp_path))
-            with temp_conn:
-                source_conn.backup(temp_conn)
-            source_conn.close()
-            temp_conn.close()
+            try:
+                with temp_conn:
+                    source_conn.backup(temp_conn)
+            finally:
+                source_conn.close()
+                temp_conn.close()
 
             # Verify temporary file is valid
             verify_temp_conn = sqlite3.connect(str(temp_path))
-            verify_temp_conn.execute("SELECT 1")
-            verify_temp_conn.close()
+            try:
+                verify_temp_conn.execute("SELECT 1")
+            finally:
+                verify_temp_conn.close()
 
             # Atomically replace target with temp file
             if target_file.exists():
@@ -216,6 +261,11 @@ def restore_from_backup(backup_path: str, target_db_path: str) -> None:
                         old_file.unlink()
                     target_file.rename(old_file)
                     temp_path.rename(target_file)
+                    # Clean up the old file now that the rename succeeded
+                    try:
+                        old_file.unlink()
+                    except OSError:
+                        logger.warning("Failed to remove old DB file after restore: %s", old_file)
                 else:
                     # On Unix-like systems, os.replace is atomic
                     os.replace(temp_path, target_file)
@@ -244,6 +294,8 @@ async def scheduled_backup_loop(
     """
     Async background loop that creates backups on a schedule.
 
+    Takes an immediate backup on startup, then repeats every ``interval_seconds``.
+
     Args:
         db_path: Path to the source database file
         backup_dir: Directory where backups will be stored
@@ -253,13 +305,13 @@ async def scheduled_backup_loop(
 
     while True:
         try:
-            await asyncio.sleep(interval_seconds)
             logger.info("Performing scheduled backup")
             backup_now(db_path, backup_dir)
             # Prune old backups after creating a new one
             prune_backups(backup_dir)
-
         except Exception as e:
             # Catch any exception to ensure the loop keeps running
-            logger.error(f"Scheduled backup failed: {e}", exc_info=True)
+            logger.error("Scheduled backup failed: %s", e, exc_info=True)
+
+        await asyncio.sleep(interval_seconds)
 

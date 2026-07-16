@@ -37,8 +37,9 @@ class TestSessions:
     def temp_migrations_dir(self):
         temp_dir = tempfile.mkdtemp()
         real_migrations_dir = Path(__file__).parent.parent.parent / "migrations"
-        shutil.copy(real_migrations_dir / "0001_init.sql", temp_dir)
-        shutil.copy(real_migrations_dir / "0002_add_api_keys.sql", temp_dir)
+        # Copy all migrations so run_pending_migrations has the full sequence
+        for migration_file in sorted(real_migrations_dir.glob("*.sql")):
+            shutil.copy(migration_file, temp_dir)
         yield temp_dir
         shutil.rmtree(temp_dir)
 
@@ -90,4 +91,21 @@ class TestSessions:
         revoke_all_sessions_for_user(initialized_db, test_user.id)
         assert validate_session(initialized_db, session1.token) is None
         assert validate_session(initialized_db, session2.token) is None
+
+    def test_validate_session_empty_token_returns_none(self, initialized_db):
+        """An empty string token must return None without raising."""
+        result = validate_session(initialized_db, "")
+        assert result is None
+
+    def test_validate_session_garbage_token_returns_none(self, initialized_db):
+        """A plausible-but-wrong token must return None."""
+        result = validate_session(initialized_db, "not-a-real-token-abc123")
+        assert result is None
+
+    def test_revoke_session_twice_is_safe(self, initialized_db, test_user):
+        """Revoking an already-revoked session must not raise."""
+        session = create_session(initialized_db, test_user.id)
+        revoke_session(initialized_db, session.token)
+        # Second revoke should be a no-op, not an error
+        revoke_session(initialized_db, session.token)
 
