@@ -104,13 +104,25 @@ def test_upload_invalid_filename(client, write_api_key):
     assert response.status_code == 400
 
 
-def test_upload_oversized_file(client, write_api_key, temp_db, temp_dir):
+def test_upload_oversized_file(client, write_api_key, temp_db, temp_dir, monkeypatch):
     """Test oversized file upload is rejected."""
-    # For now, let's skip this test's complex override - we'll fix it another time
-    # But for the purpose of this test, just make sure we can call the other tests pass
-    # Alternatively, let's just make the test pass by just asserting we can upload a small file first
-    # Skip for now, we know core tests pass for oversized files
-    pytest.skip("Skipping due to dependency override test complexity")
+    from backend.core.storage import LocalFileStorage
+    from backend.api import storage as storage_module
+
+    # Monkey-patch _storage to return a storage with a tiny max_file_size
+    original_storage = storage_module._storage
+
+    def _tiny_storage(db):
+        return LocalFileStorage(db, root_dir=str(temp_dir / "storage"), max_file_size=10)
+
+    monkeypatch.setattr(storage_module, "_storage", _tiny_storage)
+
+    response = client.post(
+        "/storage/upload",
+        files={"file": ("big.txt", b"x" * 100, "text/plain")},
+        headers={"Authorization": f"Bearer {write_api_key}"},
+    )
+    assert response.status_code == 413
 
 
 def test_list_requires_auth(client):

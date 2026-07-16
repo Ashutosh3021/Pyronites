@@ -51,6 +51,7 @@ async def stats(request: Request, db: Database = Depends(get_db)):
             row = cur.fetchone()
             return int(row[0]) if row else 0
         except Exception:
+            logger.warning("Stats count query failed: %r", sql, exc_info=True)
             return 0
 
     file_count = _count("SELECT COUNT(*) FROM storage_files")
@@ -65,7 +66,7 @@ async def stats(request: Request, db: Database = Depends(get_db)):
         if backups:
             last_backup = backups[0].created_at.isoformat().replace("+00:00", "Z")
     except Exception:
-        pass
+        logger.warning("Could not list backups for stats", exc_info=True)
 
     project = None
     try:
@@ -82,7 +83,7 @@ async def stats(request: Request, db: Database = Depends(get_db)):
                 "created_at": row[3],
             }
     except Exception:
-        pass
+        logger.warning("Could not fetch project info for stats", exc_info=True)
 
     return {
         "table_count": table_count,

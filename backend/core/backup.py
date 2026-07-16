@@ -66,6 +66,12 @@ def backup_now(db_path: str, backup_dir: str) -> Path:
             source_conn.backup(backup_conn)
 
     except sqlite3.Error as e:
+        # Remove any partial backup file before raising
+        if backup_file.exists():
+            try:
+                backup_file.unlink()
+            except OSError:
+                logger.warning("Failed to clean up partial backup file %s", backup_file)
         raise DatabaseError(f"Backup failed: {e}") from e
     finally:
         # Always close connections regardless of success or failure
@@ -79,8 +85,6 @@ def backup_now(db_path: str, backup_dir: str) -> Path:
                 backup_conn.close()
             except sqlite3.Error:
                 pass
-        # Clean up partial backup file on any exception
-        # (we re-raise below, so only clean up if we're in an exception path)
 
     # If we reach here the backup_conn context committed successfully.
     # Verify the backup is a readable SQLite database before declaring success.

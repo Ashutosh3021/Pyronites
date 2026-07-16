@@ -93,7 +93,7 @@ async def list_keys(request: Request, db: Database = Depends(get_db)):
 @router.post("")
 async def create_key(body: CreateKeyBody, request: Request, db: Database = Depends(get_db)):
     """Create a new API key and return the raw value exactly once."""
-    require_scopes(resolve_auth(request, db), {"read"})
+    require_scopes(resolve_auth(request, db), {"admin"})
     project_id = _resolve_project_id(db)
     try:
         raw_key, api_key = create_api_key(db, project_id, body.name, body.scopes)
@@ -117,7 +117,7 @@ async def create_key(body: CreateKeyBody, request: Request, db: Database = Depen
 @router.delete("/{key_id}")
 async def revoke_key(key_id: str, request: Request, db: Database = Depends(get_db)):
     """Revoke (soft-delete) an API key by id."""
-    require_scopes(resolve_auth(request, db), {"read"})
+    require_scopes(resolve_auth(request, db), {"admin"})
     try:
         revoke_api_key(db, key_id)
     except Exception as e:

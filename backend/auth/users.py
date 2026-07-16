@@ -52,8 +52,13 @@ def create_user(db: Database, email: str, plain_password: str) -> User:
         ValueError: If email format is invalid.
     """
     # Validate email format
+    if not email or not email.strip():
+        raise ValueError("Email must not be empty")
     if not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", email):
         raise ValueError("Invalid email format")
+
+    if not plain_password:
+        raise ValueError("Password must not be empty")
 
     # Normalize email to lowercase for case-insensitive checks
     normalized_email = email.lower()
@@ -79,6 +84,11 @@ def create_user(db: Database, email: str, plain_password: str) -> User:
             (user_id, normalized_email, password_hash, created_at.isoformat())
         )
     except DatabaseError as e:
+        # Convert a unique constraint violation (race condition: concurrent signup
+        # for the same email) into the expected UserAlreadyExistsError.
+        from backend.core.db import DatabaseIntegrityError
+        if isinstance(e, DatabaseIntegrityError):
+            raise UserAlreadyExistsError("A user with that email already exists") from e
         logger.error("Failed to insert user into database", exc_info=True)
         raise
 

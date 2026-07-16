@@ -38,26 +38,33 @@ def read_config(config_path):
     Read and parse pyrocore.toml.
 
     A deliberately small, dependency-free parser (consistent with the format
-    written by ``pyrocore init``): it ignores ``[section]`` headers and only
-    reads ``key = value`` lines for the keys it understands.
+    written by ``pyrocore init``): it tracks ``[section]`` headers and reads
+    ``key = value`` lines only within the section they belong to.
     """
     config = {"database": {}, "api": {}}
     try:
         content = config_path.read_text()
+        current_section = None
         for line in content.splitlines():
             line = line.strip()
-            if line.startswith("#") or "=" not in line:
+            if not line or line.startswith("#"):
+                continue
+            # Section header: [database] or [api]
+            if line.startswith("[") and line.endswith("]"):
+                current_section = line[1:-1].strip()
+                continue
+            if "=" not in line:
                 continue
             key, value = line.split("=", 1)
             key = key.strip()
             value = value.strip().strip('"').strip("'")
-            if key == "path":
+            if current_section == "database" and key == "path":
                 config["database"]["path"] = value
-            elif key == "host":
+            elif current_section == "api" and key == "host":
                 config["api"]["host"] = value
-            elif key == "port":
+            elif current_section == "api" and key == "port":
                 config["api"]["port"] = int(value)
-    except Exception as e:
+    except (OSError, ValueError) as e:
         error(f"Failed to read config file: {e}")
 
     # Default values

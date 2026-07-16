@@ -126,7 +126,7 @@ async def download_file(
         return StreamingResponse(
             iter([file_bytes]),
             media_type=record.content_type,
-            headers={"Content-Disposition": f"attachment; filename={record.original_filename}"},
+            headers={"Content-Disposition": f'attachment; filename="{record.original_filename}"'},
         )
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=ErrorResponse(code="not_found", message="File not found").model_dump())

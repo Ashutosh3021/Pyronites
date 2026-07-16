@@ -136,6 +136,7 @@ async def list_tables(request: Request, db: Database = Depends(get_db)):
             row = cur.fetchone()
             count = int(row[0]) if row else 0
         except Exception:
+            logger.warning("Could not count rows in table %r", name, exc_info=True)
             count = 0
         result.append({"name": name, "rows": count})
     return result

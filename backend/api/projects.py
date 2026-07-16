@@ -89,8 +89,7 @@ async def create_project(
     Requires an authenticated dashboard session.  Returns the project summary
     plus the raw initial key (shown exactly once, like any other key).
     """
-    require_scopes(resolve_auth(request, db), {"read"})
-
+    require_scopes(resolve_auth(request, db), {"admin"})
     project_id = _resolve_project_id(db)
     # If a project row already exists (re-running the wizard), upsert by id.
     internal_id = str(uuid.uuid4())

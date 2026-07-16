@@ -361,9 +361,8 @@ class LocalFileStorage:
         Args:
             prefix: Optional filename prefix filter.  When provided, only files
                 whose ``original_filename`` starts with this string are returned.
-                The filter is applied with a SQL ``LIKE`` clause; special SQL
-                wildcard characters in ``prefix`` are not escaped, so callers
-                should avoid user-supplied values containing ``%`` or ``_``.
+                The filter is applied with a SQL ``LIKE`` clause; ``%`` and ``_``
+                in the prefix are escaped so they are treated as literals.
             limit: Optional maximum number of records to return.  When ``None``
                 (the default for non-API callers) all matches are returned.
             offset: Number of records to skip; only applied when ``limit`` is set.
@@ -379,8 +378,11 @@ class LocalFileStorage:
         params: List[Any] = [self.project_id]
 
         if prefix:
-            query += " AND original_filename LIKE ?"
-            params.append(f"{prefix}%")
+            # Escape SQL wildcard characters in the user-supplied prefix so
+            # a value like "50%" doesn't match everything.
+            escaped_prefix = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            query += " AND original_filename LIKE ? ESCAPE '\\'"
+            params.append(f"{escaped_prefix}%")
 
         query += " ORDER BY uploaded_at DESC"
 
