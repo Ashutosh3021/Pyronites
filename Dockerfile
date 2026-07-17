@@ -45,8 +45,11 @@ RUN mkdir -p /data/storage_files /data/backups && chmod -R 777 /data
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy our code
-COPY backend cli connectors __init__.py /app/
+# Copy our code (preserve package directories so `backend.app` is importable)
+COPY backend /app/backend
+COPY cli /app/cli
+COPY connectors /app/connectors
+COPY __init__.py /app/__init__.py
 
 # Expose port (platforms inject their own $PORT at runtime; see HEALTHCHECK)
 EXPOSE 8000
