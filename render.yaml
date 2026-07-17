@@ -1,0 +1,75 @@
+# Render deployment config for the PyroCore BACKEND (FREE TIER).
+#
+# Frontend is deployed separately on Vercel (vercel.json / DEPLOY.md §7).
+# Render reads this blueprint on every push to `main`.
+#
+# FREE-TIER CONSTRAINTS (see DEPLOY.md §10):
+#   * No persistent disk — /data is the container's EPHEMERAL filesystem, so
+#     pyrocore.db / storage_files / backups are LOST on every cold start and
+#     redeploy.  Fine for a demo; for real data either upgrade to a paid plan
+#     (re-add the `disk:` block below + `plan: starter`) or add S3/R2 sync.
+#   * Spins down after 15 min idle (~1 min cold start on the next request).
+#   * No shell/SSH access — verify via /health and GET /api/backups instead.
+# Docker runtime IS supported on the free tier, and Render injects $PORT.
+#
+# Required secrets (set in the dashboard after first deploy, `sync: false` below):
+#   FRONTEND_ORIGIN  -> your Vercel dashboard origin, e.g.
+#                       https://pyrocore.vercel.app  (comma-separated if many)
+#   SESSION_COOKIE_SECURE=true
+#   SESSION_COOKIE_SAMESITE=none
+#   S3_* (see §10)   -> to persist the DB across redeploys on the free tier.
+# PORT is injected by Render automatically — do NOT set it.
+
+services:
+  - type: web
+    name: pyrocore-backend
+    runtime: docker
+    # The repo root contains the Dockerfile; the backend lives in /backend.
+    dockerfilePath: ./Dockerfile
+    # Render overrides this with its own injected $PORT at runtime.
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATABASE_PATH
+        value: /data/pyrocore.db
+      - key: STORAGE_ROOT
+        value: /data/storage_files
+      - key: MIGRATIONS_DIR
+        value: /app/backend/migrations
+      - key: BACKUP_INTERVAL_SECONDS
+        # 300s (=5 min) keeps free-tier data loss bounded when S3 sync is on;
+        # the bucket is only as fresh as the last upload.  Raise for fewer
+        # writes / local backups if you don't enable S3 sync.
+        value: "300"
+      # Cross-origin dashboard (Vercel) — set this in the dashboard to your real
+      # Vercel origin.  Listed here as a placeholder so the service starts;
+      # override it with the real value before going live.
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: SESSION_COOKIE_SECURE
+        sync: false
+      - key: SESSION_COOKIE_SAMESITE
+        sync: false
+      # --- S3 / R2 persistence (free-tier) — set all of these in the dashboard ---
+      - key: S3_SYNC_ENABLED
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: S3_ENDPOINT_URL
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_PREFIX
+        sync: false
+    # --- Persistence on PAID plans (NOT available on free) ------------------
+    # Uncomment to get a real persistent disk (requires plan: starter or above):
+    # disk:
+    #   name: pyrocore-data
+    #   mountPath: /data
+    #   sizeGB: 1

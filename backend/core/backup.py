@@ -294,6 +294,7 @@ async def scheduled_backup_loop(
     db_path: str,
     backup_dir: str,
     interval_seconds: int,
+    on_backup: "callable[[str], None] | None" = None,
 ) -> None:
     """
     Async background loop that creates backups on a schedule.
@@ -304,6 +305,9 @@ async def scheduled_backup_loop(
         db_path: Path to the source database file
         backup_dir: Directory where backups will be stored
         interval_seconds: Number of seconds between backups
+        on_backup: Optional blocking callable invoked with ``db_path`` after each
+            successful backup (e.g. to push the DB to object storage). Runs in a
+            worker thread so it never blocks the event loop.
     """
     logger.info("Starting scheduled backup loop")
 
@@ -316,6 +320,9 @@ async def scheduled_backup_loop(
             await asyncio.to_thread(backup_now, db_path, backup_dir)
             # Prune old backups after creating a new one
             await asyncio.to_thread(prune_backups, backup_dir)
+            # Persist to object storage (S3/R2) if a hook was supplied.
+            if on_backup is not None:
+                await asyncio.to_thread(on_backup, db_path)
         except Exception as e:
             # Catch any exception to ensure the loop keeps running
             logger.error("Scheduled backup failed: %s", e, exc_info=True)

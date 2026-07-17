@@ -1,7 +1,7 @@
-# Fly.io deployment config for PyroCore
+# Fly.io deployment config for PyroCore (LEGACY — chosen host is now
+# Render backend + Vercel frontend; see render.yaml / vercel.json / DEPLOY.md).
 #
-# Target host chosen because the `fly` CLI was available in the build
-# environment.  Deploy steps (after `fly auth login`):
+# Kept for reference.  Deploy steps (after `fly auth login`):
 #   1. fly launch --no-deploy --copy-config   # or just `fly apps create pyrocore`
 #   2. fly volumes create pyrocore_data --region <region> --size 1
 #   3. fly deploy

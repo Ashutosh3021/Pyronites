@@ -21,6 +21,7 @@ from backend.api.schemas import ErrorResponse
 from backend.core.db import Database
 from backend.core.migrations import get_migration_files, run_pending_migrations
 from backend.core.backup import scheduled_backup_loop
+from backend.core.s3_sync import load_s3_config
 from backend.core.logring import install as install_logring, record_event
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,26 @@ def create_app() -> FastAPI:
             except OSError as e:
                 logger.warning("Could not create directory %s: %s", d, e)
 
+        # ── S3 / object-storage sync (free-tier persistence) ──────────────────
+        # On platforms with no persistent disk (Render free tier), the DB lives
+        # on an ephemeral filesystem.  If sync is enabled, pull the latest copy
+        # from the bucket *before* migrations so a fresh container resumes the
+        # previous state instead of starting from an empty schema — and so any
+        # newer migrations are applied to the restored file.  `s3` is None when
+        # S3_SYNC_ENABLED is unset, so this whole block is a no-op in that case.
+        s3 = load_s3_config()
+        if s3 is not None:
+            try:
+                restored = await asyncio.to_thread(s3.download, db_path)
+                logger.info(
+                    "S3 restore: %s",
+                    "downloaded latest DB" if restored else "no remote DB / local present",
+                )
+            except Exception as e:
+                logger.error(
+                    "S3 restore error (continuing with local/empty DB): %s", e, exc_info=True
+                )
+
         logger.info("Running pending migrations...")
         db = Database(db_path)
         db.connect()
@@ -80,12 +101,16 @@ def create_app() -> FastAPI:
         # launched — directly via `uvicorn backend.app:app` in the Docker image,
         # or via `pyrocore start`.  Without this, the containerised deploy would
         # never create backups.  Takes an immediate backup on startup, then
-        # repeats every BACKUP_INTERVAL_SECONDS (default 3600 = 1h).
+        # repeats every BACKUP_INTERVAL_SECONDS (default 3600 = 1h).  When S3
+        # sync is enabled, each backup is also pushed to the bucket (on_backup).
         backup_interval = int(os.environ.get("BACKUP_INTERVAL_SECONDS", "3600"))
+        s3_upload = (lambda p: s3.upload(p)) if s3 is not None else None
         backup_task = None
         try:
             backup_task = asyncio.create_task(
-                scheduled_backup_loop(db_path, backup_dir, backup_interval)
+                scheduled_backup_loop(
+                    db_path, backup_dir, backup_interval, on_backup=s3_upload
+                )
             )
             logger.info("Scheduled backup loop started (interval=%ss)", backup_interval)
         except Exception as e:
@@ -94,6 +119,14 @@ def create_app() -> FastAPI:
         yield  # App runs here
 
         logger.info("Shutting down...")
+        if s3 is not None:
+            # Best-effort final push so the last few minutes of writes survive
+            # a graceful shutdown (SIGTERM) even between scheduled backups.
+            try:
+                await asyncio.to_thread(s3.upload, db_path)
+                logger.info("S3: final upload on shutdown complete")
+            except Exception as e:
+                logger.error("S3: final upload on shutdown failed: %s", e, exc_info=True)
         if backup_task is not None:
             backup_task.cancel()
             try:

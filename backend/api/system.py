@@ -111,6 +111,18 @@ async def trigger_backup(request: Request, db: Database = Depends(get_db)):
             ).model_dump(),
         )
     record_event("success", "Backup completed")
+    import asyncio  # local import; module does not import asyncio at top level
+
+    # Persist to object storage (S3/R2) if sync is enabled, so a manual backup
+    # also survives an ephemeral filesystem (e.g. Render free tier).
+    try:
+        from backend.core.s3_sync import load_s3_config
+
+        s3 = load_s3_config()
+        if s3 is not None:
+            await asyncio.to_thread(s3.upload, db_path)
+    except Exception as e:
+        logger.warning("Manual backup S3 upload failed: %s", e, exc_info=True)
     return {"path": str(backup_file), "created_at": _now_iso()}
 
 

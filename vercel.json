@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "buildCommand": "next build",
+  "installCommand": "npm install",
+  "frameworkRoots": ["frontend"],
+  "git": {
+    "ignorePatterns": [
+      "backend/",
+      "cli/",
+      "connectors/",
+      "Dockerfile",
+      "fly.toml",
+      "render.yaml",
+      "*.db",
+      "*.db-wal",
+      "*.db-shm",
+      "storage_files/",
+      "backups/",
+      ".venv/"
+    ]
+  }
+}
