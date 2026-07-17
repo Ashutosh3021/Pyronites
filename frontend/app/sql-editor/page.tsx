@@ -21,9 +21,7 @@ interface ExecuteResponse {
 }
 
 export default function SQLEditorPage() {
-  const [query, setQuery] = useState(
-    'SELECT * FROM users WHERE created_at > datetime("now", "-7 days")'
-  )
+  const [query, setQuery] = useState('SELECT * FROM users')
   const [response, setResponse] = useState<ExecuteResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showConfirm, setShowConfirm] = useState(false)
