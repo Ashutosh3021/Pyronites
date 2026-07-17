@@ -75,13 +75,19 @@ export default function DatabaseExplorerPage() {
             { credentials: 'include' },
           ),
         ])
-        if (!schemaRes.ok) throw new Error('schema')
-        if (!rowsRes.ok) throw new Error('rows')
+        if (!schemaRes.ok) {
+          const b = await schemaRes.json().catch(() => ({}))
+          throw new Error(b?.detail?.message ?? b?.message ?? `Could not load schema for "${name}".`)
+        }
+        if (!rowsRes.ok) {
+          const b = await rowsRes.json().catch(() => ({}))
+          throw new Error(b?.detail?.message ?? b?.message ?? `Could not load rows for "${name}".`)
+        }
         setSchema((await schemaRes.json()) as ColumnInfo[])
         setRows((await rowsRes.json()) as Row[])
         setOffset(pageOffset)
-      } catch {
-        setLoadErr(`Could not load table "${name}".`)
+      } catch (e) {
+        setLoadErr(e instanceof Error ? e.message : `Could not load table "${name}".`)
       } finally {
         setLoading(false)
       }

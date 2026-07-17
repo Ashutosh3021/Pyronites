@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -175,6 +175,24 @@ def create_app() -> FastAPI:
             status_code=422,
             content=ErrorResponse(code="validation_error", message=message).model_dump(),
         )
+
+    @app.exception_handler(HTTPException)
+    async def _http_exception_handler(
+        request: Request, exc: HTTPException
+    ) -> JSONResponse:
+        # FastAPI wraps ``HTTPException(detail=<dict>)`` as ``{"detail": <dict>}``.
+        # Our routers raise with ``detail=ErrorResponse(...).model_dump()``, so we
+        # unwrap it to a top-level ``{"code", "message"}`` envelope that matches the
+        # JSONResponse-based handlers (validation_error, etc.) and what the
+        # frontend's ``body?.message`` reads.  This keeps every error shape
+        # consistent across the whole API instead of mixing ``detail``-wrapped and
+        # flat envelopes.
+        detail = exc.detail
+        if isinstance(detail, dict) and ("code" in detail or "message" in detail):
+            body = detail
+        else:
+            body = ErrorResponse(code="error", message=str(detail)).model_dump()
+        return JSONResponse(status_code=exc.status_code, content=body)
 
     @app.exception_handler(Exception)
     async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:

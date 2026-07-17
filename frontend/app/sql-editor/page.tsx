@@ -51,7 +51,12 @@ export default function SQLEditorPage() {
       setExecutionTime(Date.now() - t0)
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        setError(body?.message ?? `Query failed (${res.status}).`)
+        const msg =
+          body?.detail?.message ??
+          (typeof body?.detail === "string" ? body.detail : null) ??
+          body?.message ??
+          `Query failed (${res.status}).`
+        setError(msg)
         setResponse(null)
         return
       }
