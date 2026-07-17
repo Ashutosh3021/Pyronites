@@ -28,9 +28,9 @@ You just connect your accounts, set a few variables, and deploy.
 
    | Key | Value | Why |
    |---|---|---|
-   | `FRONTEND_ORIGIN` | `https://<your-vercel-app>.vercel.app` | Lets the dashboard talk to the API (CORS). Get this from Step 2. |
-   | `SESSION_COOKIE_SECURE` | `true` | Required over HTTPS. |
-   | `SESSION_COOKIE_SAMESITE` | `none` | Required for a cross-origin dashboard. |
+   | `FRONTEND_ORIGIN` | *(optional)* | **No longer required.** The backend now allows any origin by default, so a cross-origin dashboard works without it. If you DO set it, it must be the *exact* Vercel URL (e.g. `https://pyronites.vercel.app`) — a wrong value will re-break CORS. Leave it **unset** unless you want to lock the API to one origin. |
+   | `SESSION_COOKIE_SECURE` | *(optional)* | Auto-detected from HTTPS now. Only set to force a value. |
+   | `SESSION_COOKIE_SAMESITE` | *(optional)* | Auto-detected (`none` over HTTPS, `lax` on localhost). Only set to force a value. |
 
    > Leave `PORT` alone — Render sets it automatically.
 

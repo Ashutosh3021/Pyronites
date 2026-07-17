@@ -147,10 +147,12 @@ def create_app() -> FastAPI:
     if frontend_origins:
         allow_origins = [o.strip() for o in frontend_origins.split(",") if o.strip()]
     else:
-        allow_origins = [
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
-        ]
+        # No explicit origin configured — allow any origin.  PyroCore is a
+        # self-hosted, single-tenant tool, so a cross-origin dashboard (e.g.
+        # Vercel frontend -> Render backend) works out of the box without manual
+        # env config.  Set FRONTEND_ORIGIN to a comma-separated list to lock this
+        # down to specific origins in production.
+        allow_origins = ["*"]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allow_origins,

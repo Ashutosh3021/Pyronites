@@ -35,33 +35,45 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _cookie_secure() -> bool:
+def _is_https(request: Request | None) -> bool:
+    """Best-effort detection of whether the request arrived over HTTPS.
+
+    Behind a platform proxy (Render/Fly) the scheme is reported via the
+    ``x-forwarded-proto`` header; fall back to the URL scheme otherwise.
+    """
+    if request is None:
+        return False
+    if request.headers.get("x-forwarded-proto", "").lower() == "https":
+        return True
+    return request.url.scheme == "https"
+
+
+def _cookie_secure(request: Request | None = None) -> bool:
     """
     Whether the session cookie should be marked ``Secure``.
 
-    Defaults to ``False`` so the local http://localhost demo works without TLS.
-    On a real deployment (HTTPS) this MUST be ``True``.  It can be forced with
-    ``SESSION_COOKIE_SECURE=true``, and is also forced on whenever SameSite is
-    ``None`` (browsers reject ``SameSite=None`` without ``Secure``).
+    Defaults to following the request's scheme: HTTPS -> Secure, HTTP
+    (localhost) -> insecure.  This lets a cross-origin HTTPS dashboard work
+    without manual env config.  Can be forced with ``SESSION_COOKIE_SECURE``.
     """
     raw = os.environ.get("SESSION_COOKIE_SECURE")
     if raw is not None:
         return raw.strip().lower() in ("1", "true", "yes", "on")
-    # Default: insecure (localhost-safe).
-    return False
+    return _is_https(request)
 
 
-def _cookie_samesite() -> str:
+def _cookie_samesite(request: Request | None = None) -> str:
     """
     SameSite policy for the session cookie.
 
-    ``lax`` (default) is correct for a same-origin dashboard.  When the dashboard
-    is served from a DIFFERENT origin than the API (e.g. Vercel frontend calling a
-    Fly.io/Render backend) the browser only forwards the cookie on cross-site
-    requests when SameSite is ``None`` *and* Secure is set.  Set
-    ``SESSION_COOKIE_SAMESITE=none`` for that deployment shape.
+    Defaults to ``none`` over HTTPS (a cross-origin HTTPS dashboard needs the
+    cookie forwarded on cross-site requests) and ``lax`` over plain HTTP
+    (localhost).  Can be overridden with ``SESSION_COOKIE_SAMESITE``.
     """
-    return os.environ.get("SESSION_COOKIE_SAMESITE", "lax").strip().lower()
+    raw = os.environ.get("SESSION_COOKIE_SAMESITE")
+    if raw is not None:
+        return raw.strip().lower()
+    return "none" if _is_https(request) else "lax"
 
 
 def get_db() -> Database:
@@ -74,17 +86,17 @@ def get_db() -> Database:
         db.close()
 
 
-def _set_session_cookie(response: Response, raw_token: str) -> None:
+def _set_session_cookie(response: Response, raw_token: str, request: Request | None = None) -> None:
     """
     Persist the opaque session token as an httpOnly cookie.
 
     Cookie security is deployment-driven (see ``_cookie_secure`` /
     ``_cookie_samesite``): localhost stays insecure/Lax, but a deployed HTTPS
-    backend serving a cross-origin dashboard must use Secure + SameSite=None or
-    the browser silently drops the cookie and every authenticated request 401s.
+    backend serving a cross-origin dashboard uses Secure + SameSite=None so the
+    browser forwards the cookie and authenticated requests succeed.
     """
-    samesite = _cookie_samesite()
-    secure = _cookie_secure()
+    samesite = _cookie_samesite(request)
+    secure = _cookie_secure(request)
     if samesite == "none":
         # Browsers refuse SameSite=None unless the cookie is also Secure.
         secure = True
@@ -109,7 +121,7 @@ class _EmailBody(BaseModel):
 
 
 @router.post("/signup")
-async def signup(body: _EmailBody, response: Response, db: Database = Depends(get_db)):
+async def signup(body: _EmailBody, response: Response, request: Request, db: Database = Depends(get_db)):
     """Create a new user account and start a session for them."""
     try:
         user = create_user(db, body.email, body.password)
@@ -130,7 +142,7 @@ async def signup(body: _EmailBody, response: Response, db: Database = Depends(ge
     # Auto-login: a brand-new user should be able to continue straight to the
     # project wizard without a second credential prompt.
     session = create_session(db, user.id)
-    _set_session_cookie(response, session.token)
+    _set_session_cookie(response, session.token, request)
     record_event("success", f"User signed up: {user.email}")
     return {
         "id": user.id,
@@ -140,7 +152,7 @@ async def signup(body: _EmailBody, response: Response, db: Database = Depends(ge
 
 
 @router.post("/login")
-async def login(body: _EmailBody, response: Response, db: Database = Depends(get_db)):
+async def login(body: _EmailBody, response: Response, request: Request, db: Database = Depends(get_db)):
     """Authenticate by email/password and set the session cookie."""
     user = authenticate_user(db, body.email, body.password)
     if user is None:
@@ -152,7 +164,7 @@ async def login(body: _EmailBody, response: Response, db: Database = Depends(get
             ).model_dump(),
         )
     session = create_session(db, user.id)
-    _set_session_cookie(response, session.token)
+    _set_session_cookie(response, session.token, request)
     record_event("info", f"User logged in: {user.email}")
     return {"email": user.email}
 
@@ -170,8 +182,8 @@ async def logout(request: Request, response: Response, db: Database = Depends(ge
     response.delete_cookie(
         "session_token",
         path="/",
-        secure=_cookie_secure(),
-        samesite=_cookie_samesite(),
+        secure=_cookie_secure(request),
+        samesite=_cookie_samesite(request),
     )
     return {"message": "Logged out"}
 
