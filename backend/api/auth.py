@@ -26,7 +26,7 @@ from backend.auth.users import (
     create_user,
     authenticate_user,
 )
-from backend.auth.sessions import create_session, revoke_session
+from backend.auth.sessions import create_session, revoke_session, validate_session
 from backend.core.db import Database, DatabaseError
 from backend.api.schemas import ErrorResponse, to_utc_iso
 from backend.core.logring import record_event
@@ -174,3 +174,23 @@ async def logout(request: Request, response: Response, db: Database = Depends(ge
         samesite=_cookie_samesite(),
     )
     return {"message": "Logged out"}
+
+
+@router.get("/me")
+async def me(request: Request, db: Database = Depends(get_db)):
+    """Return the current session user, or 401 if not authenticated.
+
+    The dashboard uses this to decide whether to show the app or redirect to
+    /login.  It relies only on the session cookie, so it works for the
+    browser SPA without exposing the token anywhere.
+    """
+    token = request.cookies.get("session_token")
+    user = validate_session(db, token) if token else None
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail=ErrorResponse(
+                code="unauthorized", message="Not authenticated"
+            ).model_dump(),
+        )
+    return {"authenticated": True, "email": user.email}

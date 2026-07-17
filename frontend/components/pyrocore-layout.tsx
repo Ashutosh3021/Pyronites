@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Database,
   Code,
@@ -15,6 +15,8 @@ import {
   Menu,
   X,
 } from 'lucide-react'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 const navItems = [
   { href: '/', icon: BarChart3, label: 'Overview' },
@@ -36,6 +38,32 @@ export function PyroCoreLayout({
   // Desktop: sidebar always open; mobile/tablet: closed by default
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
+  const router = useRouter()
+
+  // ── Auth gate ──────────────────────────────────────────────────────────
+  // Every page wrapped by this layout requires a session.  Check once on
+  // mount; if unauthenticated, send the user to /login (where they can sign
+  // up too).  Without this, an unauthenticated visitor landed straight on the
+  // dashboard and saw a CORS-blocked/401'd mess instead of the login screen.
+  const [authChecked, setAuthChecked] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+      .then((res) => {
+        if (cancelled) return
+        if (res.ok) {
+          setAuthChecked(true)
+        } else {
+          router.replace('/login')
+        }
+      })
+      .catch(() => {
+        if (!cancelled) router.replace('/login')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [router])
 
   // Close sidebar on route change (mobile nav item tap)
   useEffect(() => {
@@ -53,6 +81,16 @@ export function PyroCoreLayout({
 
   // Current page label for mobile top nav
   const currentPage = navItems.find((item) => item.href === pathname)?.label ?? 'PyroCore'
+
+  // While we verify the session, show a neutral loading state instead of
+  // flashing the dashboard (which would just 401 in the background).
+  if (!authChecked) {
+    return (
+      <div className="flex h-screen items-center justify-center text-muted-foreground">
+        Loading…
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
