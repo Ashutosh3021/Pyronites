@@ -9,7 +9,7 @@ Platforms like Supabase and Firebase are excellent — until you cross a free-ti
 ## Core Ideas
 
 - **SQLite as the storage engine** — a single embedded database file, zero hosting cost, ACID-compliant, SQL-native. WAL mode handles concurrent access safely out of the box.
-- **CLI-first workflow** — init a project, manage schema/migrations, and connect frameworks (Next.js, Python, Prisma, Vercel) from the terminal.
+- **CLI-first workflow** — init a project, manage schema/migrations, and connect frameworks from the terminal.
 - **Dashboard (Web App / PWA)** — a Supabase-style visual layer: table explorer, SQL editor, auth management, storage, logs, and settings.
 - **REST API** — auto-generated from your schema, so any framework can talk to your backend with plain HTTP calls. No mandatory SDK.
 - **PostgreSQL compatibility as a future goal** — SQLite today, with a clear migration path once a project outgrows single-node scale.
@@ -18,50 +18,111 @@ Platforms like Supabase and Firebase are excellent — until you cross a free-ti
 
 Students, beginners, and indie developers building personal or college projects — not production apps expecting thousands of concurrent users. If your project outgrows ~100 users or needs multi-region availability, this project's docs will point you toward migrating to Postgres.
 
+## Status
+
+**MVP complete** (Phases 1–4).
+
+| Phase | Scope | Status |
+|-------|-------|--------|
+| 1 | Core backend (SQLite, auth, dynamic REST, API keys) | Done |
+| 2 | Dashboard (tables, SQL editor, users, keys, logs) | Done |
+| 3 | File storage + scheduled backups | Done |
+| 4 | Docker + free-tier deploy (Render / Fly / Vercel) | Done |
+
+See `PLAN.md` for the full roadmap and `ARCHITECTURE.md` for technical design.
+
+---
+
+## 5-minute local quick start
+
+**Prerequisites:** Python 3.11+, Node 18+ (for the dashboard).
+
+### 1. Backend
+
+```bash
+git clone https://github.com/Ashutosh3021/Pyronites.git
+cd Pyronites
+
+# Install
+pip install -e ".[dev]"
+
+# Start the API (creates pyrocore.db + runs migrations automatically)
+python -m uvicorn backend.app:app --host 0.0.0.0 --port 8000
+```
+
+Open http://localhost:8000/health — you should see `{"status":"ok","database":true}`.
+
+### 2. Dashboard
+
+```bash
+cd frontend
+npm install   # or pnpm install
+npm run dev
+```
+
+Open http://localhost:3000 → sign up → create a table → start building.
+
+### 3. Talk to the API from your app
+
+```bash
+# After signing up in the dashboard, create an API key (API Keys page).
+# Then from any client:
+
+curl -H "Authorization: Bearer pyro_live_..." \
+  http://localhost:8000/tables/your_table
+```
+
+Or use plain `fetch` / `requests` against `/tables/...`, `/storage/...`, etc.
+
+### Docker (one command)
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+API: http://localhost:8000 — data lives in the `pyrocore-data` volume.
+
+---
+
+## Deploy (free tier)
+
+Full guide: **[DEPLOY.md](DEPLOY.md)**
+
+Short version:
+
+1. **Backend → Render**  
+   Connect the repo as a Blueprint (`render.yaml`). Set `FRONTEND_ORIGIN`, cookie env vars, and optionally `S3_*` for free-tier persistence.
+
+2. **Frontend → Vercel**  
+   Import the repo, set `NEXT_PUBLIC_API_URL` to your Render URL, deploy.
+
+3. Open the Vercel URL, sign up, and use the dashboard.
+
+For real (non-demo) data on free tier, enable **S3/R2 sync** (see DEPLOY.md §10.1). On a paid Render plan, just attach a disk at `/data`.
+
+---
+
 ## Components
 
 | Component | Description |
 |---|---|
-| **CLI / Python package** | Create/manage projects, generate config files, manage schema & migrations, connect apps to the backend |
-| **Dashboard** | Database explorer, SQL editor, auth management, user management, API key management, storage management, project settings, logs & monitoring |
-| **Core engine** | SQLite (WAL mode) + REST API layer + session-based auth |
-
-## Quick Start (planned CLI flow)
-
-```bash
-pip install <package-name>
-
-# create a new backend project
-<cli> init my-project
-
-# push your schema (from a schema file, or via SQL directly)
-<cli> db push
-
-# start the local server (REST API + dashboard)
-<cli> start
-
-# back up your database
-<cli> backup
-```
-
-Your app (Next.js, Python, etc.) then talks to the local REST API just like it would talk to Supabase — `fetch`/`requests` calls against auto-generated table endpoints.
+| **CLI / Python package** | Create/manage projects, schema & migrations, connect apps |
+| **Dashboard** | Table explorer, SQL editor, auth, API keys, storage, logs, settings |
+| **Core engine** | SQLite (WAL) + REST API + session auth + file storage + backups |
 
 ## Design Principles
 
-1. **Don't rebuild solved problems.** Password hashing (argon2), SQL execution (SQLite), containerization (Docker) — use battle-tested tools, not custom implementations.
-2. **Zero cost by default.** No component in the MVP requires a paid service.
-3. **Data ownership.** Your data lives in a file you control, not a vendor's cloud.
-4. **Honest tradeoffs.** This is a single-node, self-hosted tool. It won't pretend to be infinitely scalable — the docs will say plainly when it's time to migrate to Postgres.
-5. **Simple now, extensible later.** MVP scope is deliberately small; see `PLAN.md` for what's in v1 vs. deferred.
-
-## Status
-
-Early planning / pre-MVP. See `PLAN.md` for roadmap and `ARCHITECTURE.md` for technical design.
+1. **Don't rebuild solved problems.** Password hashing (argon2), SQL (SQLite), containers (Docker).
+2. **Zero cost by default.** No paid service required for the MVP.
+3. **Data ownership.** Your data is a file you control.
+4. **Honest tradeoffs.** Single-node. Docs say when to migrate to Postgres.
+5. **Simple now, extensible later.**
 
 ## License
 
-Open source (license TBD — MIT or Apache 2.0 recommended for maximum adoption).
+Open source (license TBD — MIT or Apache 2.0 recommended).
 
 ## Contributing
 
-Not yet open for contributions — MVP is being scoped and built first. This will be updated once the core is stable enough for outside contributors.
+Core is stable enough for outside contributions. Open an issue or PR.
