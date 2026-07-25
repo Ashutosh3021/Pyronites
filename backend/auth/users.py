@@ -116,7 +116,7 @@ def authenticate_user(db: Database, email: str, plain_password: str) -> Optional
         return user
 
     except Exception:
-        logger.error("Error during user authentication", exc_info=True)
+        logger.error("Error during user authentication", exp_info=True)
         return None
 
 
@@ -147,7 +147,7 @@ def get_user_by_id(db: Database, user_id: str) -> Optional[User]:
             is_active=is_active,
         )
     except DatabaseError:
-        logger.error("Failed to get user by id", exc_info=True)
+        logger.error("Failed to get user by id", exp_info=True)
         raise
 
 
@@ -179,7 +179,7 @@ def get_user_by_email(db: Database, email: str) -> Optional[User]:
             is_active=is_active,
         )
     except DatabaseError:
-        logger.error("Failed to get user by email", exc_info=True)
+        logger.error("Failed to get user by email", exp_info=True)
         raise
 
 
