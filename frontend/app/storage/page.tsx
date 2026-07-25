@@ -53,6 +53,7 @@ export default function StoragePage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadErr, setUploadErr] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState<string | null>(null)
 
   const loadFiles = useCallback(async () => {
     setLoading(true)
@@ -104,6 +105,33 @@ export default function StoragePage() {
       setUploadErr(e instanceof Error ? e.message : 'Upload failed.')
     } finally {
       setUploading(false)
+    }
+  }
+
+  const handleDownload = async (file: StorageFile) => {
+    setDownloading(file.id)
+    setOpenMenu(null)
+    try {
+      const res = await fetch(`${API_BASE}/storage/${file.id}/download`, {
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.message ?? 'Download failed.')
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = file.name
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setLoadErr(e instanceof Error ? e.message : 'Download failed.')
+    } finally {
+      setDownloading(null)
     }
   }
 
@@ -217,12 +245,13 @@ export default function StoragePage() {
                     </button>
                     {openMenu === file.id && (
                       <div className="absolute right-0 top-full mt-1 bg-card border border-border shadow-lg z-10 min-w-40 overflow-hidden">
-                        <a
-                          href={`${API_BASE}/storage/${file.id}/download`}
-                          className="w-full px-4 py-3 text-left text-sm text-foreground hover:bg-muted transition-colors flex items-center gap-2 min-h-[44px]"
+                        <button
+                          onClick={() => handleDownload(file)}
+                          disabled={downloading === file.id}
+                          className="w-full px-4 py-3 text-left text-sm text-foreground hover:bg-muted transition-colors flex items-center gap-2 min-h-[44px] disabled:opacity-60"
                         >
-                          <Download className="w-4 h-4" />Download
-                        </a>
+                          <Download className="w-4 h-4" />{downloading === file.id ? 'Downloading…' : 'Download'}
+                        </button>
                         <button
                           onClick={() => { setDeleteConfirm(file.id); setOpenMenu(null) }}
                           className="w-full px-4 py-3 text-left text-sm text-error hover:bg-error/10 transition-colors flex items-center gap-2 min-h-[44px]"
@@ -243,13 +272,14 @@ export default function StoragePage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    <a
-                      href={`${API_BASE}/storage/${file.id}/download`}
-                      className="p-2 text-muted-foreground hover:text-foreground transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                    <button
+                      onClick={() => handleDownload(file)}
+                      disabled={downloading === file.id}
+                      className="p-2 text-muted-foreground hover:text-foreground transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center disabled:opacity-60"
                       title="Download"
                     >
                       <Download className="w-4 h-4" />
-                    </a>
+                    </button>
                     <button
                       onClick={() => setDeleteConfirm(file.id)}
                       className="p-2 text-muted-foreground hover:text-error transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
@@ -272,12 +302,21 @@ export default function StoragePage() {
                 <h3 className="text-sm font-medium text-foreground truncate mb-1">{file.name}</h3>
                 <p className="text-xs text-muted-foreground mb-1">{formatFileSize(file.size)}</p>
                 <p className="text-xs text-muted-foreground mb-3">{new Date(file.uploaded).toLocaleDateString()}</p>
-                <button
-                  onClick={() => setDeleteConfirm(file.id)}
-                  className="w-full px-2 py-2 text-xs text-error hover:bg-error/10 transition-colors min-h-[36px]"
-                >
-                  Delete
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleDownload(file)}
+                    disabled={downloading === file.id}
+                    className="flex-1 px-2 py-2 text-xs text-foreground hover:bg-muted transition-colors min-h-[36px] disabled:opacity-60"
+                  >
+                    {downloading === file.id ? '…' : 'Download'}
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirm(file.id)}
+                    className="flex-1 px-2 py-2 text-xs text-error hover:bg-error/10 transition-colors min-h-[36px]"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
           </div>
