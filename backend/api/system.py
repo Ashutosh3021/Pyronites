@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 
 from backend.core.db import Database
 from backend.api.schemas import ErrorResponse
@@ -19,6 +20,8 @@ from backend.api.auth_deps import resolve_auth, require_scopes
 from backend.api.tables import get_allowed_tables
 from backend.core.backup import backup_now, list_backups
 from backend.core.logring import get_logs, record_event
+from backend.auth.users import set_user_active, delete_user
+from backend.auth.sessions import revoke_session
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["system"])
@@ -66,7 +69,7 @@ async def stats(request: Request, db: Database = Depends(get_db)):
         if backups:
             last_backup = backups[0].created_at.isoformat().replace("+00:00", "Z")
     except Exception:
-        logger.warning("Could not list backups for stats", exc_info=True)
+        logger.warning("Could not list backups for stats", exp_info=True)
 
     project = None
     try:
@@ -83,7 +86,7 @@ async def stats(request: Request, db: Database = Depends(get_db)):
                 "created_at": row[3],
             }
     except Exception:
-        logger.warning("Could not fetch project info for stats", exc_info=True)
+        logger.warning("Could not fetch project info for stats", exp_info=True)
 
     return {
         "table_count": table_count,
@@ -103,7 +106,7 @@ async def trigger_backup(request: Request, db: Database = Depends(get_db)):
     try:
         backup_file = await _run_backup(db_path, _backup_dir())
     except Exception as e:
-        logger.error("Manual backup failed", exc_info=True)
+        logger.error("Manual backup failed", exp_info=True)
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -122,7 +125,7 @@ async def trigger_backup(request: Request, db: Database = Depends(get_db)):
         if s3 is not None:
             await asyncio.to_thread(s3.upload, db_path)
     except Exception as e:
-        logger.warning("Manual backup S3 upload failed: %s", e, exc_info=True)
+        logger.warning("Manual backup S3 upload failed: %s", e, exp_info=True)
     return {"path": str(backup_file), "created_at": _now_iso()}
 
 
@@ -182,7 +185,7 @@ async def users(request: Request, db: Database = Depends(get_db)):
             for r in cur.fetchall()
         ]
     except Exception as e:
-        logger.error("Failed to list users", exc_info=True)
+        logger.error("Failed to list users", exp_info=True)
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -208,10 +211,104 @@ async def sessions(request: Request, db: Database = Depends(get_db)):
             for r in cur.fetchall()
         ]
     except Exception as e:
-        logger.error("Failed to list sessions", exc_info=True)
+        logger.error("Failed to list sessions", exp_info=True)
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
                 code="internal_error", message="Failed to list sessions"
             ).model_dump(),
         )
+
+
+# ── User management (admin) ───────────────────────────────────────────────────
+
+class SetActiveBody(BaseModel):
+    is_active: bool
+
+
+@router.patch("/users/{user_id}")
+async def patch_user(
+    user_id: str,
+    body: SetActiveBody,
+    request: Request,
+    db: Database = Depends(get_db),
+):
+    """Enable or disable a user (admin only)."""
+    require_scopes(resolve_auth(request, db), {"admin"})
+    try:
+        updated = set_user_active(db, user_id, body.is_active)
+    except Exception as e:
+        logger.error("Failed to update user %s", user_id, exp_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=ErrorResponse(
+                code="internal_error", message="Failed to update user"
+            ).model_dump(),
+        )
+    if not updated:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(code="not_found", message="User not found").model_dump(),
+        )
+    action = "enabled" if body.is_active else "disabled"
+    record_event("info", f"User {action}: {user_id}")
+    return {"id": user_id, "is_active": body.is_active}
+
+
+@router.delete("/users/{user_id}")
+async def remove_user(
+    user_id: str,
+    request: Request,
+    db: Database = Depends(get_db),
+):
+    """Permanently delete a user (admin only). Sessions cascade-delete."""
+    require_scopes(resolve_auth(request, db), {"admin"})
+    try:
+        deleted = delete_user(db, user_id)
+    except Exception as e:
+        logger.error("Failed to delete user %s", user_id, exp_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=ErrorResponse(
+                code="internal_error", message="Failed to delete user"
+            ).model_dump(),
+        )
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(code="not_found", message="User not found").model_dump(),
+        )
+    record_event("warning", f"User deleted: {user_id}")
+    return {"message": "User deleted"}
+
+
+@router.delete("/sessions/{session_id}")
+async def remove_session(
+    session_id: str,
+    request: Request,
+    db: Database = Depends(get_db),
+):
+    """Revoke a specific session by id (admin only)."""
+    require_scopes(resolve_auth(request, db), {"admin"})
+    try:
+        # sessions table stores the token *hash*, but we delete by primary key id
+        cur = db.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=ErrorResponse(
+                    code="not_found", message="Session not found"
+                ).model_dump(),
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to revoke session %s", session_id, exp_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=ErrorResponse(
+                code="internal_error", message="Failed to revoke session"
+            ).model_dump(),
+        )
+    record_event("info", f"Session revoked: {session_id}")
+    return {"message": "Session revoked"}
