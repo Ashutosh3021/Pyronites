@@ -2,7 +2,7 @@
 
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
 import { useState, useEffect, useCallback } from 'react'
-import { MoreVertical, Trash2, Lock, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { MoreVertical, Trash2, Lock, Unlock, ChevronDown, ChevronUp, X } from 'lucide-react'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -53,6 +53,9 @@ export default function AuthenticationPage() {
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadErr, setLoadErr] = useState<string | null>(null)
+  const [actionErr, setActionErr] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<User | null>(null)
+  const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -91,6 +94,70 @@ export default function AuthenticationPage() {
     load()
   }, [load])
 
+  const toggleActive = async (user: User) => {
+    setBusy(true)
+    setActionErr(null)
+    setOpenMenu(null)
+    try {
+      const res = await fetch(`${API_BASE}/api/users/${user.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ is_active: user.status !== 'active' }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.message ?? 'Failed to update user')
+      }
+      await load()
+    } catch (e) {
+      setActionErr(e instanceof Error ? e.message : 'Failed to update user')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const doDeleteUser = async (user: User) => {
+    setBusy(true)
+    setActionErr(null)
+    try {
+      const res = await fetch(`${API_BASE}/api/users/${user.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.message ?? 'Failed to delete user')
+      }
+      setConfirmDelete(null)
+      await load()
+    } catch (e) {
+      setActionErr(e instanceof Error ? e.message : 'Failed to delete user')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const revokeSession = async (sessionId: string) => {
+    setBusy(true)
+    setActionErr(null)
+    try {
+      const res = await fetch(`${API_BASE}/api/sessions/${sessionId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.message ?? 'Failed to revoke session')
+      }
+      await load()
+    } catch (e) {
+      setActionErr(e instanceof Error ? e.message : 'Failed to revoke session')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const activeCount = users.filter((u) => u.status === 'active').length
 
   return (
@@ -105,6 +172,9 @@ export default function AuthenticationPage() {
 
         {loadErr && (
           <p role="alert" className="text-sm" style={{ color: 'var(--error)' }}>{loadErr}</p>
+        )}
+        {actionErr && (
+          <p role="alert" className="text-sm" style={{ color: 'var(--error)' }}>{actionErr}</p>
         )}
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
@@ -172,19 +242,24 @@ export default function AuthenticationPage() {
                           <button
                             onClick={() => setOpenMenu(openMenu === user.id ? null : user.id)}
                             className="p-2 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                            disabled={busy}
                           >
                             <MoreVertical className="w-4 h-4" />
                           </button>
                           {openMenu === user.id && (
                             <div className="absolute right-0 top-full mt-1 bg-card border border-border shadow-lg z-10 min-w-40 overflow-hidden">
-                              <button className="w-full px-4 py-3 text-left text-sm text-foreground hover:bg-muted transition-colors flex items-center gap-2 min-h-[44px]">
-                                <Lock className="w-4 h-4" />Disable User
+                              <button
+                                onClick={() => toggleActive(user)}
+                                className="w-full px-4 py-3 text-left text-sm text-foreground hover:bg-muted transition-colors flex items-center gap-2 min-h-[44px]"
+                              >
+                                {user.status === 'active' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                                {user.status === 'active' ? 'Disable User' : 'Enable User'}
                               </button>
-                              <button className="w-full px-4 py-3 text-left text-sm text-error hover:bg-error/10 transition-colors flex items-center gap-2 min-h-[44px]">
+                              <button
+                                onClick={() => { setConfirmDelete(user); setOpenMenu(null) }}
+                                className="w-full px-4 py-3 text-left text-sm text-error hover:bg-error/10 transition-colors flex items-center gap-2 min-h-[44px]"
+                              >
                                 <Trash2 className="w-4 h-4" />Delete User
-                              </button>
-                              <button className="w-full px-4 py-3 text-left text-sm text-foreground hover:bg-muted transition-colors min-h-[44px]">
-                                Reset Password
                               </button>
                             </div>
                           )}
@@ -222,10 +297,19 @@ export default function AuthenticationPage() {
                               </div>
                             </div>
                             <div className="flex gap-2 pt-1">
-                              <button className="flex items-center gap-2 px-3 py-2 border border-border text-sm text-foreground hover:bg-muted transition-colors min-h-[44px] flex-1 justify-center">
-                                <Lock className="w-4 h-4" />Disable
+                              <button
+                                onClick={() => toggleActive(user)}
+                                disabled={busy}
+                                className="flex items-center gap-2 px-3 py-2 border border-border text-sm text-foreground hover:bg-muted transition-colors min-h-[44px] flex-1 justify-center disabled:opacity-60"
+                              >
+                                {user.status === 'active' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                                {user.status === 'active' ? 'Disable' : 'Enable'}
                               </button>
-                              <button className="flex items-center gap-2 px-3 py-2 border border-error/30 text-sm text-error hover:bg-error/10 transition-colors min-h-[44px] flex-1 justify-center">
+                              <button
+                                onClick={() => setConfirmDelete(user)}
+                                disabled={busy}
+                                className="flex items-center gap-2 px-3 py-2 border border-error/30 text-sm text-error hover:bg-error/10 transition-colors min-h-[44px] flex-1 justify-center disabled:opacity-60"
+                              >
                                 <Trash2 className="w-4 h-4" />Delete
                               </button>
                             </div>
@@ -261,7 +345,11 @@ export default function AuthenticationPage() {
                       <div className="text-sm font-mono text-foreground">{session.userEmail}</div>
                       <div className="text-sm font-mono text-muted-foreground">{session.created}</div>
                       <div className="text-sm font-mono text-muted-foreground">{session.expires}</div>
-                      <button className="text-sm text-error hover:underline transition-colors w-fit min-h-[44px] flex items-center">
+                      <button
+                        onClick={() => revokeSession(session.id)}
+                        disabled={busy}
+                        className="text-sm text-error hover:underline transition-colors w-fit min-h-[44px] flex items-center disabled:opacity-60"
+                      >
                         Revoke
                       </button>
                     </div>
@@ -271,7 +359,11 @@ export default function AuthenticationPage() {
                         <p className="text-sm font-mono text-foreground truncate">{session.userEmail}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">Expires {session.expires}</p>
                       </div>
-                      <button className="text-sm text-error px-3 py-2 hover:bg-error/10 transition-colors flex-shrink-0 min-h-[44px] flex items-center">
+                      <button
+                        onClick={() => revokeSession(session.id)}
+                        disabled={busy}
+                        className="text-sm text-error px-3 py-2 hover:bg-error/10 transition-colors flex-shrink-0 min-h-[44px] flex items-center disabled:opacity-60"
+                      >
                         Revoke
                       </button>
                     </div>
@@ -282,6 +374,41 @@ export default function AuthenticationPage() {
           </div>
         )}
       </div>
+
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-card border border-border w-full sm:max-w-sm flex flex-col">
+            <div className="flex items-center justify-between p-6 pb-4">
+              <h2 className="text-lg font-semibold text-foreground">Delete User</h2>
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="p-2 text-muted-foreground hover:text-foreground min-w-[44px] min-h-[44px] flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground px-6 pb-2">
+              Permanently delete <span className="font-semibold text-foreground">{confirmDelete.email}</span>?
+              Their sessions will also be removed. This cannot be undone.
+            </p>
+            <div className="flex gap-3 px-6 pb-6 pt-2">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="flex-1 px-4 py-3 border border-border text-sm font-medium text-foreground hover:bg-muted transition-colors min-h-[44px]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => doDeleteUser(confirmDelete)}
+                disabled={busy}
+                className="flex-1 px-4 py-3 bg-error text-error-foreground text-sm font-medium hover:bg-error/90 transition-colors min-h-[44px] disabled:opacity-70"
+              >
+                {busy ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </PyroCoreLayout>
   )
 }
