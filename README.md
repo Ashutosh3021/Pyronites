@@ -29,7 +29,7 @@ Students, beginners, and indie developers building personal or college projects 
 | 3 | File storage + scheduled backups | Done |
 | 4 | Docker + free-tier deploy (Render / Fly / Vercel) | Done |
 
-See `PLAN.md` for the full roadmap and `ARCHITECTURE.md` for technical design.
+See `docs/PLAN.md` for the full roadmap and `docs/ARCHITECTURE.md` for technical design.
 
 ---
 
@@ -87,7 +87,7 @@ API: http://localhost:8000 — data lives in the `pyrocore-data` volume.
 
 ## Deploy (free tier)
 
-Full guide: **[DEPLOY.md](DEPLOY.md)**
+Full guide: **[docs/DEPLOY.md](docs/DEPLOY.md)**
 
 Short version:
 
@@ -99,7 +99,7 @@ Short version:
 
 3. Open the Vercel URL, sign up, and use the dashboard.
 
-For real (non-demo) data on free tier, enable **S3/R2 sync** (see DEPLOY.md §10.1). On a paid Render plan, just attach a disk at `/data`.
+For real (non-demo) data on free tier, enable **S3/R2 sync** (see docs/DEPLOY.md §10.1). On a paid Render plan, just attach a disk at `/data`.
 
 ---
 
