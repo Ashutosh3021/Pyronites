@@ -33,6 +33,7 @@ class TableQuery:
         self._op: Optional[str] = None
 
     def eq(self, column: str, value: Any) -> Any:
+        """Add a single equality filter. On update/delete, executes immediately."""
         self._filter_column = column
         self._filter_value = str(value) if value is not None else None
         if self._op in ("update", "delete"):
@@ -94,6 +95,11 @@ class TableQuery:
         if self._policy == POLICY_CACHE and self._local is not None and isinstance(result, dict):
             self._local.insert(self._name, result)
         return result  # type: ignore[return-value]
+
+    def schema(self) -> List[Dict[str, Any]]:
+        """Return column definitions. Maps to ``GET /tables/{name}/schema``."""
+        result = self._http.request("GET", f"/tables/{self._name}/schema")
+        return result if isinstance(result, list) else []
 
     def execute(self) -> Any:
         return self._dispatch()
