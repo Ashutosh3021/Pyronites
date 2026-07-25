@@ -129,7 +129,7 @@ def authenticate_user(db: Database, email: str, plain_password: str) -> Optional
         return user
 
     except Exception as e:  # Catch any exception to avoid leaking info
-        logger.error("Error during user authentication", exc_info=True)
+        logger.error("Error during user authentication", exp_info=True)
         return None
 
 
@@ -202,7 +202,7 @@ def get_user_by_email(db: Database, email: str) -> Optional[User]:
             is_active=is_active,
         )
     except DatabaseError as e:
-        logger.error("Failed to get user by email", exc_info=True)
+        logger.error("Failed to get user by email", exp_info=True)
         raise
 
 
@@ -220,7 +220,7 @@ def set_user_active(db: Database, user_id: str, active: bool) -> bool:
         )
         return cursor.rowcount > 0
     except DatabaseError as e:
-        logger.error("Failed to set user active state", exc_info=True)
+        logger.error("Failed to set user active state", exp_info=True)
         raise
 
 
