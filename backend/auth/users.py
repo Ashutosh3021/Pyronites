@@ -51,7 +51,6 @@ def create_user(db: Database, email: str, plain_password: str) -> User:
         UserAlreadyExistsError: If a user with that email already exists.
         ValueError: If email format is invalid.
     """
-    # Validate email format
     if not email or not email.strip():
         raise ValueError("Email must not be empty")
     if not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", email):
@@ -60,17 +59,12 @@ def create_user(db: Database, email: str, plain_password: str) -> User:
     if not plain_password:
         raise ValueError("Password must not be empty")
 
-    # Normalize email to lowercase for case-insensitive checks
     normalized_email = email.lower()
 
-    # Check if user already exists
     existing = get_user_by_email(db, normalized_email)
     if existing is not None:
-        # Do NOT include the email in the exception message — it could be
-        # reflected back in an API response and aid account enumeration.
         raise UserAlreadyExistsError("A user with that email already exists")
 
-    # Create new user
     user_id = str(uuid.uuid4())
     created_at = datetime.now(timezone.utc)
     password_hash = hash_password(plain_password)
@@ -84,8 +78,6 @@ def create_user(db: Database, email: str, plain_password: str) -> User:
             (user_id, normalized_email, password_hash, created_at.isoformat())
         )
     except DatabaseError as e:
-        # Convert a unique constraint violation (race condition: concurrent signup
-        # for the same email) into the expected UserAlreadyExistsError.
         from backend.core.db import DatabaseIntegrityError
         if isinstance(e, DatabaseIntegrityError):
             raise UserAlreadyExistsError("A user with that email already exists") from e
@@ -105,13 +97,8 @@ def authenticate_user(db: Database, email: str, plain_password: str) -> Optional
     """
     Authenticate a user by email and password.
 
-    Args:
-        db: Database instance to use.
-        email: Email address of user to authenticate.
-        plain_password: Plaintext password to check.
-
     Returns:
-        User if authentication successful, None otherwise (no info leaked about why.
+        User if authentication successful, None otherwise (no info leaked about why).
     """
     try:
         normalized_email = email.lower()
@@ -128,7 +115,7 @@ def authenticate_user(db: Database, email: str, plain_password: str) -> Optional
 
         return user
 
-    except Exception as e:  # Catch any exception to avoid leaking info
+    except Exception:
         logger.error("Error during user authentication", exc_info=True)
         return None
 
@@ -137,16 +124,11 @@ def get_user_by_id(db: Database, user_id: str) -> Optional[User]:
     """
     Retrieve user by ID.
 
-    Args:
-        db: Database instance.
-        user_id: User's unique ID.
-
     Returns:
         User if found, None if no such user exists.
 
     Raises:
-        DatabaseError: If a database error occurs (re-raised so callers can
-            distinguish "not found" from "DB down").
+        DatabaseError: If a database error occurs.
     """
     try:
         cursor = db.execute(
@@ -156,7 +138,6 @@ def get_user_by_id(db: Database, user_id: str) -> Optional[User]:
         row = cursor.fetchone()
         if row is None:
             return None
-        # is_active is stored as INTEGER (0/1) in SQLite
         is_active = bool(row[4]) if len(row) > 4 else True
         return User(
             id=row[0],
@@ -165,7 +146,7 @@ def get_user_by_id(db: Database, user_id: str) -> Optional[User]:
             created_at=datetime.fromisoformat(row[3]),
             is_active=is_active,
         )
-    except DatabaseError as e:
+    except DatabaseError:
         logger.error("Failed to get user by id", exc_info=True)
         raise
 
@@ -173,10 +154,6 @@ def get_user_by_id(db: Database, user_id: str) -> Optional[User]:
 def get_user_by_email(db: Database, email: str) -> Optional[User]:
     """
     Retrieve user by email (case-insensitive).
-
-    Args:
-        db: Database instance.
-        email: Email address to look up.
 
     Returns:
         User if found, None if no such user exists.
@@ -201,8 +178,8 @@ def get_user_by_email(db: Database, email: str) -> Optional[User]:
             created_at=datetime.fromisoformat(row[3]),
             is_active=is_active,
         )
-    except DatabaseError as e:
-        logger.error("Failed to get user by email", exp_info=True)
+    except DatabaseError:
+        logger.error("Failed to get user by email", exc_info=True)
         raise
 
 
@@ -219,7 +196,7 @@ def set_user_active(db: Database, user_id: str, active: bool) -> bool:
             (1 if active else 0, datetime.now(timezone.utc).isoformat(), user_id),
         )
         return cursor.rowcount > 0
-    except DatabaseError as e:
+    except DatabaseError:
         logger.error("Failed to set user active state", exp_info=True)
         raise
 
@@ -236,6 +213,6 @@ def delete_user(db: Database, user_id: str) -> bool:
     try:
         cursor = db.execute("DELETE FROM users WHERE id = ?", (user_id,))
         return cursor.rowcount > 0
-    except DatabaseError as e:
+    except DatabaseError:
         logger.error("Failed to delete user", exp_info=True)
         raise
