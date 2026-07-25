@@ -24,11 +24,13 @@ def test_2xx_json():
 
 
 def test_401_raises_auth_error():
-    t = _transport_resp = MagicMock()
+    t = _transport()
+    mock_resp = MagicMock()
     mock_resp.status_code = 401
     mock_resp.text = "unauthorized"
-    mock_resp.json.return_value = {"detail": {"code": "unauthorized", "message": "Missing or invalid authentication"}}
-    t = _transport()
+    mock_resp.json.return_value = {
+        "detail": {"code": "unauthorized", "message": "Missing or invalid authentication"}
+    }
     with patch.object(t._client, "request", return_value=mock_resp):
         with pytest.raises(AuthError) as exc:
             t.request("GET", "/tables/notes")
@@ -42,7 +44,9 @@ def test_404_raises_not_found():
     mock_resp = MagicMock()
     mock_resp.status_code = 404
     mock_resp.text = "not found"
-    mock_resp.json.return_value = {"detail": {"code": "not_found", "message": "Row not found"}}
+    mock_resp.json.return_value = {
+        "detail": {"code": "not_found", "message": "Row not found"}
+    }
     with patch.object(t._client, "request", return_value=mock_resp):
         with pytest.raises(NotFoundError) as exc:
             t.request("GET", "/tables/notes/xyz")
@@ -55,7 +59,9 @@ def test_500_raises_api_error():
     mock_resp = MagicMock()
     mock_resp.status_code = 500
     mock_resp.text = "boom"
-    mock_resp.json.return_value = {"detail": {"code": "internal_error", "message": "boom"}}
+    mock_resp.json.return_value = {
+        "detail": {"code": "internal_error", "message": "boom"}
+    }
     with patch.object(t._client, "request", return_value=mock_resp):
         with pytest.raises(ApiError) as exc:
             t.request("GET", "/tables/notes")
