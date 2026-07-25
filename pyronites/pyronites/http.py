@@ -2,19 +2,32 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+import time
+from typing import Any, Dict, Optional, Set
 
 import httpx
 
 from pyronites.config import ClientConfig
 from pyronites.errors import ApiError, AuthError, NotFoundError
 
+_RETRYABLE_STATUS: Set[int] = {502, 503, 504}
+_DEFAULT_MAX_RETRIES = 2
+_DEFAULT_BACKOFF_BASE = 0.3
+
 
 class HttpTransport:
-    """Thin wrapper around ``httpx.Client`` with auth headers and error mapping."""
+    """Thin wrapper around ``httpx.Client`` with auth headers, retries, and error mapping."""
 
-    def __init__(self, config: ClientConfig) -> None:
+    def __init__(
+        self,
+        config: ClientConfig,
+        *,
+        max_retries: int = _DEFAULT_MAX_RETRIES,
+        backoff_base: float = _DEFAULT_BACKOFF_BASE,
+    ) -> None:
         self._config = config
+        self._max_retries = max(0, max_retries)
+        self._backoff_base = backoff_base
         headers: Dict[str, str] = {}
         if config.key:
             headers["Authorization"] = f"Bearer {config.key}"
@@ -42,31 +55,45 @@ class HttpTransport:
         files: Any = None,
         data: Any = None,
     ) -> Any:
-        """Perform a request and return parsed JSON (or ``None`` for empty body).
-
-        Raises typed exceptions for non-2xx responses.
-        """
+        """Perform a request with conservative retries on transient failures."""
         if not path.startswith("/"):
             path = "/" + path
 
-        try:
-            response = self._client.request(
-                method,
-                path,
-                json=json,
-                params=params,
-                files=files,
-                data=data,
-            )
-        except httpx.TimeoutException as exc:
-            raise ApiError(f"Request timed out after {self._config.timeout}s") from exc
-        except httpx.RequestError as exc:
-            raise ApiError(f"Network error: {exc}") from exc
+        last_exc: Optional[Exception] = None
+        attempts = self._max_retries + 1
 
-        return self._handle_response(response)
+        for attempt in range(attempts):
+            try:
+                response = self._client.request(
+                    method, path, json=json, params=params, files=files, data=data,
+                )
+            except httpx.TimeoutException as exc:
+                last_exc = ApiError(f"Request timed out after {self._config.timeout}s")
+                last_exc.__cause__ = exc
+                if attempt < self._max_retries:
+                    time.sleep(self._backoff_base * (2 ** attempt))
+                    continue
+                raise last_exc from exc
+            except httpx.RequestError as exc:
+                last_exc = ApiError(f"Network error: {exc}")
+                last_exc.__cause__ = exc
+                if attempt < self._max_retries:
+                    time.sleep(self._backoff_base * (2 ** attempt))
+                    continue
+                raise last_exc from exc
+
+            if response.status_code in _RETRYABLE_STATUS and attempt < self._max_retries:
+                time.sleep(self._backoff_base * (2 ** attempt))
+                continue
+
+            return self._handle_response(response)
+
+        if last_exc is not None:
+            raise last_exc
+        raise ApiError("Request failed after retries")
 
     def _handle_response(self, response: httpx.Response) -> Any:
-        if response.status_code >= 200 and response.status_code < 300:
+        if 200 <= response.status_code < 300:
             if not response.content:
                 return None
             try:
