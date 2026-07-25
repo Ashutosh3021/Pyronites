@@ -205,3 +205,37 @@ def get_user_by_email(db: Database, email: str) -> Optional[User]:
         logger.error("Failed to get user by email", exc_info=True)
         raise
 
+
+def set_user_active(db: Database, user_id: str, active: bool) -> bool:
+    """
+    Enable or disable a user by setting ``is_active``.
+
+    Returns:
+        True if a row was updated, False if the user does not exist.
+    """
+    try:
+        cursor = db.execute(
+            "UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?",
+            (1 if active else 0, datetime.now(timezone.utc).isoformat(), user_id),
+        )
+        return cursor.rowcount > 0
+    except DatabaseError as e:
+        logger.error("Failed to set user active state", exc_info=True)
+        raise
+
+
+def delete_user(db: Database, user_id: str) -> bool:
+    """
+    Permanently delete a user.
+
+    Sessions are removed via ON DELETE CASCADE on the sessions table.
+
+    Returns:
+        True if a row was deleted, False if the user does not exist.
+    """
+    try:
+        cursor = db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        return cursor.rowcount > 0
+    except DatabaseError as e:
+        logger.error("Failed to delete user", exp_info=True)
+        raise
