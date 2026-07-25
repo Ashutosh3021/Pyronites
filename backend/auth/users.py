@@ -129,7 +129,7 @@ def authenticate_user(db: Database, email: str, plain_password: str) -> Optional
         return user
 
     except Exception as e:  # Catch any exception to avoid leaking info
-        logger.error("Error during user authentication", exp_info=True)
+        logger.error("Error during user authentication", exc_info=True)
         return None
 
 
