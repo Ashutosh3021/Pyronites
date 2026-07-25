@@ -1,5 +1,7 @@
 """Unit tests for create_client façade."""
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from pyronites import create_client, __version__
@@ -31,4 +33,14 @@ def test_table_name_validation(monkeypatch):
     client = create_client()
     with pytest.raises(ApiError):
         client.table("")
+    client.close()
+
+
+def test_tables_list(monkeypatch):
+    monkeypatch.setenv("PYRONITES_URL", "https://example.com")
+    client = create_client()
+    client._http.request = MagicMock(return_value=[{"name": "notes", "rows": 3}])
+    result = client.tables()
+    assert result[0]["name"] == "notes"
+    client._http.request.assert_called_once_with("GET", "/tables")
     client.close()

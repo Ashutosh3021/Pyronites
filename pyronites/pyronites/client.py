@@ -27,12 +27,19 @@ class PyronitesClient:
             self._local = LocalStore(path)
 
     def table(self, name: str) -> TableQuery:
+        """Return a fluent table handle for the given table name."""
         if not name or not isinstance(name, str):
             raise ApiError("table name must be a non-empty string")
         policy = self._config.table_policy(name)
         return TableQuery(self._http, name, policy=policy, local=self._local)
 
+    def tables(self) -> list:
+        """List user tables with row counts. Maps to ``GET /tables``."""
+        result = self._http.request("GET", "/tables")
+        return result if isinstance(result, list) else []
+
     def sql(self, query: str) -> dict:
+        """Execute raw SQL (admin-scoped key required)."""
         return self._http.request(  # type: ignore[return-value]
             "POST", "/sql/execute", json={"sql": query},
         )
