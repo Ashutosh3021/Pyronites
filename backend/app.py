@@ -17,7 +17,6 @@ from backend.api.auth import router as auth_router
 from backend.api.projects import router as projects_router
 from backend.api.apikeys import router as apikeys_router
 from backend.api.system import router as system_router
-from backend.api.project_scoped import router as project_scoped_router
 from backend.api.schemas import ErrorResponse
 from backend.core.db import Database
 from backend.core.migrations import get_migration_files, run_pending_migrations
@@ -30,41 +29,35 @@ logging.basicConfig(level=logging.INFO)
 
 DEFAULT_MIGRATIONS_DIR = str(Path(__file__).parent / "migrations")
 
+# Default dashboard origins when FRONTEND_ORIGIN is unset.
+# IMPORTANT: browsers forbid Access-Control-Allow-Origin: * together with
+# Access-Control-Allow-Credentials: true — session cookies would never stick
+# for a Vercel frontend talking to a Render API.
+_DEFAULT_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://pyronites.vercel.app",
+]
+
 
 def create_app() -> FastAPI:
-    """
-    Build the PyroCore FastAPI application.
-
-    This is the single source of truth for the API surface.  Both the container
-    entry point (``backend.app:app``) and the CLI ``pyrocore start`` command use
-    it, so they can never drift apart (routers, prefixes, or middleware).
-    """
     db_path = os.environ.get("DATABASE_PATH", "pyrocore.db")
     migrations_dir = os.environ.get("MIGRATIONS_DIR", DEFAULT_MIGRATIONS_DIR)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         logger.info("Starting up: db=%s migrations=%s", db_path, migrations_dir)
-        # Begin capturing application events into the in-memory log ring so the
-        # dashboard Logs page has something to show even before any user action.
         install_logring()
 
-        # Ensure the on-disk layout for the persistent volume exists before
-        # anything touches it.  On a brand-new deploy the platform mounts an
-        # empty volume at /data; if these dirs are missing the first upload or
-        # backup would 500.  Creating them here (and running as a user that can
-        # write the mount) avoids the "worked locally because the dir already
-        # existed" trap.
         storage_root = os.environ.get("STORAGE_ROOT", "storage_files")
         backup_dir = str(Path(db_path).parent / "backups")
-        projects_dir = str(Path(db_path).parent / "data" / "projects")
-        for d in (os.path.dirname(db_path) or ".", storage_root, backup_dir, projects_dir):
+        projects_data = str(Path(db_path).parent / "data" / "projects")
+        for d in (os.path.dirname(db_path) or ".", storage_root, backup_dir, projects_data):
             try:
                 Path(d).mkdir(parents=True, exist_ok=True)
             except OSError as e:
                 logger.warning("Could not create directory %s: %s", d, e)
 
-        # ── S3 / object-storage sync (free-tier persistence) ──────────────────
         s3 = load_s3_config()
         if s3 is not None:
             try:
@@ -92,7 +85,6 @@ def create_app() -> FastAPI:
 
         record_event("info", "Server started")
 
-        # ── Scheduled backup loop ──────────────────────────────────────────────
         backup_interval = int(os.environ.get("BACKUP_INTERVAL_SECONDS", "3600"))
         s3_upload = (lambda p: s3.upload(p)) if s3 is not None else None
         backup_task = None
@@ -106,7 +98,7 @@ def create_app() -> FastAPI:
         except Exception as e:
             logger.error("Failed to start backup loop: %s", e, exc_info=True)
 
-        yield  # App runs here
+        yield
 
         logger.info("Shutting down...")
         if s3 is not None:
@@ -124,21 +116,34 @@ def create_app() -> FastAPI:
 
     app = FastAPI(lifespan=lifespan, title="PyroCore API")
 
-    # ── CORS ────────────────────────────────────────────────────────────────
+    # ── CORS (credentialed dashboard) ─────────────────────────────────────
     frontend_origins = os.environ.get("FRONTEND_ORIGIN")
     if frontend_origins:
         allow_origins = [o.strip() for o in frontend_origins.split(",") if o.strip()]
     else:
-        allow_origins = ["*"]
+        allow_origins = list(_DEFAULT_ORIGINS)
+
+    # Also allow any *.vercel.app preview deployment when not locked down.
+    allow_origin_regex = os.environ.get(
+        "FRONTEND_ORIGIN_REGEX",
+        r"https://.*\.vercel\.app",
+    )
+
+    logger.info(
+        "CORS allow_origins=%s allow_origin_regex=%s",
+        allow_origins,
+        allow_origin_regex,
+    )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allow_origins,
+        allow_origin_regex=allow_origin_regex or None,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    # --- Uniform error handling ---------------------------------------------
     @app.exception_handler(RequestValidationError)
     async def _validation_error_handler(
         request: Request, exc: RequestValidationError
@@ -181,22 +186,25 @@ def create_app() -> FastAPI:
             ).model_dump(),
         )
 
-    # Include routers — legacy unscoped data routes stay for Default + clients.
-    # Project-scoped router matches frontend apiUrl() rewrites.
+    # Legacy unscoped routes (Default / primary project = meta DB)
     app.include_router(health_router)
     app.include_router(auth_router)
     app.include_router(tables_router)
     app.include_router(storage_router)
     app.include_router(sql_router)
     app.include_router(projects_router)
-    app.include_router(project_scoped_router)
     app.include_router(apikeys_router)
     app.include_router(system_router)
+
+    # Phase 2: same handlers under /api/projects/{project_id}/...
+    app.include_router(tables_router, prefix="/api/projects/{project_id}")
+    app.include_router(storage_router, prefix="/api/projects/{project_id}")
+    app.include_router(sql_router, prefix="/api/projects/{project_id}")
+    app.include_router(apikeys_router, prefix="/api/projects/{project_id}")
 
     return app
 
 
-# Module-level app used by `python -m uvicorn backend.app:app` and the Dockerfile.
 app = create_app()
 
 
