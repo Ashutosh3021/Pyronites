@@ -4,6 +4,7 @@ Storage API — file upload, download, listing, and deletion.
 Works at /storage and /api/projects/{project_id}/storage.
 """
 import logging
+import os
 from typing import Optional, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Query
@@ -19,7 +20,6 @@ from backend.core.storage import (
 from backend.api.schemas import ErrorResponse, to_utc_iso
 from backend.api.auth_deps import resolve_auth, require_scopes
 from backend.api.project_deps import get_db, auth_db
-import os
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/storage", tags=["storage"])
@@ -62,7 +62,7 @@ async def upload_file(
     except FileTooLargeError as e:
         raise HTTPException(status_code=413, detail=ErrorResponse(code="file_too_large", message=str(e)).model_dump())
     except Exception as e:
-        logger.error("Failed to upload file: %s", e, exp_info=True)
+        logger.error("Failed to upload file: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=ErrorResponse(code="internal_error", message="Failed to upload file").model_dump())
 
 
@@ -98,7 +98,7 @@ async def download_file(file_id: str, request: Request, db: Database = Depends(g
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=ErrorResponse(code="not_found", message="File not found").model_dump())
     except Exception as e:
-        logger.error("Failed to download file: %s", e, exp_info=True)
+        logger.error("Failed to download file: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=ErrorResponse(code="internal_error", message="Failed to download file").model_dump())
 
 
@@ -110,7 +110,7 @@ async def get_file_metadata(file_id: str, request: Request, db: Database = Depen
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=ErrorResponse(code="not_found", message="File not found").model_dump())
     except Exception as e:
-        logger.error("Failed to get file metadata: %s", e, exp_info=True)
+        logger.error("Failed to get file metadata: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=ErrorResponse(code="internal_error", message="Failed to get file metadata").model_dump())
 
 
