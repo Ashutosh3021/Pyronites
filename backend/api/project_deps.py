@@ -19,11 +19,11 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Generator, Optional
 
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 
 from backend.core.db import Database
 from backend.api.schemas import ErrorResponse
-from backend.api.auth_deps import resolve_auth
+from backend.api.auth_deps import resolve_auth, require_scopes
 from backend.core import projects as projmod
 from backend.core.migrations import run_pending_migrations
 
@@ -99,6 +99,54 @@ def enforce_api_key_project(auth: Optional[Dict[str, Any]], project: Dict[str, A
                 message="API key is not valid for this project",
             ).model_dump(),
         )
+
+
+def get_meta_db() -> Generator[Database, None, None]:
+    """Yield a connection to the meta registry DB."""
+    db = Database(meta_db_path())
+    db.connect()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def get_project_context(
+    project_id: str,
+    request: Request,
+    meta: Database = Depends(get_meta_db),
+) -> Generator[Dict[str, Any], None, None]:
+    """
+    FastAPI dependency for ``/api/projects/{project_id}/...`` routes.
+
+    Yields::
+
+        {
+          "project": <registry dict>,
+          "meta": <meta Database>,
+          "db": <project data Database>,
+          "auth": <resolve_auth dict>,
+        }
+    """
+    auth = resolve_auth(request, meta)
+    require_scopes(auth, {"read"})  # routes still apply tighter scopes
+
+    project = resolve_project_or_404(meta, project_id)
+    enforce_api_key_project(auth, project)
+
+    data_db = open_data_db_for_project(project)
+    try:
+        # Also attach to request.state for any code using the path-based get_db
+        request.state.meta_db = meta
+        request.state.project = project
+        yield {
+            "project": project,
+            "meta": meta,
+            "db": data_db,
+            "auth": auth,
+        }
+    finally:
+        data_db.close()
 
 
 def get_db(request: Request) -> Generator[Database, None, None]:
