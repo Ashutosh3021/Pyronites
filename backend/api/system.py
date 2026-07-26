@@ -106,7 +106,7 @@ async def trigger_backup(request: Request, db: Database = Depends(get_db)):
     try:
         backup_file = await _run_backup(db_path, _backup_dir())
     except Exception as e:
-        logger.error("Manual backup failed", exc_info=True)
+        logger.error("Manual backup failed", exp_info=True)
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -185,7 +185,7 @@ async def users(request: Request, db: Database = Depends(get_db)):
             for r in cur.fetchall()
         ]
     except Exception as e:
-        logger.error("Failed to list users", exc_info=True)
+        logger.error("Failed to list users", exp_info=True)
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -211,7 +211,7 @@ async def sessions(request: Request, db: Database = Depends(get_db)):
             for r in cur.fetchall()
         ]
     except Exception as e:
-        logger.error("Failed to list sessions", exp_info=True)
+        logger.error("Failed to list sessions", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -238,7 +238,7 @@ async def patch_user(
     try:
         updated = set_user_active(db, user_id, body.is_active)
     except Exception as e:
-        logger.error("Failed to update user %s", user_id, exc_info=True)
+        logger.error("Failed to update user %s", user_id, exp_info=True)
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -266,7 +266,7 @@ async def remove_user(
     try:
         deleted = delete_user(db, user_id)
     except Exception as e:
-        logger.error("Failed to delete user %s", user_id, exc_info=True)
+        logger.error("Failed to delete user %s", user_id, exp_info=True)
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -303,7 +303,7 @@ async def remove_session(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to revoke session %s", session_id, exc_info=True)
+        logger.error("Failed to revoke session %s", session_id, exp_info=True)
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
