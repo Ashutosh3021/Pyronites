@@ -41,6 +41,30 @@ def get_db() -> Database:
         db.close()
 
 
+def _resolve_project_id(db: Database) -> str:
+    """
+    Legacy helper used by /api/keys when no project is specified.
+
+    Returns the slug (``project_id`` column) of the oldest active project,
+    or ``"default"`` if none exist yet.
+    """
+    try:
+        cur = db.execute(
+            """
+            SELECT project_id FROM projects
+            WHERE status IS NULL OR status = 'active'
+            ORDER BY created_at ASC
+            LIMIT 1
+            """
+        )
+        row = cur.fetchone()
+        if row and row[0]:
+            return row[0]
+    except Exception:
+        logger.warning("_resolve_project_id failed", exc_info=True)
+    return "default"
+
+
 def _current_user_id(request: Request, db: Database) -> str:
     """Require a dashboard session and return user id."""
     token = request.cookies.get("session_token")
@@ -76,7 +100,6 @@ class CreateProjectBody(BaseModel):
     storage_location: str = "local"
     backup_interval: str = "1hour"
     enable_public_api: bool = True
-    # Legacy wizard fields (optional)
     project_id: Optional[str] = None
     project_name: Optional[str] = None
 
@@ -102,7 +125,6 @@ class HardDeleteBody(BaseModel):
 
 @router.get("")
 async def list_projects(request: Request, db: Database = Depends(get_db)):
-    """List active projects for the signed-in user."""
     require_scopes(resolve_auth(request, db), {"read"})
     user_id = _current_user_id(request, db)
     items = projmod.list_projects_for_owner(db, user_id)
@@ -115,11 +137,6 @@ async def create_project(
     request: Request,
     db: Database = Depends(get_db),
 ):
-    """
-    Create a new project (dedicated SQLite file) and mint an initial API key.
-
-    Max 10 projects per user.  Name can also be sent as project_name (legacy wizard).
-    """
     require_scopes(resolve_auth(request, db), {"admin"})
     user_id = _current_user_id(request, db)
 
@@ -151,7 +168,6 @@ async def create_project(
             ).model_dump(),
         )
 
-    raw_key = None
     key_meta = None
     try:
         raw_key, api_key = create_api_key(
@@ -183,18 +199,16 @@ async def get_project(
     require_scopes(resolve_auth(request, db), {"read"})
     user_id = _current_user_id(request, db)
     project = projmod.get_project(db, project_id)
-    if not project or project.get("owner_id") not in (None, user_id):
-        # Allow legacy rows with null owner for the signed-in user who adopts them
-        if not project:
-            raise HTTPException(
-                status_code=404,
-                detail=ErrorResponse(code="not_found", message="Project not found").model_dump(),
-            )
-        if project.get("owner_id") and project["owner_id"] != user_id:
-            raise HTTPException(
-                status_code=403,
-                detail=ErrorResponse(code="forbidden", message="Not project owner").model_dump(),
-            )
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(code="not_found", message="Project not found").model_dump(),
+        )
+    if project.get("owner_id") and project["owner_id"] != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail=ErrorResponse(code="forbidden", message="Not project owner").model_dump(),
+        )
     return _public(project)
 
 
@@ -269,7 +283,6 @@ async def restore_project(
     require_scopes(resolve_auth(request, db), {"admin"})
     user_id = _current_user_id(request, db)
     try:
-        # Load including archived
         cur = db.execute(
             "SELECT id, owner_id FROM projects WHERE (id = ? OR project_id = ?) AND status = 'archived'",
             (project_id, project_id),
@@ -299,7 +312,6 @@ async def delete_project(
     request: Request,
     db: Database = Depends(get_db),
 ):
-    """Hard-delete: requires confirm_name matching the project name."""
     require_scopes(resolve_auth(request, db), {"admin"})
     user_id = _current_user_id(request, db)
     cur = db.execute(
