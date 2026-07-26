@@ -15,8 +15,8 @@ import {
   Menu,
   X,
 } from 'lucide-react'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+import { ProjectSwitcher } from '@/components/project-switcher'
+import { API_BASE, getStoredProjectName, PROJECT_CHANGE_EVENT } from '@/lib/api'
 
 const navItems = [
   { href: '/', icon: BarChart3, label: 'Overview' },
@@ -35,16 +35,11 @@ export function PyroCoreLayout({
 }: {
   children: React.ReactNode
 }) {
-  // Desktop: sidebar always open; mobile/tablet: closed by default
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
+  const [projectLabel, setProjectLabel] = useState<string | null>(null)
 
-  // ── Auth gate ──────────────────────────────────────────────────────────
-  // Every page wrapped by this layout requires a session.  Check once on
-  // mount; if unauthenticated, send the user to /login (where they can sign
-  // up too).  Without this, an unauthenticated visitor landed straight on the
-  // dashboard and saw a CORS-blocked/401'd mess instead of the login screen.
   const [authChecked, setAuthChecked] = useState(false)
   useEffect(() => {
     let cancelled = false
@@ -65,12 +60,17 @@ export function PyroCoreLayout({
     }
   }, [router])
 
-  // Close sidebar on route change (mobile nav item tap)
+  useEffect(() => {
+    const sync = () => setProjectLabel(getStoredProjectName())
+    sync()
+    window.addEventListener(PROJECT_CHANGE_EVENT, sync)
+    return () => window.removeEventListener(PROJECT_CHANGE_EVENT, sync)
+  }, [])
+
   useEffect(() => {
     setSidebarOpen(false)
   }, [pathname])
 
-  // Close sidebar on desktop resize (re-entering lg range)
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 1024) setSidebarOpen(false)
@@ -79,11 +79,8 @@ export function PyroCoreLayout({
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  // Current page label for mobile top nav
   const currentPage = navItems.find((item) => item.href === pathname)?.label ?? 'PyroCore'
 
-  // While we verify the session, show a neutral loading state instead of
-  // flashing the dashboard (which would just 401 in the background).
   if (!authChecked) {
     return (
       <div className="flex h-screen items-center justify-center text-muted-foreground">
@@ -94,19 +91,10 @@ export function PyroCoreLayout({
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-
-      {/* ── SIDEBAR ─────────────────────────────────────────────────────── */}
-      {/*
-        Desktop (lg+): static in-flow 280px column, always visible.
-        Below lg: fixed overlay, slides in from left, 280px, z-50.
-      */}
       <aside
         className={[
-          // Shared
           'bg-card border-r border-border flex-shrink-0 flex flex-col',
-          // Desktop: static, always visible
           'lg:relative lg:translate-x-0 lg:w-70 lg:z-auto',
-          // Mobile/tablet: fixed overlay, transitions
           'fixed top-0 left-0 bottom-0 w-72 z-50',
           'transition-transform duration-200 ease-in-out',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
@@ -114,13 +102,11 @@ export function PyroCoreLayout({
         aria-label="Main navigation"
       >
         <div className="h-full flex flex-col overflow-hidden">
-          {/* Logo / Header */}
           <div className="px-6 py-5 border-b border-border flex-shrink-0 flex items-center justify-between">
             <div>
               <h1 className="text-lg font-semibold text-foreground">PyroCore</h1>
               <p className="text-xs text-muted-foreground mt-0.5">Backend Control</p>
             </div>
-            {/* X button — only visible on mobile/tablet overlay */}
             <button
               onClick={() => setSidebarOpen(false)}
               className="lg:hidden p-2 -mr-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
@@ -130,7 +116,10 @@ export function PyroCoreLayout({
             </button>
           </div>
 
-          {/* Nav Items */}
+          <div className="px-3 pt-3 pb-1 flex-shrink-0">
+            <ProjectSwitcher />
+          </div>
+
           <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon
@@ -141,9 +130,7 @@ export function PyroCoreLayout({
                   href={item.href}
                   className={[
                     'flex items-center gap-3 py-3 text-sm font-medium transition-colors',
-                    // Left border — 4px active orange, transparent inactive (keeps spacing consistent)
                     'border-l-4 pl-3 pr-4',
-                    // Min touch target height: 44px — py-3 on text-sm gives ~44px
                     isActive
                       ? 'bg-muted text-accent border-accent'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/50 border-transparent',
@@ -156,15 +143,13 @@ export function PyroCoreLayout({
             })}
           </nav>
 
-          {/* Bottom Info */}
           <div className="px-4 py-4 border-t border-border flex-shrink-0 space-y-1 text-xs text-muted-foreground">
-            <p>v0.1.0</p>
-            <p>Project: my-project</p>
+            <p>v1.1.66</p>
+            <p className="truncate">Project: {projectLabel ?? '—'}</p>
           </div>
         </div>
       </aside>
 
-      {/* ── SCRIM — mobile/tablet only, behind sidebar ───────────────────── */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 lg:hidden"
@@ -174,13 +159,8 @@ export function PyroCoreLayout({
         />
       )}
 
-      {/* ── MAIN CONTENT ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-
-        {/* Top Nav */}
         <header className="h-14 lg:h-16 bg-card border-b border-border px-4 lg:px-6 flex items-center justify-between flex-shrink-0 gap-3">
-
-          {/* Left: hamburger (mobile/tablet) */}
           <button
             onClick={() => setSidebarOpen(true)}
             className="lg:hidden p-2 -ml-1 text-foreground hover:bg-muted rounded transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
@@ -189,27 +169,22 @@ export function PyroCoreLayout({
             <Menu className="w-5 h-5" strokeWidth={2} />
           </button>
 
-          {/* Center/left: page name on mobile, spacer on desktop */}
           <span className="lg:hidden text-sm font-medium text-foreground truncate flex-1">
             {currentPage}
           </span>
           <div className="hidden lg:block flex-1" />
 
-          {/* Right: Core Status */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Orange dot — always visible */}
             <div
               className="w-2.5 h-2.5 rounded-full flex-shrink-0"
               style={{ backgroundColor: 'var(--pyro-orange)' }}
             />
-            {/* "Core Status" text — hidden on mobile to save space */}
             <span className="hidden sm:block text-xs text-muted-foreground">
               Core Status
             </span>
           </div>
         </header>
 
-        {/* Page Content */}
         <main className="flex-1 overflow-auto">
           <div className="p-4 lg:p-6">{children}</div>
         </main>
