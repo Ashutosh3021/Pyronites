@@ -2,7 +2,9 @@
 
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { Copy, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { getStoredProjectId, setStoredProject } from '@/lib/api'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -41,11 +43,15 @@ function fmtDate(iso: string | null): string {
 }
 
 export default function SettingsPage() {
+  const router = useRouter()
   const [tab, setTab] = useState<Tab>('general')
   const [projectName, setProjectName] = useState('')
+  const [confirmName, setConfirmName] = useState('')
   const [backupInterval, setBackupInterval] = useState('1hour')
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleteInput, setDeleteInput] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const [stats, setStats] = useState<Stats | null>(null)
   const [backups, setBackups] = useState<Backup[]>([])
@@ -67,7 +73,9 @@ export default function SettingsPage() {
       if (!sRes.ok) throw new Error('stats')
       const s = (await sRes.json()) as Stats
       setStats(s)
-      setProjectName(s.project?.project_name ?? '')
+      const name = s.project?.project_name ?? ''
+      setProjectName(name)
+      setConfirmName(name)
       if (s.project?.backup_interval) setBackupInterval(s.project.backup_interval)
       if (bRes.ok) setBackups((await bRes.json()) as Backup[])
     } catch {
@@ -99,6 +107,48 @@ export default function SettingsPage() {
       setBackupMsg(e instanceof Error ? e.message : 'Backup failed.')
     } finally {
       setBackingUp(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (deleteInput !== confirmName || !confirmName) return
+    setDeleting(true)
+    setDeleteError(null)
+    const id =
+      getStoredProjectId() ||
+      stats?.project?.project_id ||
+      ''
+    if (!id) {
+      setDeleteError('No project selected.')
+      setDeleting(false)
+      return
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ confirm_name: deleteInput }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setDeleteError(
+          body?.message || body?.detail?.message || `Delete failed (${res.status})`
+        )
+        return
+      }
+      // Clear selection and go home — switcher will pick another project
+      setStoredProject({ id: '', name: '' })
+      try {
+        localStorage.removeItem('pyronites_project_id')
+        localStorage.removeItem('pyronites_project_name')
+      } catch { /* ignore */ }
+      router.push('/')
+      router.refresh()
+    } catch {
+      setDeleteError('Could not reach the server.')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -290,7 +340,9 @@ export default function SettingsPage() {
                     <AlertTriangle className="w-5 h-5 text-error flex-shrink-0" />
                     <div>
                       <h3 className="text-sm font-semibold text-error mb-1">Danger Zone</h3>
-                      <p className="text-xs text-error/80">These actions are irreversible. Proceed with caution.</p>
+                      <p className="text-xs text-error/80">
+                        Hard-deletes this project and its data file. You cannot delete your last active project.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -306,7 +358,7 @@ export default function SettingsPage() {
                   <div className="space-y-4 p-4 border border-error/30">
                     <p className="text-sm text-foreground">
                       To confirm, type the project name:{' '}
-                      <span className="font-mono text-accent">{projectName}</span>
+                      <span className="font-mono text-accent">{confirmName || '—'}</span>
                     </p>
                     <input
                       type="text"
@@ -315,22 +367,29 @@ export default function SettingsPage() {
                       placeholder="Type project name..."
                       className="w-full px-3 py-2 bg-background border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:border-error min-h-[44px]"
                     />
+                    {deleteError && (
+                      <p role="alert" className="text-sm" style={{ color: 'var(--error)' }}>
+                        {deleteError}
+                      </p>
+                    )}
                     <div className="flex flex-wrap gap-3">
                       <button
-                        onClick={() => { setDeleteConfirm(false); setDeleteInput('') }}
+                        onClick={() => { setDeleteConfirm(false); setDeleteInput(''); setDeleteError(null) }}
                         className="flex-1 px-4 py-3 border border-border text-sm font-medium text-foreground hover:bg-muted transition-colors min-h-[44px]"
                       >
                         Cancel
                       </button>
                       <button
-                        disabled={deleteInput !== projectName}
+                        type="button"
+                        disabled={deleteInput !== confirmName || !confirmName || deleting}
+                        onClick={handleDelete}
                         className={`flex-1 px-4 py-3 text-sm font-medium transition-colors min-h-[44px] ${
-                          deleteInput === projectName
+                          deleteInput === confirmName && confirmName && !deleting
                             ? 'bg-error text-error-foreground hover:bg-error/90'
                             : 'bg-muted text-muted-foreground cursor-not-allowed'
                         }`}
                       >
-                        Delete Project
+                        {deleting ? 'Deleting…' : 'Delete Project'}
                       </button>
                     </div>
                   </div>

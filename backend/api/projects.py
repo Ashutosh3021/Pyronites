@@ -18,12 +18,12 @@ import os
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from backend.core.db import Database
 from backend.auth.api_keys import create_api_key
 from backend.auth.sessions import validate_session
-from backend.api.schemas import ErrorResponse, to_utc_iso, MAX_ID_LEN
+from backend.api.schemas import ErrorResponse, to_utc_iso
 from backend.api.auth_deps import resolve_auth, require_scopes
 from backend.core.logring import record_event
 from backend.core import projects as projmod
@@ -42,12 +42,6 @@ def get_db() -> Database:
 
 
 def _resolve_project_id(db: Database) -> str:
-    """
-    Legacy helper used by /api/keys when no project is specified.
-
-    Returns the slug (``project_id`` column) of the oldest active project,
-    or ``"default"`` if none exist yet.
-    """
     try:
         cur = db.execute(
             """
@@ -66,7 +60,6 @@ def _resolve_project_id(db: Database) -> str:
 
 
 def _current_user_id(request: Request, db: Database) -> str:
-    """Require a dashboard session and return user id."""
     token = request.cookies.get("session_token")
     user = validate_session(db, token) if token else None
     if user is None:
@@ -95,12 +88,6 @@ def _public(p: Dict[str, Any]) -> Dict[str, Any]:
 
 
 class CreateProjectBody(BaseModel):
-    """
-    Accept both API-style (``name``/``slug``) and dashboard wizard fields
-    (``project_name``/``project_id``). ``admin_password`` is accepted and ignored
-    (auth is account-level, not per-project).
-    """
-
     name: Optional[str] = Field(None, max_length=128)
     slug: Optional[str] = None
     storage_location: str = "local"
@@ -108,7 +95,7 @@ class CreateProjectBody(BaseModel):
     enable_public_api: bool = True
     project_id: Optional[str] = None
     project_name: Optional[str] = None
-    admin_password: Optional[str] = None  # wizard field; unused server-side
+    admin_password: Optional[str] = None
 
     @model_validator(mode="after")
     def _require_name(self) -> "CreateProjectBody":
@@ -339,11 +326,21 @@ async def delete_project(
             detail=ErrorResponse(code="forbidden", message="Not project owner").model_dump(),
         )
     try:
-        projmod.hard_delete_project(db, row[0], confirm_name=body.confirm_name)
+        projmod.hard_delete_project(
+            db,
+            row[0],
+            confirm_name=body.confirm_name,
+            owner_id=user_id,
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=400,
             detail=ErrorResponse(code="bad_request", message=str(e)).model_dump(),
+        )
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(code="not_found", message="Project not found").model_dump(),
         )
     record_event("warning", f"Project hard-deleted: {row[2]}")
     return {"message": "Project deleted"}
