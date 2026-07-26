@@ -1,15 +1,15 @@
 """
-API key management endpoints (create / list / revoke).
+API key management (create / list / revoke).
 
-Mirrors the CLI ``keys`` commands but over HTTP for the dashboard.  The single
-``projects`` row determines which ``project_id`` new keys belong to (single
-tenant).  The raw key is returned exactly once at creation; the list endpoint
-returns a ``masked`` display string derived from the stored hash so the UI never
-sees the secret and it is never logged.
+Works at:
+  /api/keys
+  /api/projects/{project_id}/api/keys  (via dual-mount; prefix becomes .../api/keys)
+
+Keys always live in the **meta** DB. When the path is project-scoped, list/create
+are limited to that project's slug.
 """
 
 import logging
-import os
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -24,23 +24,17 @@ from backend.auth.api_keys import (
 )
 from backend.api.schemas import ErrorResponse, to_utc_iso, MAX_NAME_LEN
 from backend.api.auth_deps import resolve_auth, require_scopes
-from backend.api.projects import _resolve_project_id
+from backend.api.project_deps import get_db, auth_db, current_project_slug
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/keys", tags=["api-keys"])
 
 
-def get_db() -> Database:
-    db = Database(os.environ.get("DATABASE_PATH", "pyrocore.db"))
-    db.connect()
-    try:
-        yield db
-    finally:
-        db.close()
+def _auth(request: Request, db: Database):
+    return resolve_auth(request, auth_db(request, db))
 
 
 def _mask(key_hash: str) -> str:
-    """Display-only mask derived from the stored hash (no secret revealed)."""
     return f"pyro_live_{'•' * 10}{key_hash[-4:]}"
 
 
@@ -74,13 +68,19 @@ class CreateKeyBody(BaseModel):
 
 @router.get("")
 async def list_keys(request: Request, db: Database = Depends(get_db)):
-    """List all non-revoked API keys (masked) for the project."""
-    require_scopes(resolve_auth(request, db), {"read"})
-    keys = list_api_keys(db)
+    require_scopes(_auth(request, db), {"read"})
+    meta = auth_db(request, db)
+    keys = list_api_keys(meta)
+    project = getattr(request.state, "project", None)
+    if project:
+        slug = project["project_id"]
+        pid = project["id"]
+        keys = [k for k in keys if k.project_id in (slug, pid)]
     return [
         {
             "id": k.id,
             "name": k.name,
+            "project_id": k.project_id,
             "masked": _mask(k.key_hash),
             "scopes": k.scopes,
             "created_at": to_utc_iso(k.created_at),
@@ -92,11 +92,11 @@ async def list_keys(request: Request, db: Database = Depends(get_db)):
 
 @router.post("")
 async def create_key(body: CreateKeyBody, request: Request, db: Database = Depends(get_db)):
-    """Create a new API key and return the raw value exactly once."""
-    require_scopes(resolve_auth(request, db), {"admin"})
-    project_id = _resolve_project_id(db)
+    require_scopes(_auth(request, db), {"admin"})
+    meta = auth_db(request, db)
+    project_id = current_project_slug(request, meta)
     try:
-        raw_key, api_key = create_api_key(db, project_id, body.name, body.scopes)
+        raw_key, api_key = create_api_key(meta, project_id, body.name, body.scopes)
     except ValueError as e:
         raise HTTPException(
             status_code=400,
@@ -109,6 +109,7 @@ async def create_key(body: CreateKeyBody, request: Request, db: Database = Depen
         "key": raw_key,
         "id": api_key.id,
         "name": api_key.name,
+        "project_id": api_key.project_id,
         "scopes": api_key.scopes,
         "created_at": to_utc_iso(api_key.created_at),
     }
@@ -116,17 +117,15 @@ async def create_key(body: CreateKeyBody, request: Request, db: Database = Depen
 
 @router.delete("/{key_id}")
 async def revoke_key(key_id: str, request: Request, db: Database = Depends(get_db)):
-    """Revoke (soft-delete) an API key by id."""
-    require_scopes(resolve_auth(request, db), {"admin"})
+    require_scopes(_auth(request, db), {"admin"})
+    meta = auth_db(request, db)
     try:
-        revoke_api_key(db, key_id)
-    except Exception as e:
+        revoke_api_key(meta, key_id)
+    except Exception:
         logger.error("Failed to revoke key %s", key_id, exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=ErrorResponse(
-                code="internal_error", message="Failed to revoke key"
-            ).model_dump(),
+            detail=ErrorResponse(code="internal_error", message="Failed to revoke key").model_dump(),
         )
     from backend.core.logring import record_event
 
