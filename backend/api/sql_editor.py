@@ -17,6 +17,13 @@ its own read-only connection to the file, so it never contends on the route's
 Connection design: every route opens exactly ONE ``Database`` connection via
 ``get_db``; auth and execution share that same connection, matching the pattern
 used by ``storage.py`` and ``tables.py``.
+
+Secret redaction
+----------------
+Result columns named ``password``, ``password_hash``, or ``token`` (session
+token hashes) are replaced with ``[REDACTED]`` in the JSON response so an
+admin browsing ``SELECT * FROM users`` cannot accidentally copy hashes into
+logs, screenshots, or tickets.
 """
 import asyncio
 import logging
@@ -42,6 +49,9 @@ _READONLY_KEYWORDS = {"SELECT", "WITH", "EXPLAIN", "VALUES", "PRAGMA"}
 # Hard cap on the number of statements accepted in a single request, to bound
 # the cost of statement splitting / execution.
 MAX_STATEMENTS = 50
+
+# Column names whose cell values must never leave the SQL editor API as-is.
+_REDACT_COLUMNS = {"password", "password_hash", "token"}
 
 
 class SqlExecuteRequest(BaseModel):
@@ -152,6 +162,17 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
+def _redact_row(columns: List[str], row: List[Any]) -> List[Any]:
+    """Replace secret column values with a fixed redaction marker."""
+    out: List[Any] = []
+    for col, val in zip(columns, row):
+        if col.lower() in _REDACT_COLUMNS and val is not None:
+            out.append("[REDACTED]")
+        else:
+            out.append(val)
+    return out
+
+
 @router.post("/execute")
 async def execute_sql(
     request: Request,
@@ -222,7 +243,10 @@ async def execute_sql(
 
         if cursor.description is not None:
             columns = [d[0] for d in cursor.description]
-            rows = [[_jsonable(v) for v in row] for row in cursor.fetchall()]
+            rows = [
+                _redact_row(columns, [_jsonable(v) for v in row])
+                for row in cursor.fetchall()
+            ]
             results.append(
                 {
                     "statement": stmt,
