@@ -4,7 +4,7 @@ import { PyroCoreLayout } from '@/components/pyrocore-layout'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Copy, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react'
-import { getStoredProjectId, setStoredProject } from '@/lib/api'
+import { getStoredProjectId, setStoredProject, apiUrl } from '@/lib/api'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -23,7 +23,7 @@ interface Stats {
   key_count: number
   db_size_bytes: number
   last_backup: string | null
-  project: { project_id: string; project_name: string; backup_interval: string; created_at: string } | null
+  project: { id?: string; project_id: string; project_name: string; backup_interval: string; created_at: string } | null
 }
 
 interface Backup {
@@ -67,7 +67,7 @@ export default function SettingsPage() {
     setLoadErr(null)
     try {
       const [sRes, bRes] = await Promise.all([
-        fetch(`${API_BASE}/api/stats`, { credentials: 'include' }),
+        fetch(apiUrl('/api/stats'), { credentials: 'include' }),
         fetch(`${API_BASE}/api/backups`, { credentials: 'include' }),
       ])
       if (!sRes.ok) throw new Error('stats')
@@ -115,8 +115,7 @@ export default function SettingsPage() {
     setDeleting(true)
     setDeleteError(null)
     const id =
-      getStoredProjectId() ||
-      stats?.project?.project_id ||
+      getStoredProjectId() || stats?.project?.id || stats?.project?.project_id ||
       ''
     if (!id) {
       setDeleteError('No project selected.')
