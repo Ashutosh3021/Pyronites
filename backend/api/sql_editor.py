@@ -1,36 +1,14 @@
 """
-SQL Editor API — raw SQL execution against the live project database.
+SQL Editor API — raw SQL against the project data database.
 
-This is the backend half of the dashboard's SQL editor (ARCHITECTURE.md §5).
-It is intentionally powerful: it runs arbitrary SQL, so it is gated behind the
-``admin`` scope and is only reachable by dashboard sessions or admin-scoped API
-keys.
-
-Safety guard (ARCHITECTURE.md §2)
----------------------------------
-Before any statement that could *modify* data (``DROP``/``DELETE``/``TRUNCATE``
-and friends) is executed, an automatic backup of the live database is taken via
-the same ``backup_now()`` used by the scheduled backup loop.  The backup opens
-its own read-only connection to the file, so it never contends on the route's
-``Database`` connection — there is no deadlock risk.
-
-Connection design: every route opens exactly ONE ``Database`` connection via
-``get_db``; auth and execution share that same connection, matching the pattern
-used by ``storage.py`` and ``tables.py``.
-
-Secret redaction
-----------------
-Result columns named ``password``, ``password_hash``, or ``token`` (session
-token hashes) are replaced with ``[REDACTED]`` in the JSON response so an
-admin browsing ``SELECT * FROM users`` cannot accidentally copy hashes into
-logs, screenshots, or tickets.
+Works at /sql and /api/projects/{project_id}/sql.
 """
 import asyncio
 import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -39,53 +17,25 @@ from backend.core.db import Database, DatabaseError
 from backend.core.backup import backup_now
 from backend.api.schemas import ErrorResponse
 from backend.api.auth_deps import resolve_auth, require_scopes
+from backend.api.project_deps import get_db, auth_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sql", tags=["sql"])
 
-# Statements that only read (never trigger the auto-backup guard).
 _READONLY_KEYWORDS = {"SELECT", "WITH", "EXPLAIN", "VALUES", "PRAGMA"}
-
-# Hard cap on the number of statements accepted in a single request, to bound
-# the cost of statement splitting / execution.
 MAX_STATEMENTS = 50
-
-# Column names whose cell values must never leave the SQL editor API as-is.
 _REDACT_COLUMNS = {"password", "password_hash", "token"}
 
 
 class SqlExecuteRequest(BaseModel):
-    """Request body for ``POST /sql/execute``."""
-
-    sql: str = Field(
-        ...,
-        # Upper bound guards against absurd payloads (a multi-MB body would be a
-        # denial-of-service vector and is never a legitimate SQL editor query).
-        # Empty strings are still rejected by the route with a clear 400.
-        max_length=200_000,
-        description="Raw SQL to execute. Destructive statements trigger an auto-backup.",
-    )
+    sql: str = Field(..., max_length=200_000)
 
 
-def get_db() -> Database:
-    """Yield a single Database connection for the lifetime of the request."""
-    db = Database(os.environ.get("DATABASE_PATH", "pyrocore.db"))
-    db.connect()
-    try:
-        yield db
-    finally:
-        db.close()
+def _auth(request: Request, db: Database):
+    return resolve_auth(request, auth_db(request, db))
 
 
 def _split_statements(sql: str) -> List[str]:
-    """
-    Split a SQL string into individual statements, respecting quotes/comments.
-
-    A naive ``str.split(';')`` breaks on semicolons inside string literals
-    (e.g. ``INSERT ... VALUES ('a;b')``).  This walker tracks single-quoted,
-    double-quoted (identifier), line (``--``) and block (``/* */``) contexts so
-    a top-level ``;`` is the only split point.
-    """
     statements: List[str] = []
     current: List[str] = []
     in_single = in_double = in_line = in_block = False
@@ -106,7 +56,7 @@ def _split_statements(sql: str) -> List[str]:
         elif in_single:
             current.append(ch)
             if ch == "'":
-                if nxt == "'":  # escaped quote
+                if nxt == "'":
                     current.append(nxt)
                     i += 2
                     continue
@@ -148,22 +98,19 @@ def _split_statements(sql: str) -> List[str]:
 
 
 def _is_readonly(statement: str) -> bool:
-    """Return True if the statement only reads (no auto-backup needed)."""
     match = re.match(r"\s*([A-Za-z]+)", statement)
     if not match:
-        return True  # empty / comment-only — nothing to run
+        return True
     return match.group(1).upper() in _READONLY_KEYWORDS
 
 
 def _jsonable(value: Any) -> Any:
-    """Make a SQLite value JSON-serialisable (BLOBs would otherwise 500)."""
     if isinstance(value, bytes):
         return f"<blob {len(value)} bytes>"
     return value
 
 
 def _redact_row(columns: List[str], row: List[Any]) -> List[Any]:
-    """Replace secret column values with a fixed redaction marker."""
     out: List[Any] = []
     for col, val in zip(columns, row):
         if col.lower() in _REDACT_COLUMNS and val is not None:
@@ -179,47 +126,33 @@ async def execute_sql(
     payload: SqlExecuteRequest,
     db: Database = Depends(get_db),
 ):
-    """
-    Execute raw SQL against the project database.
-
-    Destructive statements (anything that isn't a pure read) trigger an automatic
-    backup first.  Requires the ``admin`` scope.
-    """
-    # Admin-only: this endpoint runs arbitrary SQL.
-    require_scopes(resolve_auth(request, db), {"admin"})
+    require_scopes(_auth(request, db), {"admin"})
 
     statements = _split_statements(payload.sql)
     if not statements:
         raise HTTPException(
             status_code=400,
-            detail=ErrorResponse(
-                code="bad_request", message="No SQL statements provided"
-            ).model_dump(),
+            detail=ErrorResponse(code="bad_request", message="No SQL statements provided").model_dump(),
         )
     if len(statements) > MAX_STATEMENTS:
         raise HTTPException(
             status_code=400,
             detail=ErrorResponse(
-                code="bad_request",
-                message=f"Too many statements (max {MAX_STATEMENTS})",
+                code="bad_request", message=f"Too many statements (max {MAX_STATEMENTS})"
             ).model_dump(),
         )
 
     has_write = any(not _is_readonly(s) for s in statements)
-
-    # Auto-backup guard before any destructive statement (ARCHITECTURE.md §2).
     backup_taken = False
     backup_path: Optional[str] = None
     if has_write:
-        db_path = os.environ.get("DATABASE_PATH", "pyrocore.db")
-        # Mirror the directory layout used by the CLI ``start`` command:
-        # backups live in a ``backups/`` sibling of the database file.
+        db_path = getattr(db, "db_path", None) or os.environ.get("DATABASE_PATH", "pyrocore.db")
         backup_dir = str(Path(db_path).parent / "backups")
         try:
             backup_file = await asyncio.to_thread(backup_now, db_path, backup_dir)
             backup_taken = True
             backup_path = str(backup_file)
-        except Exception as e:  # noqa: BLE001 — surface a clean 500 either way
+        except Exception as e:
             logger.error("Auto-backup before destructive SQL failed: %s", e, exc_info=True)
             raise HTTPException(
                 status_code=500,
@@ -236,9 +169,7 @@ async def execute_sql(
         except DatabaseError as e:
             raise HTTPException(
                 status_code=400,
-                detail=ErrorResponse(
-                    code="sql_error", message=str(e)
-                ).model_dump(),
+                detail=ErrorResponse(code="sql_error", message=str(e)).model_dump(),
             )
 
         if cursor.description is not None:

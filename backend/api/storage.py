@@ -1,12 +1,8 @@
 """
 Storage API — file upload, download, listing, and deletion.
 
-Connection design: every route opens exactly ONE Database connection via
-``get_db``.  The ``LocalFileStorage`` instance and the auth helpers both
-receive that same connection object — there is no second ``get_db`` call
-anywhere in this module.
+Works at /storage and /api/projects/{project_id}/storage.
 """
-import os
 import logging
 from typing import Optional, Dict, Any
 
@@ -22,35 +18,23 @@ from backend.core.storage import (
 )
 from backend.api.schemas import ErrorResponse, to_utc_iso
 from backend.api.auth_deps import resolve_auth, require_scopes
+from backend.api.project_deps import get_db, auth_db
+import os
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/storage", tags=["storage"])
 
 
-def get_db() -> Database:
-    """Yield a single Database connection for the lifetime of the request."""
-    db = Database(os.environ.get("DATABASE_PATH", "pyrocore.db"))
-    db.connect()
-    try:
-        yield db
-    finally:
-        db.close()
+def _auth(request: Request, db: Database):
+    return resolve_auth(request, auth_db(request, db))
 
 
 def _storage(db: Database) -> LocalFileStorage:
-    """Return a LocalFileStorage bound to the given DB connection."""
     root_dir = os.environ.get("STORAGE_ROOT", "storage_files")
     return LocalFileStorage(db, root_dir=root_dir)
 
 
 def _record_to_dict(record: FileRecord) -> Dict[str, Any]:
-    """
-    Serialise a ``FileRecord`` to a JSON-safe dict for API responses.
-
-    ``uploaded_at`` is rendered with ``to_utc_iso`` so every timestamp in the
-    API uses the same ISO 8601 UTC ``Z`` format as the rest of the contract
-    (see ``backend.api.schemas``).
-    """
     return {
         "id": record.id,
         "original_filename": record.original_filename,
@@ -61,18 +45,13 @@ def _record_to_dict(record: FileRecord) -> Dict[str, Any]:
     }
 
 
-# ---------------------------------------------------------------------------
-# Routes — each uses a single ``db`` dependency and passes it everywhere
-# ---------------------------------------------------------------------------
-
 @router.post("/upload")
 async def upload_file(
     request: Request,
     file: UploadFile = File(...),
     db: Database = Depends(get_db),
 ):
-    """Upload a file to storage."""
-    require_scopes(resolve_auth(request, db), {"write"})
+    require_scopes(_auth(request, db), {"write"})
     try:
         filename = file.filename or "unknown"
         content_type = file.content_type or "application/octet-stream"
@@ -83,7 +62,7 @@ async def upload_file(
     except FileTooLargeError as e:
         raise HTTPException(status_code=413, detail=ErrorResponse(code="file_too_large", message=str(e)).model_dump())
     except Exception as e:
-        logger.error("Failed to upload file: %s", e, exc_info=True)
+        logger.error("Failed to upload file: %s", e, exp_info=True)
         raise HTTPException(status_code=500, detail=ErrorResponse(code="internal_error", message="Failed to upload file").model_dump())
 
 
@@ -95,14 +74,7 @@ async def list_files(
     offset: int = Query(0, ge=0),
     db: Database = Depends(get_db),
 ):
-    """
-    List files for this project, newest-first.
-
-    Uses the same ``limit``/``offset`` pagination shape as ``GET /tables/{table}``
-    so the dashboard can page both list views identically.  Returns a bare JSON
-    array of file metadata objects (no envelope) to match that endpoint.
-    """
-    require_scopes(resolve_auth(request, db), {"read"})
+    require_scopes(_auth(request, db), {"read"})
     try:
         records = _storage(db).list(prefix, limit=limit, offset=offset)
         return [_record_to_dict(r) for r in records]
@@ -112,13 +84,8 @@ async def list_files(
 
 
 @router.get("/{file_id}/download")
-async def download_file(
-    file_id: str,
-    request: Request,
-    db: Database = Depends(get_db),
-):
-    """Download a file by ID."""
-    require_scopes(resolve_auth(request, db), {"read"})
+async def download_file(file_id: str, request: Request, db: Database = Depends(get_db)):
+    require_scopes(_auth(request, db), {"read"})
     store = _storage(db)
     try:
         record = store.get_record(file_id)
@@ -131,40 +98,30 @@ async def download_file(
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=ErrorResponse(code="not_found", message="File not found").model_dump())
     except Exception as e:
-        logger.error("Failed to download file: %s", e, exc_info=True)
+        logger.error("Failed to download file: %s", e, exp_info=True)
         raise HTTPException(status_code=500, detail=ErrorResponse(code="internal_error", message="Failed to download file").model_dump())
 
 
 @router.get("/{file_id}")
-async def get_file_metadata(
-    file_id: str,
-    request: Request,
-    db: Database = Depends(get_db),
-):
-    """Get metadata for a file by ID."""
-    require_scopes(resolve_auth(request, db), {"read"})
+async def get_file_metadata(file_id: str, request: Request, db: Database = Depends(get_db)):
+    require_scopes(_auth(request, db), {"read"})
     try:
         return _record_to_dict(_storage(db).get_record(file_id))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=ErrorResponse(code="not_found", message="File not found").model_dump())
     except Exception as e:
-        logger.error("Failed to get file metadata: %s", e, exc_info=True)
+        logger.error("Failed to get file metadata: %s", e, exp_info=True)
         raise HTTPException(status_code=500, detail=ErrorResponse(code="internal_error", message="Failed to get file metadata").model_dump())
 
 
 @router.delete("/{file_id}")
-async def delete_file(
-    file_id: str,
-    request: Request,
-    db: Database = Depends(get_db),
-):
-    """Delete a file from storage."""
-    require_scopes(resolve_auth(request, db), {"write"})
+async def delete_file(file_id: str, request: Request, db: Database = Depends(get_db)):
+    require_scopes(_auth(request, db), {"write"})
     try:
         _storage(db).delete(file_id)
         return {"message": "File deleted successfully"}
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=ErrorResponse(code="not_found", message="File not found").model_dump())
     except Exception as e:
-        logger.error("Failed to delete file: %s", e, exc_info=True)
+        logger.error("Failed to delete file: %s", e, exp_info=True)
         raise HTTPException(status_code=500, detail=ErrorResponse(code="internal_error", message="Failed to delete file").model_dump())
