@@ -5,26 +5,28 @@ Routes (session / admin):
   GET    /api/projects              list current user's projects
   POST   /api/projects              create (max 10)
   GET    /api/projects/{id}         detail
+  GET    /api/projects/{id}/stats   table/file/key counts for this project
   PATCH  /api/projects/{id}         rename / settings
   POST   /api/projects/{id}/archive soft-delete
   POST   /api/projects/{id}/restore restore archived
   DELETE /api/projects/{id}         hard-delete (body: confirm_name)
-
-{id} may be the internal UUID or the slug (project_id).
 """
 
 import logging
 import os
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from backend.core.db import Database
-from backend.auth.api_keys import create_api_key
+from backend.auth.api_keys import create_api_key, list_api_keys
 from backend.auth.sessions import validate_session
 from backend.api.schemas import ErrorResponse, to_utc_iso, MAX_ID_LEN
 from backend.api.auth_deps import resolve_auth, require_scopes
+from backend.api.project_deps import open_data_db_for_project
+from backend.api.tables import get_allowed_tables
 from backend.core.logring import record_event
 from backend.core import projects as projmod
 
@@ -42,12 +44,6 @@ def get_db() -> Database:
 
 
 def _resolve_project_id(db: Database) -> str:
-    """
-    Legacy helper used by /api/keys when no project is specified.
-
-    Returns the slug (``project_id`` column) of the oldest active project,
-    or ``"default"`` if none exist yet.
-    """
     try:
         cur = db.execute(
             """
@@ -66,15 +62,12 @@ def _resolve_project_id(db: Database) -> str:
 
 
 def _current_user_id(request: Request, db: Database) -> str:
-    """Require a dashboard session and return user id."""
     token = request.cookies.get("session_token")
     user = validate_session(db, token) if token else None
     if user is None:
         raise HTTPException(
             status_code=401,
-            detail=ErrorResponse(
-                code="unauthorized", message="Not authenticated"
-            ).model_dump(),
+            detail=ErrorResponse(code="unauthorized", message="Not authenticated").model_dump(),
         )
     return user.id
 
@@ -139,10 +132,8 @@ async def create_project(
 ):
     require_scopes(resolve_auth(request, db), {"admin"})
     user_id = _current_user_id(request, db)
-
     name = body.name or body.project_name or ""
     slug = body.slug or body.project_id
-
     try:
         project = projmod.create_project(
             db,
@@ -163,16 +154,11 @@ async def create_project(
         logger.error("Failed to create project", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=ErrorResponse(
-                code="internal_error", message="Failed to create project"
-            ).model_dump(),
+            detail=ErrorResponse(code="internal_error", message="Failed to create project").model_dump(),
         )
-
     key_meta = None
     try:
-        raw_key, api_key = create_api_key(
-            db, project["project_id"], "default", ["read", "write"]
-        )
+        raw_key, api_key = create_api_key(db, project["project_id"], "default", ["read", "write"])
         key_meta = {
             "key": raw_key,
             "id": api_key.id,
@@ -182,7 +168,6 @@ async def create_project(
         }
     except ValueError as e:
         logger.warning("Project created but initial API key failed: %s", e)
-
     record_event("success", f"Project created: {project['name']}")
     out = _public(project)
     if key_meta:
@@ -190,12 +175,57 @@ async def create_project(
     return out
 
 
+@router.get("/{project_id}/stats")
+async def project_stats(project_id: str, request: Request, db: Database = Depends(get_db)):
+    """Table / file / key counts for one project (dashboard Overview)."""
+    require_scopes(resolve_auth(request, db), {"read"})
+    user_id = _current_user_id(request, db)
+    project = projmod.get_project(db, project_id)
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(code="not_found", message="Project not found").model_dump(),
+        )
+    if project.get("owner_id") and project["owner_id"] != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail=ErrorResponse(code="forbidden", message="Not project owner").model_dump(),
+        )
+
+    data_db = open_data_db_for_project(project)
+    try:
+        table_count = len(get_allowed_tables(data_db))
+        try:
+            cur = data_db.execute("SELECT COUNT(*) FROM storage_files")
+            row = cur.fetchone()
+            file_count = int(row[0]) if row else 0
+        except Exception:
+            file_count = 0
+        db_size = 0
+        try:
+            p = Path(data_db.db_path)
+            if p.exists():
+                db_size = p.stat().st_size
+        except Exception:
+            pass
+    finally:
+        data_db.close()
+
+    keys = list_api_keys(db)
+    slug, pid = project["project_id"], project["id"]
+    key_count = sum(1 for k in keys if k.project_id in (slug, pid))
+
+    return {
+        "project": _public(project),
+        "table_count": table_count,
+        "file_count": file_count,
+        "key_count": key_count,
+        "db_size_bytes": db_size,
+    }
+
+
 @router.get("/{project_id}")
-async def get_project(
-    project_id: str,
-    request: Request,
-    db: Database = Depends(get_db),
-):
+async def get_project(project_id: str, request: Request, db: Database = Depends(get_db)):
     require_scopes(resolve_auth(request, db), {"read"})
     user_id = _current_user_id(request, db)
     project = projmod.get_project(db, project_id)
@@ -214,10 +244,7 @@ async def get_project(
 
 @router.patch("/{project_id}")
 async def patch_project(
-    project_id: str,
-    body: PatchProjectBody,
-    request: Request,
-    db: Database = Depends(get_db),
+    project_id: str, body: PatchProjectBody, request: Request, db: Database = Depends(get_db)
 ):
     require_scopes(resolve_auth(request, db), {"admin"})
     user_id = _current_user_id(request, db)
@@ -251,11 +278,7 @@ async def patch_project(
 
 
 @router.post("/{project_id}/archive")
-async def archive_project(
-    project_id: str,
-    request: Request,
-    db: Database = Depends(get_db),
-):
+async def archive_project(project_id: str, request: Request, db: Database = Depends(get_db)):
     require_scopes(resolve_auth(request, db), {"admin"})
     user_id = _current_user_id(request, db)
     project = projmod.get_project(db, project_id)
@@ -275,11 +298,7 @@ async def archive_project(
 
 
 @router.post("/{project_id}/restore")
-async def restore_project(
-    project_id: str,
-    request: Request,
-    db: Database = Depends(get_db),
-):
+async def restore_project(project_id: str, request: Request, db: Database = Depends(get_db)):
     require_scopes(resolve_auth(request, db), {"admin"})
     user_id = _current_user_id(request, db)
     try:
@@ -307,10 +326,7 @@ async def restore_project(
 
 @router.delete("/{project_id}")
 async def delete_project(
-    project_id: str,
-    body: HardDeleteBody,
-    request: Request,
-    db: Database = Depends(get_db),
+    project_id: str, body: HardDeleteBody, request: Request, db: Database = Depends(get_db)
 ):
     require_scopes(resolve_auth(request, db), {"admin"})
     user_id = _current_user_id(request, db)
