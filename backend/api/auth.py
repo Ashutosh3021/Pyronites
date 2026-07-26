@@ -13,6 +13,7 @@ Security notes
 - Signup auto-creates a session (common SPA pattern) so a freshly registered
   user can immediately hit authenticated endpoints (e.g. /api/projects)
   without a separate login round-trip.
+- Signup also ensures a Default project exists for the new user (multi-project).
 """
 
 import logging
@@ -30,17 +31,13 @@ from backend.auth.sessions import create_session, revoke_session, validate_sessi
 from backend.core.db import Database, DatabaseError
 from backend.api.schemas import ErrorResponse, to_utc_iso
 from backend.core.logring import record_event
+from backend.core import projects as projmod
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _is_https(request: Request | None) -> bool:
-    """Best-effort detection of whether the request arrived over HTTPS.
-
-    Behind a platform proxy (Render/Fly) the scheme is reported via the
-    ``x-forwarded-proto`` header; fall back to the URL scheme otherwise.
-    """
     if request is None:
         return False
     if request.headers.get("x-forwarded-proto", "").lower() == "https":
@@ -49,13 +46,6 @@ def _is_https(request: Request | None) -> bool:
 
 
 def _cookie_secure(request: Request | None = None) -> bool:
-    """
-    Whether the session cookie should be marked ``Secure``.
-
-    Defaults to following the request's scheme: HTTPS -> Secure, HTTP
-    (localhost) -> insecure.  This lets a cross-origin HTTPS dashboard work
-    without manual env config.  Can be forced with ``SESSION_COOKIE_SECURE``.
-    """
     raw = os.environ.get("SESSION_COOKIE_SECURE")
     if raw is not None:
         return raw.strip().lower() in ("1", "true", "yes", "on")
@@ -63,13 +53,6 @@ def _cookie_secure(request: Request | None = None) -> bool:
 
 
 def _cookie_samesite(request: Request | None = None) -> str:
-    """
-    SameSite policy for the session cookie.
-
-    Defaults to ``none`` over HTTPS (a cross-origin HTTPS dashboard needs the
-    cookie forwarded on cross-site requests) and ``lax`` over plain HTTP
-    (localhost).  Can be overridden with ``SESSION_COOKIE_SAMESITE``.
-    """
     raw = os.environ.get("SESSION_COOKIE_SAMESITE")
     if raw is not None:
         return raw.strip().lower()
@@ -77,7 +60,6 @@ def _cookie_samesite(request: Request | None = None) -> str:
 
 
 def get_db() -> Database:
-    """Open a single DB connection for the lifetime of the request."""
     db = Database(os.environ.get("DATABASE_PATH", "pyrocore.db"))
     db.connect()
     try:
@@ -87,18 +69,9 @@ def get_db() -> Database:
 
 
 def _set_session_cookie(response: Response, raw_token: str, request: Request | None = None) -> None:
-    """
-    Persist the opaque session token as an httpOnly cookie.
-
-    Cookie security is deployment-driven (see ``_cookie_secure`` /
-    ``_cookie_samesite``): localhost stays insecure/Lax, but a deployed HTTPS
-    backend serving a cross-origin dashboard uses Secure + SameSite=None so the
-    browser forwards the cookie and authenticated requests succeed.
-    """
     samesite = _cookie_samesite(request)
     secure = _cookie_secure(request)
     if samesite == "none":
-        # Browsers refuse SameSite=None unless the cookie is also Secure.
         secure = True
     response.set_cookie(
         key="session_token",
@@ -122,7 +95,7 @@ class _EmailBody(BaseModel):
 
 @router.post("/signup")
 async def signup(body: _EmailBody, response: Response, request: Request, db: Database = Depends(get_db)):
-    """Create a new user account and start a session for them."""
+    """Create a new user account, Default project, and start a session."""
     try:
         user = create_user(db, body.email, body.password)
     except UserAlreadyExistsError:
@@ -139,16 +112,29 @@ async def signup(body: _EmailBody, response: Response, request: Request, db: Dat
             detail=ErrorResponse(code="bad_request", message=str(e)).model_dump(),
         )
 
-    # Auto-login: a brand-new user should be able to continue straight to the
-    # project wizard without a second credential prompt.
+    # Multi-project: every user gets a Default project (uses meta DB for data).
+    default_project = None
+    try:
+        default_project = projmod.ensure_default_project(db, user.id)
+    except Exception:
+        logger.error("Failed to ensure Default project on signup", exc_info=True)
+
     session = create_session(db, user.id)
     _set_session_cookie(response, session.token, request)
     record_event("success", f"User signed up: {user.email}")
-    return {
+
+    out = {
         "id": user.id,
         "email": user.email,
         "created_at": to_utc_iso(user.created_at),
     }
+    if default_project:
+        out["default_project"] = {
+            "id": default_project["id"],
+            "slug": default_project.get("slug") or default_project["project_id"],
+            "name": default_project["name"],
+        }
+    return out
 
 
 @router.post("/login")
@@ -156,13 +142,18 @@ async def login(body: _EmailBody, response: Response, request: Request, db: Data
     """Authenticate by email/password and set the session cookie."""
     user = authenticate_user(db, body.email, body.password)
     if user is None:
-        # Generic message — never reveal whether the email exists.
         raise HTTPException(
             status_code=401,
             detail=ErrorResponse(
                 code="unauthorized", message="Incorrect email or password"
             ).model_dump(),
         )
+    # Backfill Default project for older accounts that pre-date multi-project.
+    try:
+        projmod.ensure_default_project(db, user.id)
+    except Exception:
+        logger.warning("ensure_default_project on login failed", exc_info=True)
+
     session = create_session(db, user.id)
     _set_session_cookie(response, session.token, request)
     record_event("info", f"User logged in: {user.email}")
@@ -190,12 +181,7 @@ async def logout(request: Request, response: Response, db: Database = Depends(ge
 
 @router.get("/me")
 async def me(request: Request, db: Database = Depends(get_db)):
-    """Return the current session user, or 401 if not authenticated.
-
-    The dashboard uses this to decide whether to show the app or redirect to
-    /login.  It relies only on the session cookie, so it works for the
-    browser SPA without exposing the token anywhere.
-    """
+    """Return the current session user, or 401 if not authenticated."""
     token = request.cookies.get("session_token")
     user = validate_session(db, token) if token else None
     if user is None:
@@ -205,4 +191,4 @@ async def me(request: Request, db: Database = Depends(get_db)):
                 code="unauthorized", message="Not authenticated"
             ).model_dump(),
         )
-    return {"authenticated": True, "email": user.email}
+    return {"authenticated": True, "email": user.email, "id": user.id}
