@@ -1,67 +1,67 @@
 """
 Project-scoped request helpers (Phase 2).
 
-Resolves ``/api/projects/{project_id}/...`` to a registry row + the correct
-SQLite ``Database`` (meta DB for the primary/Default project, or
-``data/projects/{uuid}.db`` for others).
+- Meta DB (DATABASE_PATH): users, sessions, projects, api_keys
+- Project data DB: user tables + storage_files (meta for Default; file for others)
 
-API keys still validate against the **meta** DB; their ``project_id`` (slug)
-must match the path project when present.
+Path ``/api/projects/{id}/...`` selects the project data DB.
+Unscoped ``/tables`` etc. use the meta DB (Default / legacy).
+
+Auth always runs against the **meta** DB so sessions and keys stay valid
+even when the data connection is a separate project file.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, Generator, Optional
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import HTTPException, Request
 
 from backend.core.db import Database
 from backend.api.schemas import ErrorResponse
-from backend.api.auth_deps import resolve_auth, require_scopes
+from backend.api.auth_deps import resolve_auth
 from backend.core import projects as projmod
 from backend.core.migrations import run_pending_migrations
 
 logger = logging.getLogger(__name__)
 
+_PROJECT_PATH_RE = re.compile(r"^/api/projects/([^/]+)/")
 
-def get_meta_db() -> Generator[Database, None, None]:
-    db = Database(os.environ.get("DATABASE_PATH", "pyrocore.db"))
-    db.connect()
-    try:
-        yield db
-    finally:
-        db.close()
+
+def meta_db_path() -> str:
+    return os.environ.get("DATABASE_PATH", "pyrocore.db")
+
+
+def migrations_dir() -> str:
+    return os.environ.get(
+        "MIGRATIONS_DIR",
+        str(Path(__file__).resolve().parent.parent / "migrations"),
+    )
+
+
+def extract_project_ref(request: Request) -> Optional[str]:
+    m = _PROJECT_PATH_RE.match(request.url.path)
+    return m.group(1) if m else None
 
 
 def _primary_uses_meta(project: Dict[str, Any]) -> bool:
-    """Default/first project keeps data in the meta DB file."""
     path = projmod.project_file_path(project["id"])
-    if not path.exists():
-        return True
-    return False
+    return not path.exists()
 
 
 def open_data_db_for_project(project: Dict[str, Any]) -> Database:
-    """
-    Open the SQLite file that holds this project's tables/storage metadata.
-
-    Primary projects without a dedicated file use the meta DATABASE_PATH.
-    """
     if _primary_uses_meta(project):
-        path = os.environ.get("DATABASE_PATH", "pyrocore.db")
+        path = meta_db_path()
     else:
         path = str(projmod.project_file_path(project["id"]))
     db = Database(path)
     db.connect()
     try:
-        migrations = os.environ.get(
-            "MIGRATIONS_DIR",
-            str(Path(__file__).resolve().parent.parent / "migrations"),
-        )
-        run_pending_migrations(db, migrations)
+        run_pending_migrations(db, migrations_dir())
     except Exception:
         logger.error("project db migrations failed for %s", path, exc_info=True)
         db.close()
@@ -79,58 +79,83 @@ def resolve_project_or_404(meta: Database, project_id: str) -> Dict[str, Any]:
     if project.get("status") == "archived":
         raise HTTPException(
             status_code=409,
-            detail=ErrorResponse(
-                code="archived", message="Project is archived"
-            ).model_dump(),
+            detail=ErrorResponse(code="archived", message="Project is archived").model_dump(),
         )
     return project
 
 
-def get_project_context(
-    project_id: str,
-    request: Request,
-    meta: Database = Depends(get_meta_db),
-) -> Generator[Dict[str, Any], None, None]:
+def enforce_api_key_project(auth: Optional[Dict[str, Any]], project: Dict[str, Any]) -> None:
+    if not auth or auth.get("type") != "api_key":
+        return
+    key_project = auth.get("project_id")
+    if not key_project:
+        return
+    allowed = {project["id"], project["project_id"], project.get("slug")}
+    if key_project not in allowed:
+        raise HTTPException(
+            status_code=403,
+            detail=ErrorResponse(
+                code="forbidden",
+                message="API key is not valid for this project",
+            ).model_dump(),
+        )
+
+
+def get_db(request: Request) -> Generator[Database, None, None]:
     """
-    FastAPI dependency: auth + project membership + data DB.
+    Yield the correct **data** Database for this request.
 
-    Yields::
+    Always attaches ``request.state.meta_db`` (and optional ``request.state.project``)
+    so callers can run auth against the meta connection:
 
-        {
-          "project": <registry dict>,
-          "meta": <meta Database>,
-          "db": <project data Database>,
-          "auth": <resolve_auth dict>,
-        }
+        resolve_auth(request, getattr(request.state, "meta_db", db))
     """
-    auth = resolve_auth(request, meta)
-    require_scopes(auth, {"read"})  # routes still apply tighter scopes
+    meta = Database(meta_db_path())
+    meta.connect()
+    data: Optional[Database] = None
+    project_ref = extract_project_ref(request)
 
-    project = resolve_project_or_404(meta, project_id)
-
-    # API key must belong to this project (slug or uuid).
-    if auth and auth.get("type") == "api_key":
-        key_project = auth.get("project_id")
-        if key_project and key_project not in (
-            project["id"],
-            project["project_id"],
-            project.get("slug"),
-        ):
-            raise HTTPException(
-                status_code=403,
-                detail=ErrorResponse(
-                    code="forbidden",
-                    message="API key is not valid for this project",
-                ).model_dump(),
-            )
-
-    data_db = open_data_db_for_project(project)
     try:
-        yield {
-            "project": project,
-            "meta": meta,
-            "db": data_db,
-            "auth": auth,
-        }
+        request.state.meta_db = meta
+        request.state.project = None
+
+        if project_ref:
+            project = resolve_project_or_404(meta, project_ref)
+            request.state.project = project
+            # Key isolation (session users may access any owned project)
+            auth = resolve_auth(request, meta)
+            enforce_api_key_project(auth, project)
+            data = open_data_db_for_project(project)
+            yield data
+        else:
+            yield meta
     finally:
-        data_db.close()
+        if data is not None and data is not meta:
+            data.close()
+        meta.close()
+
+
+def auth_db(request: Request, fallback: Database) -> Database:
+    """Meta DB for auth, falling back to ``fallback`` on legacy unscoped routes."""
+    return getattr(request.state, "meta_db", None) or fallback
+
+
+def current_project_slug(request: Request, fallback_db: Database) -> str:
+    """Slug to bind new API keys to (path project or oldest active)."""
+    project = getattr(request.state, "project", None)
+    if project:
+        return project["project_id"]
+    try:
+        cur = fallback_db.execute(
+            """
+            SELECT project_id FROM projects
+            WHERE status IS NULL OR status = 'active'
+            ORDER BY created_at ASC LIMIT 1
+            """
+        )
+        row = cur.fetchone()
+        if row and row[0]:
+            return row[0]
+    except Exception:
+        pass
+    return "default"

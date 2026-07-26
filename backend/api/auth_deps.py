@@ -5,9 +5,6 @@ Auth precedence
 ---------------
 1. ``Authorization: Bearer <token>`` header — API key path.
 2. ``session_token`` cookie — browser/dashboard session path.
-
-If neither is present (or both fail validation) ``resolve_auth`` returns
-``None`` and the caller must raise HTTP 401.
 """
 
 import logging
@@ -48,9 +45,11 @@ def require_scopes(
 
 def resolve_auth(request: Request, db: Database) -> Optional[Dict[str, Any]]:
     """
-    Returns ``{"type", "scopes", "project_id"?}`` on success, else ``None``.
+    Returns identity dict or None.
 
-    For API keys, ``project_id`` is the key's bound project slug (or id).
+    API keys include ``project_id`` (the bound project slug) for isolation.
+    Prefer passing the **meta** DB so sessions/keys resolve correctly when the
+    route's data connection is a per-project file.
     """
     client_ip = request.client.host if request.client else "unknown"
 
