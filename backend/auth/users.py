@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr
 
-from backend.auth.passwords import hash_password, verify_password, is_argon2_hash
+from backend.auth.passwords import hash_password, verify_password
 from backend.core.db import Database, DatabaseError
 
 logger = logging.getLogger(__name__)
@@ -68,12 +68,6 @@ def create_user(db: Database, email: str, plain_password: str) -> User:
     created_at = datetime.now(timezone.utc)
     password_hash = hash_password(plain_password)
 
-    # Belt-and-suspenders: never persist anything that is not an Argon2 hash.
-    if not is_argon2_hash(password_hash):
-        raise RuntimeError("Refusing to store a non-Argon2 password_hash")
-    if password_hash == plain_password:
-        raise RuntimeError("Refusing to store plaintext password")
-
     try:
         db.execute(
             """
@@ -115,7 +109,6 @@ def authenticate_user(db: Database, email: str, plain_password: str) -> Optional
         if not user.is_active:
             return None
 
-        # verify_password already rejects non-Argon2 stored values.
         if not verify_password(plain_password, user.password_hash):
             return None
 
