@@ -39,7 +39,6 @@ def meta_db_path() -> str:
 
 
 def projects_dir() -> Path:
-    """Directory that holds per-project SQLite files."""
     override = os.environ.get("PROJECTS_DIR")
     if override:
         return Path(override)
@@ -54,8 +53,6 @@ def migrations_dir() -> str:
 
 
 def project_file_path(project_id: str) -> Path:
-    """Canonical path for a project's dedicated SQLite file (by UUID id)."""
-    # Only allow UUID-like ids in paths (no traversal).
     safe = project_id.strip()
     if not re.match(r"^[a-fA-F0-9-]{36}$", safe) and not re.match(r"^[a-z0-9][a-z0-9-]{0,62}$", safe):
         raise ValueError("invalid project id for path")
@@ -82,12 +79,6 @@ def open_meta_db() -> Database:
 
 
 def open_project_db(project_row: Dict[str, Any], *, run_migrations: bool = True) -> Database:
-    """
-    Open the SQLite file for a project registry row.
-
-    Uses ``db_path`` from the row when set (legacy primary); otherwise
-    ``data/projects/{id}.db``.
-    """
     path = project_row.get("db_path") or str(project_file_path(project_row["id"]))
     db = Database(path)
     db.connect()
@@ -104,6 +95,15 @@ def open_project_db(project_row: Dict[str, Any], *, run_migrations: bool = True)
 def count_projects_for_owner(db: Database, owner_id: str) -> int:
     cur = db.execute(
         "SELECT COUNT(*) FROM projects WHERE owner_id = ? AND status != 'deleted'",
+        (owner_id,),
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else 0
+
+
+def count_active_projects_for_owner(db: Database, owner_id: str) -> int:
+    cur = db.execute(
+        "SELECT COUNT(*) FROM projects WHERE owner_id = ? AND status = 'active'",
         (owner_id,),
     )
     row = cur.fetchone()
@@ -139,7 +139,6 @@ def list_projects_for_owner(db: Database, owner_id: str, *, include_archived: bo
 
 
 def get_project(db: Database, project_id: str) -> Optional[Dict[str, Any]]:
-    """Lookup by internal UUID ``id`` or by slug ``project_id``."""
     cur = db.execute(
         """
         SELECT id, project_id, project_name, slug, owner_id, status,
@@ -171,12 +170,6 @@ def create_project(
     backup_interval: str = "1hour",
     enable_public_api: bool = True,
 ) -> Dict[str, Any]:
-    """
-    Create a project row and initialise its SQLite file (unless use_meta_db).
-
-    Raises:
-        ValueError: validation / limit / slug conflict
-    """
     name = (name or "").strip()
     if not name:
         raise ValueError("project name must not be empty")
@@ -191,7 +184,6 @@ def create_project(
     project_uuid = str(uuid.uuid4())
     created = _now()
 
-    # project_id column historically held the slug; keep that contract.
     db.execute(
         """
         INSERT INTO projects (
@@ -234,17 +226,10 @@ def create_project(
 
 
 def ensure_default_project(db: Database, owner_id: str) -> Dict[str, Any]:
-    """
-    Ensure the user has at least one active project ("Default").
-
-    First project for an owner uses the meta DB path so existing single-tenant
-    data keeps working.  Called from signup after user creation.
-    """
     existing = list_projects_for_owner(db, owner_id)
     if existing:
         return existing[0]
 
-    # Also adopt orphan legacy row (no owner) once.
     cur = db.execute(
         "SELECT id FROM projects WHERE (owner_id IS NULL OR owner_id = '') AND status != 'deleted' LIMIT 1"
     )
@@ -279,9 +264,6 @@ def update_project(
     proj = get_project(db, project_id)
     if not proj:
         raise KeyError("project not found")
-    if proj["status"] == "archived":
-        # Allow rename while archived; still updatable.
-        pass
 
     new_name = name.strip() if name is not None else proj["name"]
     if not new_name:
@@ -324,17 +306,12 @@ def archive_project(db: Database, project_id: str) -> Dict[str, Any]:
         "UPDATE projects SET status = 'archived', updated_at = ? WHERE id = ?",
         (_now(), proj["id"]),
     )
-    out = get_project(db, proj["id"])
-    # get_project filters deleted only; archived still returned
-    if out is None:
-        # status archived still selected by get_project
-        cur = db.execute(
-            "SELECT id, project_id, project_name, slug, owner_id, status, storage_location, backup_interval, enable_public_api, created_at, updated_at FROM projects WHERE id = ?",
-            (proj["id"],),
-        )
-        row = cur.fetchone()
-        return _row_to_project(row) if row else proj
-    return out
+    cur = db.execute(
+        "SELECT id, project_id, project_name, slug, owner_id, status, storage_location, backup_interval, enable_public_api, created_at, updated_at FROM projects WHERE id = ?",
+        (proj["id"],),
+    )
+    row = cur.fetchone()
+    return _row_to_project(row) if row else proj
 
 
 def restore_project(db: Database, project_id: str) -> Dict[str, Any]:
@@ -354,16 +331,21 @@ def restore_project(db: Database, project_id: str) -> Dict[str, Any]:
     return proj
 
 
-def hard_delete_project(db: Database, project_id: str, *, confirm_name: str) -> None:
+def hard_delete_project(
+    db: Database,
+    project_id: str,
+    *,
+    confirm_name: str,
+    owner_id: Optional[str] = None,
+) -> None:
     """
     Permanently delete a project after name confirmation.
 
-    Removes registry row, API keys for that project slug/id, and the dedicated
-    DB file when it is not the meta database.
+    Refuses to delete the owner's last active project (keeps Default usable).
     """
     cur = db.execute(
         """
-        SELECT id, project_id, project_name, slug, status
+        SELECT id, project_id, project_name, slug, status, owner_id
         FROM projects WHERE id = ? OR project_id = ? OR slug = ?
         """,
         (project_id, project_id, project_id),
@@ -371,11 +353,21 @@ def hard_delete_project(db: Database, project_id: str, *, confirm_name: str) -> 
     row = cur.fetchone()
     if not row:
         raise KeyError("project not found")
-    pid, pslug, pname = row[0], row[1], row[2]
+    pid, pslug, pname, owner = row[0], row[1], row[2], row[5]
     if (confirm_name or "").strip() != pname:
         raise ValueError("confirmation name does not match project name")
 
-    # Revoke/delete keys bound to this project's slug or id
+    oid = owner_id or owner
+    if oid:
+        active_n = count_active_projects_for_owner(db, oid)
+        # If this row is still active, deleting it would leave active_n - 1
+        status = row[4] or "active"
+        remaining = active_n - (1 if status == "active" else 0)
+        if remaining < 1:
+            raise ValueError(
+                "cannot delete the last active project — create another project first"
+            )
+
     db.execute(
         "DELETE FROM api_keys WHERE project_id = ? OR project_id = ?",
         (pslug, pid),
@@ -418,7 +410,7 @@ def _unique_slug(db: Database, owner_id: str, base: str, exclude_id: Optional[st
 def _row_to_project(row: Any) -> Dict[str, Any]:
     return {
         "id": row[0],
-        "project_id": row[1],  # slug (legacy column name)
+        "project_id": row[1],
         "name": row[2],
         "slug": row[3] or row[1],
         "owner_id": row[4],
@@ -428,5 +420,5 @@ def _row_to_project(row: Any) -> Dict[str, Any]:
         "enable_public_api": bool(row[8]),
         "created_at": row[9],
         "updated_at": row[10] if len(row) > 10 else None,
-        "db_path": None,  # resolved at open time
+        "db_path": None,
     }
