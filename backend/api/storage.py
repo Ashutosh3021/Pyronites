@@ -123,5 +123,5 @@ async def delete_file(file_id: str, request: Request, db: Database = Depends(get
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=ErrorResponse(code="not_found", message="File not found").model_dump())
     except Exception as e:
-        logger.error("Failed to delete file: %s", e, exp_info=True)
+        logger.error("Failed to delete file: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=ErrorResponse(code="internal_error", message="Failed to delete file").model_dump())
