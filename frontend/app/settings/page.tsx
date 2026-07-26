@@ -4,9 +4,8 @@ import { PyroCoreLayout } from '@/components/pyrocore-layout'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Copy, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react'
-import { getStoredProjectId, setStoredProject, apiUrl } from '@/lib/api'
+import { getStoredProjectId, setStoredProject, apiUrl, API_BASE } from '@/lib/api'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 const settingsTabs = [
   { id: 'general', label: 'General' },
@@ -79,7 +78,7 @@ export default function SettingsPage() {
       if (s.project?.backup_interval) setBackupInterval(s.project.backup_interval)
       if (bRes.ok) setBackups((await bRes.json()) as Backup[])
     } catch {
-      setLoadErr('Could not load settings. Is the backend running on :8000?')
+      setLoadErr(`Could not load settings. Is the backend reachable at ${API_BASE}?`)
     } finally {
       setLoading(false)
     }
