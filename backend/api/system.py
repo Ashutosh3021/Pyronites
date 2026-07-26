@@ -69,7 +69,7 @@ async def stats(request: Request, db: Database = Depends(get_db)):
         if backups:
             last_backup = backups[0].created_at.isoformat().replace("+00:00", "Z")
     except Exception:
-        logger.warning("Could not list backups for stats", exp_info=True)
+        logger.warning("Could not list backups for stats", exc_info=True)
 
     project = None
     try:
@@ -114,10 +114,8 @@ async def trigger_backup(request: Request, db: Database = Depends(get_db)):
             ).model_dump(),
         )
     record_event("success", "Backup completed")
-    import asyncio  # local import; module does not import asyncio at top level
+    import asyncio
 
-    # Persist to object storage (S3/R2) if sync is enabled, so a manual backup
-    # also survives an ephemeral filesystem (e.g. Render free tier).
     try:
         from backend.core.s3_sync import load_s3_config
 
@@ -220,8 +218,6 @@ async def sessions(request: Request, db: Database = Depends(get_db)):
         )
 
 
-# ── User management (admin) ───────────────────────────────────────────────────
-
 class SetActiveBody(BaseModel):
     is_active: bool
 
@@ -291,7 +287,6 @@ async def remove_session(
     """Revoke a specific session by id (admin only)."""
     require_scopes(resolve_auth(request, db), {"admin"})
     try:
-        # sessions table stores the token *hash*, but we delete by primary key id
         cur = db.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
         if cur.rowcount == 0:
             raise HTTPException(
