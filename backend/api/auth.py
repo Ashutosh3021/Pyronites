@@ -36,6 +36,9 @@ from backend.core import projects as projmod
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# 7 days — long enough for dashboard use; still re-auth on deploy DB wipe.
+SESSION_MAX_AGE = int(os.environ.get("SESSION_MAX_AGE_SECONDS", str(7 * 24 * 3600)))
+
 
 def _is_https(request: Request | None) -> bool:
     if request is None:
@@ -69,18 +72,63 @@ def get_db() -> Database:
 
 
 def _set_session_cookie(response: Response, raw_token: str, request: Request | None = None) -> None:
+    """
+    Set httpOnly session cookie for the dashboard.
+
+    Cross-site (Vercel → Render) requires SameSite=None; Secure.
+    Chrome also expects the Partitioned attribute for third-party cookies
+    (CHIPS). Starlette's set_cookie does not expose Partitioned on all
+    versions, so we append a second Set-Cookie header when needed.
+    """
     samesite = _cookie_samesite(request)
     secure = _cookie_secure(request)
     if samesite == "none":
         secure = True
+
+    # Primary set via Starlette (works everywhere)
     response.set_cookie(
         key="session_token",
         value=raw_token,
         httponly=True,
         secure=secure,
-        samesite=samesite,
+        samesite=samesite,  # type: ignore[arg-type]
         path="/",
+        max_age=SESSION_MAX_AGE,
     )
+
+    # Chrome third-party / CHIPS: Partitioned cookie when cross-site HTTPS
+    if samesite == "none" and secure:
+        # Override with explicit header so Partitioned is present.
+        # Note: multiple Set-Cookie headers for the same name — last wins in
+        # practice for browsers that understand Partitioned.
+        parts = [
+            f"session_token={raw_token}",
+            "Path=/",
+            "HttpOnly",
+            "Secure",
+            "SameSite=None",
+            "Partitioned",
+            f"Max-Age={SESSION_MAX_AGE}",
+        ]
+        response.headers.append("Set-Cookie", "; ".join(parts))
+
+
+def _clear_session_cookie(response: Response, request: Request | None = None) -> None:
+    samesite = _cookie_samesite(request)
+    secure = _cookie_secure(request)
+    if samesite == "none":
+        secure = True
+    response.delete_cookie(
+        "session_token",
+        path="/",
+        secure=secure,
+        samesite=samesite,  # type: ignore[arg-type]
+    )
+    if samesite == "none" and secure:
+        response.headers.append(
+            "Set-Cookie",
+            "session_token=; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=0",
+        )
 
 
 class _EmailBody(BaseModel):
@@ -112,7 +160,6 @@ async def signup(body: _EmailBody, response: Response, request: Request, db: Dat
             detail=ErrorResponse(code="bad_request", message=str(e)).model_dump(),
         )
 
-    # Multi-project: every user gets a Default project (uses meta DB for data).
     default_project = None
     try:
         default_project = projmod.ensure_default_project(db, user.id)
@@ -148,7 +195,6 @@ async def login(body: _EmailBody, response: Response, request: Request, db: Data
                 code="unauthorized", message="Incorrect email or password"
             ).model_dump(),
         )
-    # Backfill Default project for older accounts that pre-date multi-project.
     try:
         projmod.ensure_default_project(db, user.id)
     except Exception:
@@ -170,12 +216,7 @@ async def logout(request: Request, response: Response, db: Database = Depends(ge
         except DatabaseError:
             logger.warning("Failed to revoke session on logout", exc_info=True)
         record_event("info", "User logged out")
-    response.delete_cookie(
-        "session_token",
-        path="/",
-        secure=_cookie_secure(request),
-        samesite=_cookie_samesite(request),
-    )
+    _clear_session_cookie(response, request)
     return {"message": "Logged out"}
 
 
