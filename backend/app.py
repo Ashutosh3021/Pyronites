@@ -17,6 +17,7 @@ from backend.api.auth import router as auth_router
 from backend.api.projects import router as projects_router
 from backend.api.apikeys import router as apikeys_router
 from backend.api.system import router as system_router
+from backend.api.project_scoped import router as project_scoped_router
 from backend.api.schemas import ErrorResponse
 from backend.core.db import Database
 from backend.core.migrations import get_migration_files, run_pending_migrations
@@ -29,10 +30,6 @@ logging.basicConfig(level=logging.INFO)
 
 DEFAULT_MIGRATIONS_DIR = str(Path(__file__).parent / "migrations")
 
-# Default dashboard origins when FRONTEND_ORIGIN is unset.
-# IMPORTANT: browsers forbid Access-Control-Allow-Origin: * together with
-# Access-Control-Allow-Credentials: true — session cookies would never stick
-# for a Vercel frontend talking to a Render API.
 _DEFAULT_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -116,14 +113,12 @@ def create_app() -> FastAPI:
 
     app = FastAPI(lifespan=lifespan, title="PyroCore API")
 
-    # ── CORS (credentialed dashboard) ─────────────────────────────────────
     frontend_origins = os.environ.get("FRONTEND_ORIGIN")
     if frontend_origins:
         allow_origins = [o.strip() for o in frontend_origins.split(",") if o.strip()]
     else:
         allow_origins = list(_DEFAULT_ORIGINS)
 
-    # Also allow any *.vercel.app preview deployment when not locked down.
     allow_origin_regex = os.environ.get(
         "FRONTEND_ORIGIN_REGEX",
         r"https://.*\.vercel\.app",
@@ -196,7 +191,11 @@ def create_app() -> FastAPI:
     app.include_router(apikeys_router)
     app.include_router(system_router)
 
-    # Phase 2: same handlers under /api/projects/{project_id}/...
+    # Full project-scoped data plane (tables/sql/storage/keys/stats)
+    app.include_router(project_scoped_router)
+
+    # Also keep dual-mounted legacy routers under project prefix for clients
+    # that still call /api/projects/{id}/tables via the original table handlers.
     app.include_router(tables_router, prefix="/api/projects/{project_id}")
     app.include_router(storage_router, prefix="/api/projects/{project_id}")
     app.include_router(sql_router, prefix="/api/projects/{project_id}")
