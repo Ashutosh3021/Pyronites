@@ -1,5 +1,6 @@
 # PYRO-CORE — Open Source Backend Platform for Small Projects
-![IDEA](docs\frame_000140.jpg)
+<img src="docs\frame_000140.jpg" alt="App Preview">
+
 > A free, open-source, self-hosted backend platform for students, hobbyists, and indie developers building projects with fewer than ~100 users. No paid tiers. No hosted database bills. You own your data.
 
 ## Why this exists
