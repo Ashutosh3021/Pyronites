@@ -1,14 +1,19 @@
 """
-Project-scoped request helpers (Phase 2).
+Project-scoped request helpers.
 
 - Meta DB (DATABASE_PATH): users, sessions, projects, api_keys
-- Project data DB: user tables + storage_files (meta for Default; file for others)
+- Project data DB: user tables + storage_files
+
+Isolation rules
+---------------
+* Default project (slug ``default``) may keep using the meta DB when no
+  dedicated file exists (legacy single-tenant data).
+* Every other project ALWAYS uses ``data/projects/{uuid}.db``. If the file
+  is missing it is created and migrated — we never fall back to the meta DB
+  for non-default projects (that caused shared tables across projects).
 
 Path ``/api/projects/{id}/...`` selects the project data DB.
-Unscoped ``/tables`` etc. use the meta DB (Default / legacy).
-
-Auth always runs against the **meta** DB so sessions and keys stay valid
-even when the data connection is a separate project file.
+Unscoped ``/tables`` etc. use the meta DB (Default / legacy client).
 """
 
 from __future__ import annotations
@@ -48,16 +53,35 @@ def extract_project_ref(request: Request) -> Optional[str]:
     return m.group(1) if m else None
 
 
-def _primary_uses_meta(project: Dict[str, Any]) -> bool:
+def _is_legacy_default(project: Dict[str, Any]) -> bool:
+    """True only for Default with no dedicated file yet (shared meta tables)."""
+    slug = (project.get("slug") or project.get("project_id") or "").lower()
+    if slug != "default":
+        return False
     path = projmod.project_file_path(project["id"])
     return not path.exists()
 
 
 def open_data_db_for_project(project: Dict[str, Any]) -> Database:
-    if _primary_uses_meta(project):
+    """
+    Open the SQLite file that holds this project's user tables / storage.
+
+    Non-default projects never share the meta database.
+    """
+    if _is_legacy_default(project):
         path = meta_db_path()
+        logger.debug("Project %s uses meta DB (legacy Default)", project.get("id"))
     else:
-        path = str(projmod.project_file_path(project["id"]))
+        file_path = projmod.project_file_path(project["id"])
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        path = str(file_path)
+        if not file_path.exists():
+            logger.info(
+                "Creating dedicated project DB for %s (%s)",
+                project.get("name") or project.get("project_id"),
+                path,
+            )
+
     db = Database(path)
     db.connect()
     try:
@@ -102,7 +126,6 @@ def enforce_api_key_project(auth: Optional[Dict[str, Any]], project: Dict[str, A
 
 
 def get_meta_db() -> Generator[Database, None, None]:
-    """Yield a connection to the meta registry DB."""
     db = Database(meta_db_path())
     db.connect()
     try:
@@ -116,27 +139,14 @@ def get_project_context(
     request: Request,
     meta: Database = Depends(get_meta_db),
 ) -> Generator[Dict[str, Any], None, None]:
-    """
-    FastAPI dependency for ``/api/projects/{project_id}/...`` routes.
-
-    Yields::
-
-        {
-          "project": <registry dict>,
-          "meta": <meta Database>,
-          "db": <project data Database>,
-          "auth": <resolve_auth dict>,
-        }
-    """
     auth = resolve_auth(request, meta)
-    require_scopes(auth, {"read"})  # routes still apply tighter scopes
+    require_scopes(auth, {"read"})
 
     project = resolve_project_or_404(meta, project_id)
     enforce_api_key_project(auth, project)
 
     data_db = open_data_db_for_project(project)
     try:
-        # Also attach to request.state for any code using the path-based get_db
         request.state.meta_db = meta
         request.state.project = project
         yield {
@@ -150,14 +160,6 @@ def get_project_context(
 
 
 def get_db(request: Request) -> Generator[Database, None, None]:
-    """
-    Yield the correct **data** Database for this request.
-
-    Always attaches ``request.state.meta_db`` (and optional ``request.state.project``)
-    so callers can run auth against the meta connection:
-
-        resolve_auth(request, getattr(request.state, "meta_db", db))
-    """
     meta = Database(meta_db_path())
     meta.connect()
     data: Optional[Database] = None
@@ -170,7 +172,6 @@ def get_db(request: Request) -> Generator[Database, None, None]:
         if project_ref:
             project = resolve_project_or_404(meta, project_ref)
             request.state.project = project
-            # Key isolation (session users may access any owned project)
             auth = resolve_auth(request, meta)
             enforce_api_key_project(auth, project)
             data = open_data_db_for_project(project)
@@ -184,12 +185,10 @@ def get_db(request: Request) -> Generator[Database, None, None]:
 
 
 def auth_db(request: Request, fallback: Database) -> Database:
-    """Meta DB for auth, falling back to ``fallback`` on legacy unscoped routes."""
     return getattr(request.state, "meta_db", None) or fallback
 
 
 def current_project_slug(request: Request, fallback_db: Database) -> str:
-    """Slug to bind new API keys to (path project or oldest active)."""
     project = getattr(request.state, "project", None)
     if project:
         return project["project_id"]
