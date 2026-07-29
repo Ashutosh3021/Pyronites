@@ -1,21 +1,23 @@
 """
 Transactional email via Brevo (Sendinblue) free-tier API.
 
+Uses stdlib urllib so production does not need httpx.
+
 Env:
-  BREVO_API_KEY          — required to actually send
-  BREVO_SENDER_EMAIL     — verified sender (required when key is set)
-  BREVO_SENDER_NAME      — optional display name (default: PyroCore)
-  PASSWORD_RESET_BASE_URL — frontend origin for reset links, e.g. https://app.vercel.app
-  PASSWORD_RESET_DEV_LOG  — if true/1, log the reset URL when email is skipped (local only)
+  BREVO_API_KEY           — required to actually send
+  BREVO_SENDER_EMAIL      — verified sender (required when key is set)
+  BREVO_SENDER_NAME       — optional display name (default: PyroCore)
+  PASSWORD_RESET_BASE_URL — frontend origin for reset links
+  PASSWORD_RESET_DEV_LOG  — if true, log the reset URL when email is skipped
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-from typing import Optional
-
-import httpx
+import urllib.error
+import urllib.request
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +35,7 @@ def _reset_base_url() -> str:
 
 
 def build_reset_link(raw_token: str) -> str:
-    base = _reset_base_url()
-    if not base:
-        # Fallback for local dashboard
-        base = "http://localhost:3000"
+    base = _reset_base_url() or "http://localhost:3000"
     return f"{base}/reset-password?token={raw_token}"
 
 
@@ -44,9 +43,8 @@ def send_password_reset_email(to_email: str, raw_token: str) -> bool:
     """
     Send a password-reset email.
 
-    Returns:
-        True if Brevo accepted the message, False if skipped or failed.
-        Callers must not reveal this to the end user.
+    Returns True if Brevo accepted the message, False if skipped or failed.
+    Callers must not reveal this to the end user.
     """
     link = build_reset_link(raw_token)
     api_key = (os.environ.get("BREVO_API_KEY") or "").strip()
@@ -62,7 +60,6 @@ def send_password_reset_email(to_email: str, raw_token: str) -> bool:
             "yes",
             "on",
         ):
-            # Local/dev only — never enable on production
             logger.info("DEV password reset link for %s: %s", to_email, link)
         return False
 
@@ -93,26 +90,30 @@ def send_password_reset_email(to_email: str, raw_token: str) -> bool:
         "textContent": text,
     }
 
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        BREVO_API,
+        data=data,
+        method="POST",
+        headers={
+            "api-key": api_key,
+            "accept": "application/json",
+            "content-type": "application/json",
+        },
+    )
+
     try:
-        with httpx.Client(timeout=20.0) as client:
-            res = client.post(
-                BREVO_API,
-                headers={
-                    "api-key": api_key,
-                    "accept": "application/json",
-                    "content-type": "application/json",
-                },
-                json=payload,
-            )
-        if res.status_code >= 400:
-            logger.error(
-                "Brevo send failed status=%s body=%s",
-                res.status_code,
-                res.text[:500],
-            )
-            return False
-        logger.info("Password reset email accepted by Brevo for recipient domain")
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            if resp.status >= 400:
+                body = resp.read()[:500]
+                logger.error("Brevo send failed status=%s body=%s", resp.status, body)
+                return False
+        logger.info("Password reset email accepted by Brevo")
         return True
+    except urllib.error.HTTPError as e:
+        body = e.read()[:500] if e.fp else b""
+        logger.error("Brevo HTTPError status=%s body=%s", e.code, body)
+        return False
     except Exception:
         logger.error("Brevo send raised", exc_info=True)
         return False

@@ -1,21 +1,8 @@
 """
 Authentication endpoints for the dashboard (signup / login / logout / password reset).
 
-These are the ONLY public, unauthenticated endpoints in the API — everything
-else requires a session cookie (dashboard) or a Bearer API key (external
-clients).  Login sets an httpOnly ``session_token`` cookie so the browser
-dashboard stays authenticated without re-sending credentials on every request.
-
-Security notes
---------------
-- The raw session token is returned to the client exactly once, inside the
-  httpOnly cookie.  It is never echoed in a JSON body and is never logged.
-- Signup auto-creates a session (common SPA pattern) so a freshly registered
-  user can immediately hit authenticated endpoints (e.g. /api/projects)
-  without a separate login round-trip.
-- Signup also ensures a Default project exists for the new user (multi-project).
-- Forgot-password always returns the same message (no account enumeration).
-- Reset tokens are stored hashed; raw token only appears in the email link.
+Public unauthenticated routes. Session is httpOnly cookie for the dashboard.
+Forgot-password never reveals whether an email exists.
 """
 
 import logging
@@ -52,7 +39,6 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 SESSION_MAX_AGE = int(os.environ.get("SESSION_MAX_AGE_SECONDS", str(7 * 24 * 3600)))
 
-# Simple in-process rate limit for forgot-password (per IP + per email)
 _FORGOT_LOCK = Lock()
 _FORGOT_HITS: dict[str, list[float]] = defaultdict(list)
 _FORGOT_WINDOW_SEC = 3600
@@ -60,7 +46,6 @@ _FORGOT_MAX_PER_KEY = 5
 
 
 def _rate_limit_forgot(ip: str, email: str) -> bool:
-    """Return True if allowed, False if limited."""
     now = time.time()
     keys = [f"ip:{ip or 'unknown'}", f"email:{(email or '').lower()}"]
     with _FORGOT_LOCK:
@@ -183,7 +168,6 @@ _GENERIC_FORGOT_MSG = (
 
 @router.post("/signup")
 async def signup(body: _EmailBody, response: Response, request: Request, db: Database = Depends(get_db)):
-    """Create a new user account, Default project, and start a session."""
     try:
         user = create_user(db, body.email, body.password)
     except UserAlreadyExistsError:
@@ -226,7 +210,6 @@ async def signup(body: _EmailBody, response: Response, request: Request, db: Dat
 
 @router.post("/login")
 async def login(body: _EmailBody, response: Response, request: Request, db: Database = Depends(get_db)):
-    """Authenticate by email/password and set the session cookie."""
     user = authenticate_user(db, body.email, body.password)
     if user is None:
         raise HTTPException(
@@ -238,7 +221,7 @@ async def login(body: _EmailBody, response: Response, request: Request, db: Data
     try:
         projmod.ensure_default_project(db, user.id)
     except Exception:
-        logger.warning("ensure_default_project on login failed", exp_info=True)
+        logger.warning("ensure_default_project on login failed", exc_info=True)
 
     session = create_session(db, user.id)
     _set_session_cookie(response, session.token, request)
@@ -248,7 +231,6 @@ async def login(body: _EmailBody, response: Response, request: Request, db: Data
 
 @router.post("/logout")
 async def logout(request: Request, response: Response, db: Database = Depends(get_db)):
-    """Revoke the current session and clear the cookie."""
     token = request.cookies.get("session_token")
     if token:
         try:
@@ -262,7 +244,6 @@ async def logout(request: Request, response: Response, db: Database = Depends(ge
 
 @router.get("/me")
 async def me(request: Request, db: Database = Depends(get_db)):
-    """Return the current session user, or 401 if not authenticated."""
     token = request.cookies.get("session_token")
     user = validate_session(db, token) if token else None
     if user is None:
@@ -281,11 +262,6 @@ async def forgot_password(
     request: Request,
     db: Database = Depends(get_db),
 ):
-    """
-    Request a password-reset email.
-
-    Always returns the same message whether or not the account exists.
-    """
     client_ip = request.client.host if request.client else "unknown"
     if not _rate_limit_forgot(client_ip, body.email):
         raise HTTPException(
@@ -303,7 +279,6 @@ async def forgot_password(
             send_password_reset_email(user.email, raw)
             record_event("info", "Password reset requested")
     except Exception:
-        # Never leak internals; still return generic success
         logger.error("forgot-password processing failed", exp_info=True)
 
     return {"message": _GENERIC_FORGOT_MSG}
@@ -314,7 +289,6 @@ async def reset_password(
     body: _ResetBody,
     db: Database = Depends(get_db),
 ):
-    """Set a new password using a one-time reset token."""
     if len(body.password) < 8:
         raise HTTPException(
             status_code=400,
