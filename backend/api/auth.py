@@ -183,7 +183,7 @@ async def signup(body: _EmailBody, response: Response, request: Request, db: Dat
     try:
         default_project = projmod.ensure_default_project(db, user.id)
     except Exception:
-        logger.error("Failed to ensure Default project on signup", exc_info=True)
+        logger.exception("Failed to ensure Default project on signup")
 
     session = create_session(db, user.id)
     _set_session_cookie(response, session.token, request)
@@ -216,7 +216,7 @@ async def login(body: _EmailBody, response: Response, request: Request, db: Data
     try:
         projmod.ensure_default_project(db, user.id)
     except Exception:
-        logger.warning("ensure_default_project on login failed", exc_info=True)
+        logger.exception("ensure_default_project on login failed")
 
     session = create_session(db, user.id)
     _set_session_cookie(response, session.token, request)
@@ -231,7 +231,7 @@ async def logout(request: Request, response: Response, db: Database = Depends(ge
         try:
             revoke_session(db, token)
         except DatabaseError:
-            logger.warning("Failed to revoke session on logout", exp_info=True)
+            logger.exception("Failed to revoke session on logout")
         record_event("info", "User logged out")
     _clear_session_cookie(response, request)
     return {"message": "Logged out"}
@@ -274,7 +274,7 @@ async def forgot_password(
             send_password_reset_email(user.email, raw)
             record_event("info", "Password reset requested")
     except Exception:
-        logger.error("forgot-password processing failed", exp_info=True)
+        logger.exception("forgot-password processing failed")
 
     return {"message": _GENERIC_FORGOT_MSG}
 
@@ -296,7 +296,7 @@ async def reset_password(
     try:
         user_id = consume_reset_token(db, body.token)
     except DatabaseError:
-        logger.error("reset-password token lookup failed", exp_info=True)
+        logger.exception("reset-password token lookup failed")
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -327,7 +327,7 @@ async def reset_password(
     except HTTPException:
         raise
     except Exception:
-        logger.error("reset-password update failed", exp_info=True)
+        logger.exception("reset-password update failed")
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(

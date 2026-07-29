@@ -57,7 +57,7 @@ def create_user(db: Database, email: str, plain_password: str) -> User:
         from backend.core.db import DatabaseIntegrityError
         if isinstance(e, DatabaseIntegrityError):
             raise UserAlreadyExistsError("A user with that email already exists") from e
-        logger.error("Failed to insert user into database", exc_info=True)
+        logger.exception("Failed to insert user into database")
         raise
 
     return User(
@@ -78,7 +78,7 @@ def authenticate_user(db: Database, email: str, plain_password: str) -> Optional
             return None
         return user
     except Exception:
-        logger.error("Error during user authentication", exc_info=True)
+        logger.exception("Error during user authentication")
         return None
 
 
@@ -99,7 +99,7 @@ def get_user_by_id(db: Database, user_id: str) -> Optional[User]:
             is_active=bool(row[4]) if len(row) > 4 else True,
         )
     except DatabaseError:
-        logger.error("Failed to get user by id", exc_info=True)
+        logger.exception("Failed to get user by id")
         raise
 
 
@@ -120,7 +120,7 @@ def get_user_by_email(db: Database, email: str) -> Optional[User]:
             is_active=bool(row[4]) if len(row) > 4 else True,
         )
     except DatabaseError:
-        logger.error("Failed to get user by email", exp_info=True)
+        logger.exception("Failed to get user by email")
         raise
 
 
@@ -132,7 +132,7 @@ def set_user_active(db: Database, user_id: str, active: bool) -> bool:
         )
         return cursor.rowcount > 0
     except DatabaseError:
-        logger.error("Failed to set user active state", exp_info=True)
+        logger.exception("Failed to set user active state")
         raise
 
 
@@ -147,7 +147,7 @@ def set_user_password(db: Database, user_id: str, plain_password: str) -> bool:
         )
         return cursor.rowcount > 0
     except DatabaseError:
-        logger.error("Failed to set user password", exp_info=True)
+        logger.exception("Failed to set user password")
         raise
 
 
@@ -156,5 +156,5 @@ def delete_user(db: Database, user_id: str) -> bool:
         cursor = db.execute("DELETE FROM users WHERE id = ?", (user_id,))
         return cursor.rowcount > 0
     except DatabaseError:
-        logger.error("Failed to delete user", exp_info=True)
+        logger.exception("Failed to delete user")
         raise
