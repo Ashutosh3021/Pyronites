@@ -13,7 +13,12 @@ interface Stats {
   key_count: number
   db_size_bytes: number
   last_backup: string | null
-  project: { project_id: string; project_name: string; backup_interval: string } | null
+  project: {
+    project_id: string
+    project_name: string
+    backup_interval: string
+    storage_location?: string
+  } | null
 }
 
 interface LogEntry {
@@ -63,13 +68,26 @@ function levelColor(level: string): string {
   }
 }
 
+function SkeletonCard() {
+  return (
+    <div className="bg-card border border-border p-5 lg:p-6 space-y-4">
+      <div className="h-4 w-24 rounded bg-muted animate-pulse" />
+      <div className="h-7 w-16 rounded bg-muted animate-pulse" />
+      <div className="h-3 w-full rounded bg-muted/70 animate-pulse" />
+      <div className="h-3 w-2/3 rounded bg-muted/70 animate-pulse" />
+    </div>
+  )
+}
+
 export default function OverviewPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [activity, setActivity] = useState<LogEntry[]>([])
+  const [loading, setLoading] = useState(true)
   const [loadErr, setLoadErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoadErr(null)
+    setLoading(true)
     try {
       const [sRes, lRes] = await Promise.all([
         fetch(`${API_BASE}/api/stats`, { credentials: 'include' }),
@@ -83,7 +101,9 @@ export default function OverviewPage() {
         setActivity(logs.slice(0, 5))
       }
     } catch {
-      setLoadErr('Could not load overview. Is the backend running on :8000?')
+      setLoadErr('Could not load overview. Is the backend running?')
+    } finally {
+      setLoading(false)
     }
   }, [])
 
@@ -106,7 +126,7 @@ export default function OverviewPage() {
           <p className="text-muted-foreground text-sm">
             {stats?.project?.project_name
               ? `Status of ${stats.project.project_name}`
-              : 'Status and quick access to your backend infrastructure'}
+              : 'Status and quick access to your backend'}
           </p>
         </div>
 
@@ -116,94 +136,107 @@ export default function OverviewPage() {
           </p>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
-          <div className="bg-card border border-border p-5 lg:p-6 hover:border-accent/30 transition-colors">
-            <div className="flex items-start justify-between mb-4">
-              <h3 className="text-sm font-medium text-foreground">Database</h3>
-              <Database className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--pyro-orange)' }} />
-            </div>
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs text-muted-foreground">File Size</p>
-                <p className="text-lg font-semibold text-foreground">{formatBytes(dbSize)}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4 text-xs">
-                <div>
-                  <p className="text-muted-foreground">Tables</p>
-                  <p className="text-foreground font-medium">{tableCount}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Mode</p>
-                  <p className="text-foreground font-medium">WAL</p>
-                </div>
-              </div>
-              <div className="pt-2 border-t border-border">
-                <p className="text-xs text-muted-foreground">Last backup: {relativeTime(stats?.last_backup ?? null)}</p>
-              </div>
-            </div>
+        {loading && !stats ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
           </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
+            <div className="bg-card border border-border p-5 lg:p-6 hover:border-accent/30 transition-colors">
+              <div className="flex items-start justify-between mb-4">
+                <h3 className="text-sm font-medium text-foreground">Database</h3>
+                <Database className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--pyro-orange)' }} />
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">File size</p>
+                  <p className="text-lg font-semibold text-foreground">{formatBytes(dbSize)}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <p className="text-muted-foreground">Tables</p>
+                    <p className="text-foreground font-medium">{tableCount}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Mode</p>
+                    <p className="text-foreground font-medium">WAL</p>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-border">
+                  <p className="text-xs text-muted-foreground">
+                    Last backup: {relativeTime(stats?.last_backup ?? null)}
+                  </p>
+                </div>
+              </div>
+            </div>
 
-          <div className="bg-card border border-border p-5 lg:p-6 hover:border-accent/30 transition-colors">
-            <div className="flex items-start justify-between mb-4">
-              <h3 className="text-sm font-medium text-foreground">API</h3>
-              <Brackets className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--pyro-orange)' }} />
-            </div>
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs text-muted-foreground">API Keys</p>
-                <p className="text-lg font-semibold text-foreground">{keyCount}</p>
+            <div className="bg-card border border-border p-5 lg:p-6 hover:border-accent/30 transition-colors">
+              <div className="flex items-start justify-between mb-4">
+                <h3 className="text-sm font-medium text-foreground">API</h3>
+                <Brackets className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--pyro-orange)' }} />
               </div>
-              <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="space-y-3">
                 <div>
-                  <p className="text-muted-foreground">Project</p>
-                  <p className="text-foreground font-medium truncate">{stats?.project?.project_id ?? '—'}</p>
+                  <p className="text-xs text-muted-foreground">API keys</p>
+                  <p className="text-lg font-semibold text-foreground">{keyCount}</p>
                 </div>
-                <div>
-                  <p className="text-muted-foreground">Backup</p>
-                  <p className="text-foreground font-medium">{stats?.project?.backup_interval ?? '—'}</p>
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <p className="text-muted-foreground">Project</p>
+                    <p className="text-foreground font-medium truncate">
+                      {stats?.project?.project_id ?? '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Backup interval</p>
+                    <p className="text-foreground font-medium">
+                      {stats?.project?.backup_interval ?? '—'}
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <div className="pt-2 border-t border-border">
-                <p className="text-xs text-muted-foreground">Uptime: —</p>
               </div>
             </div>
-          </div>
 
-          <div className="bg-card border border-border p-5 lg:p-6 hover:border-accent/30 transition-colors sm:col-span-2 lg:col-span-1">
-            <div className="flex items-start justify-between mb-4">
-              <h3 className="text-sm font-medium text-foreground">Storage</h3>
-              <Archive className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--pyro-orange)' }} />
-            </div>
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs text-muted-foreground">Files</p>
-                <p className="text-lg font-semibold text-foreground">{fileCount}</p>
+            <div className="bg-card border border-border p-5 lg:p-6 hover:border-accent/30 transition-colors sm:col-span-2 lg:col-span-1">
+              <div className="flex items-start justify-between mb-4">
+                <h3 className="text-sm font-medium text-foreground">Storage</h3>
+                <Archive className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--pyro-orange)' }} />
               </div>
-              <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="space-y-3">
                 <div>
-                  <p className="text-muted-foreground">Total Used</p>
-                  <p className="text-foreground font-medium">{formatBytes(dbSize)}</p>
+                  <p className="text-xs text-muted-foreground">Files</p>
+                  <p className="text-lg font-semibold text-foreground">{fileCount}</p>
                 </div>
-                <div>
+                <div className="text-xs">
                   <p className="text-muted-foreground">Location</p>
-                  <p className="text-foreground font-medium capitalize">{stats?.project?.storage_location ?? 'Local'}</p>
+                  <p className="text-foreground font-medium capitalize">
+                    {stats?.project?.storage_location ?? 'Local'}
+                  </p>
                 </div>
-              </div>
-              <div className="pt-2 border-t border-border">
-                <p className="text-xs text-muted-foreground">Limit: 100 GB</p>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
         <div>
-          <h2 className="text-base lg:text-lg font-semibold text-foreground mb-4">Recent Activity</h2>
+          <h2 className="text-base lg:text-lg font-semibold text-foreground mb-4">Recent activity</h2>
           <div className="bg-card border border-border divide-y divide-border">
-            {activity.length === 0 ? (
+            {loading && activity.length === 0 ? (
+              <div className="px-4 py-6 space-y-3">
+                <div className="h-4 w-full rounded bg-muted animate-pulse" />
+                <div className="h-4 w-5/6 rounded bg-muted animate-pulse" />
+                <div className="h-4 w-2/3 rounded bg-muted animate-pulse" />
+              </div>
+            ) : activity.length === 0 ? (
               <div className="px-4 py-3 text-sm text-muted-foreground">No recent activity.</div>
             ) : (
               activity.map((item) => (
-                <div key={item.id} className="flex items-center hover:bg-muted/30 transition-colors overflow-hidden min-h-[52px]">
+                <div
+                  key={item.id}
+                  className="flex items-center hover:bg-muted/30 transition-colors overflow-hidden min-h-[52px]"
+                >
                   <div
                     className="w-1 self-stretch flex-shrink-0"
                     style={{ backgroundColor: levelColor(item.level) }}
@@ -221,7 +254,7 @@ export default function OverviewPage() {
         </div>
 
         <div>
-          <h2 className="text-base lg:text-lg font-semibold text-foreground mb-4">Quick Actions</h2>
+          <h2 className="text-base lg:text-lg font-semibold text-foreground mb-4">Quick actions</h2>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
               { label: 'New Table', href: '/database' },

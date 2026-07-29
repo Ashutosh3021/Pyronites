@@ -1,8 +1,5 @@
 """
-Authentication endpoints for the dashboard (signup / login / logout / password reset).
-
-Public unauthenticated routes. Session is httpOnly cookie for the dashboard.
-Forgot-password never reveals whether an email exists.
+Authentication endpoints: signup / login / logout / password reset.
 """
 
 import logging
@@ -95,7 +92,6 @@ def _set_session_cookie(response: Response, raw_token: str, request: Request | N
     secure = _cookie_secure(request)
     if samesite == "none":
         secure = True
-
     response.set_cookie(
         key="session_token",
         value=raw_token,
@@ -105,7 +101,6 @@ def _set_session_cookie(response: Response, raw_token: str, request: Request | N
         path="/",
         max_age=SESSION_MAX_AGE,
     )
-
     if samesite == "none" and secure:
         parts = [
             f"session_token={raw_token}",

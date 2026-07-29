@@ -30,6 +30,35 @@ const navItems = [
   { href: '/settings', icon: Settings, label: 'Settings' },
 ]
 
+function AuthGateShell({ slow }: { slow: boolean }) {
+  return (
+    <div className="flex h-screen bg-background overflow-hidden">
+      <aside className="hidden lg:flex w-70 flex-col border-r border-border bg-card">
+        <div className="px-6 py-5 border-b border-border">
+          <div className="h-5 w-28 rounded bg-muted animate-pulse" />
+          <div className="h-3 w-20 rounded bg-muted/70 animate-pulse mt-2" />
+        </div>
+        <div className="px-3 py-4 space-y-2">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div key={i} className="h-10 rounded bg-muted/50 animate-pulse" />
+          ))}
+        </div>
+      </aside>
+      <div className="flex-1 flex flex-col">
+        <header className="h-14 lg:h-16 border-b border-border bg-card px-4 flex items-center">
+          <div className="h-4 w-32 rounded bg-muted animate-pulse" />
+        </header>
+        <main className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
+          <div className="w-8 h-8 border-2 border-muted-foreground/30 border-t-accent rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground">
+            {slow ? 'Waking the server… this can take up to a minute on free tier.' : 'Checking session…'}
+          </p>
+        </main>
+      </div>
+    </div>
+  )
+}
+
 export function PyroCoreLayout({
   children,
 }: {
@@ -41,8 +70,14 @@ export function PyroCoreLayout({
   const [projectLabel, setProjectLabel] = useState<string | null>(null)
 
   const [authChecked, setAuthChecked] = useState(false)
+  const [slowAuth, setSlowAuth] = useState(false)
+
   useEffect(() => {
     let cancelled = false
+    const slowTimer = window.setTimeout(() => {
+      if (!cancelled) setSlowAuth(true)
+    }, 2500)
+
     fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
       .then((res) => {
         if (cancelled) return
@@ -55,8 +90,13 @@ export function PyroCoreLayout({
       .catch(() => {
         if (!cancelled) router.replace('/login')
       })
+      .finally(() => {
+        window.clearTimeout(slowTimer)
+      })
+
     return () => {
       cancelled = true
+      window.clearTimeout(slowTimer)
     }
   }, [router])
 
@@ -82,11 +122,7 @@ export function PyroCoreLayout({
   const currentPage = navItems.find((item) => item.href === pathname)?.label ?? 'PyroCore'
 
   if (!authChecked) {
-    return (
-      <div className="flex h-screen items-center justify-center text-muted-foreground">
-        Loading…
-      </div>
-    )
+    return <AuthGateShell slow={slowAuth} />
   }
 
   return (
@@ -179,9 +215,7 @@ export function PyroCoreLayout({
               className="w-2.5 h-2.5 rounded-full flex-shrink-0"
               style={{ backgroundColor: 'var(--pyro-orange)' }}
             />
-            <span className="hidden sm:block text-xs text-muted-foreground">
-              Core Status
-            </span>
+            <span className="hidden sm:block text-xs text-muted-foreground">Online</span>
           </div>
         </header>
 

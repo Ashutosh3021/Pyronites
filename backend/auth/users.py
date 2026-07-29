@@ -13,12 +13,10 @@ logger = logging.getLogger(__name__)
 
 
 class UserAlreadyExistsError(Exception):
-    """Raised when attempting to create a user with an email that already exists."""
     pass
 
 
 class User(BaseModel):
-    """Internal user model with password hash (never exposed publicly)."""
     id: str
     email: str
     password_hash: str
@@ -27,7 +25,6 @@ class User(BaseModel):
 
 
 class UserPublic(BaseModel):
-    """Public user model safe to return over API (no password hash)."""
     id: str
     email: EmailStr
     created_at: datetime
@@ -39,12 +36,10 @@ def create_user(db: Database, email: str, plain_password: str) -> User:
         raise ValueError("Email must not be empty")
     if not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", email):
         raise ValueError("Invalid email format")
-
     if not plain_password:
         raise ValueError("Password must not be empty")
 
     normalized_email = email.lower()
-
     existing = get_user_by_email(db, normalized_email)
     if existing is not None:
         raise UserAlreadyExistsError("A user with that email already exists")
@@ -55,11 +50,8 @@ def create_user(db: Database, email: str, plain_password: str) -> User:
 
     try:
         db.execute(
-            """
-        INSERT INTO users (id, email, password_hash, created_at)
-        VALUES (?, ?, ?, ?)
-        """,
-            (user_id, normalized_email, password_hash, created_at.isoformat())
+            "INSERT INTO users (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+            (user_id, normalized_email, password_hash, created_at.isoformat()),
         )
     except DatabaseError as e:
         from backend.core.db import DatabaseIntegrityError
@@ -79,20 +71,12 @@ def create_user(db: Database, email: str, plain_password: str) -> User:
 
 def authenticate_user(db: Database, email: str, plain_password: str) -> Optional[User]:
     try:
-        normalized_email = email.lower()
-        user = get_user_by_email(db, normalized_email)
-
-        if user is None:
+        user = get_user_by_email(db, email.lower())
+        if user is None or not user.is_active:
             return None
-
-        if not user.is_active:
-            return None
-
         if not verify_password(plain_password, user.password_hash):
             return None
-
         return user
-
     except Exception:
         logger.error("Error during user authentication", exc_info=True)
         return None
@@ -102,41 +86,38 @@ def get_user_by_id(db: Database, user_id: str) -> Optional[User]:
     try:
         cursor = db.execute(
             "SELECT id, email, password_hash, created_at, is_active FROM users WHERE id = ?",
-            (user_id,)
+            (user_id,),
         )
         row = cursor.fetchone()
         if row is None:
             return None
-        is_active = bool(row[4]) if len(row) > 4 else True
         return User(
             id=row[0],
             email=row[1],
             password_hash=row[2],
             created_at=datetime.fromisoformat(row[3]),
-            is_active=is_active,
+            is_active=bool(row[4]) if len(row) > 4 else True,
         )
     except DatabaseError:
-        logger.error("Failed to get user by id", exp_info=True)
+        logger.error("Failed to get user by id", exc_info=True)
         raise
 
 
 def get_user_by_email(db: Database, email: str) -> Optional[User]:
-    normalized_email = email.lower()
     try:
         cursor = db.execute(
             "SELECT id, email, password_hash, created_at, is_active FROM users WHERE email = ?",
-            (normalized_email,)
+            (email.lower(),),
         )
         row = cursor.fetchone()
         if row is None:
             return None
-        is_active = bool(row[4]) if len(row) > 4 else True
         return User(
             id=row[0],
             email=row[1],
             password_hash=row[2],
             created_at=datetime.fromisoformat(row[3]),
-            is_active=is_active,
+            is_active=bool(row[4]) if len(row) > 4 else True,
         )
     except DatabaseError:
         logger.error("Failed to get user by email", exp_info=True)
@@ -156,7 +137,6 @@ def set_user_active(db: Database, user_id: str, active: bool) -> bool:
 
 
 def set_user_password(db: Database, user_id: str, plain_password: str) -> bool:
-    """Update password hash for a user. Returns True if a row was updated."""
     if not plain_password or len(plain_password) < 8:
         raise ValueError("Password must be at least 8 characters")
     password_hash = hash_password(plain_password)
