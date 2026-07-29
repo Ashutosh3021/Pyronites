@@ -35,21 +35,6 @@ class UserPublic(BaseModel):
 
 
 def create_user(db: Database, email: str, plain_password: str) -> User:
-    """
-    Create a new user.
-
-    Args:
-        db: Database instance to use.
-        email: Email address for the new user.
-        plain_password: Plaintext password for the new user.
-
-    Returns:
-        The newly created User.
-
-    Raises:
-        UserAlreadyExistsError: If a user with that email already exists.
-        ValueError: If email format is invalid.
-    """
     if not email or not email.strip():
         raise ValueError("Email must not be empty")
     if not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", email):
@@ -93,12 +78,6 @@ def create_user(db: Database, email: str, plain_password: str) -> User:
 
 
 def authenticate_user(db: Database, email: str, plain_password: str) -> Optional[User]:
-    """
-    Authenticate a user by email and password.
-
-    Returns:
-        User if authentication successful, None otherwise (no info leaked about why).
-    """
     try:
         normalized_email = email.lower()
         user = get_user_by_email(db, normalized_email)
@@ -120,15 +99,6 @@ def authenticate_user(db: Database, email: str, plain_password: str) -> Optional
 
 
 def get_user_by_id(db: Database, user_id: str) -> Optional[User]:
-    """
-    Retrieve user by ID.
-
-    Returns:
-        User if found, None if no such user exists.
-
-    Raises:
-        DatabaseError: If a database error occurs.
-    """
     try:
         cursor = db.execute(
             "SELECT id, email, password_hash, created_at, is_active FROM users WHERE id = ?",
@@ -146,20 +116,11 @@ def get_user_by_id(db: Database, user_id: str) -> Optional[User]:
             is_active=is_active,
         )
     except DatabaseError:
-        logger.error("Failed to get user by id", exc_info=True)
+        logger.error("Failed to get user by id", exp_info=True)
         raise
 
 
 def get_user_by_email(db: Database, email: str) -> Optional[User]:
-    """
-    Retrieve user by email (case-insensitive).
-
-    Returns:
-        User if found, None if no such user exists.
-
-    Raises:
-        DatabaseError: If a database error occurs.
-    """
     normalized_email = email.lower()
     try:
         cursor = db.execute(
@@ -178,17 +139,11 @@ def get_user_by_email(db: Database, email: str) -> Optional[User]:
             is_active=is_active,
         )
     except DatabaseError:
-        logger.error("Failed to get user by email", exc_info=True)
+        logger.error("Failed to get user by email", exp_info=True)
         raise
 
 
 def set_user_active(db: Database, user_id: str, active: bool) -> bool:
-    """
-    Enable or disable a user by setting ``is_active``.
-
-    Returns:
-        True if a row was updated, False if the user does not exist.
-    """
     try:
         cursor = db.execute(
             "UPDATE users SET is_active = ?, updated_at = ? WHERE id = ?",
@@ -196,22 +151,30 @@ def set_user_active(db: Database, user_id: str, active: bool) -> bool:
         )
         return cursor.rowcount > 0
     except DatabaseError:
-        logger.error("Failed to set user active state", exc_info=True)
+        logger.error("Failed to set user active state", exp_info=True)
+        raise
+
+
+def set_user_password(db: Database, user_id: str, plain_password: str) -> bool:
+    """Update password hash for a user. Returns True if a row was updated."""
+    if not plain_password or len(plain_password) < 8:
+        raise ValueError("Password must be at least 8 characters")
+    password_hash = hash_password(plain_password)
+    try:
+        cursor = db.execute(
+            "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+            (password_hash, datetime.now(timezone.utc).isoformat(), user_id),
+        )
+        return cursor.rowcount > 0
+    except DatabaseError:
+        logger.error("Failed to set user password", exp_info=True)
         raise
 
 
 def delete_user(db: Database, user_id: str) -> bool:
-    """
-    Permanently delete a user.
-
-    Sessions are removed via ON DELETE CASCADE on the sessions table.
-
-    Returns:
-        True if a row was deleted, False if the user does not exist.
-    """
     try:
         cursor = db.execute("DELETE FROM users WHERE id = ?", (user_id,))
         return cursor.rowcount > 0
     except DatabaseError:
-        logger.error("Failed to delete user", exc_info=True)
+        logger.error("Failed to delete user", exp_info=True)
         raise
