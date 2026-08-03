@@ -68,8 +68,9 @@ Frameworks (Next.js, Python apps, Prisma, Vercel deployments) talk to the **Core
 
 - **Password hashing:** `argon2` (via `argon2-cffi`).
 - **Session model:** opaque random session tokens stored in a `sessions` table (`id`, `user_id`, `expires_at`, `created_at`), delivered via httpOnly cookies. Chosen over JWTs for v1 because revocation is a simple row delete, and there's no signing-key infrastructure to manage.
-- **Tables:** `users` (id, email, password_hash, created_at, ...), `sessions`.
-- **Deferred to v2:** OAuth providers (Google/GitHub), email verification, password reset flows, JWT-based stateless auth (only if a future need for cross-service auth arises).
+- **Tables:** `users` (id, email, password_hash, created_at, is_active, ...), `sessions`, `password_reset_tokens`.
+- **`users` is auth-only by design.** It is a reserved system table (excluded from `/tables` CRUD). There is **no profiles table** and none is planned for v1: application identity is email + password_hash + session; profile/metadata for end-users of *your* app belongs in your own user-created tables, not in core `users`. Treating the lack of `/tables/users` as a bug is incorrect.
+- **Deferred to v2:** OAuth providers (Google/GitHub), email verification, JWT-based stateless auth (only if a future need for cross-service auth arises). Password reset is implemented in-core via `password_reset_tokens`.
 
 ---
 
@@ -83,6 +84,25 @@ Frameworks (Next.js, Python apps, Prisma, Vercel deployments) talk to the **Core
   - `DELETE /tables/:table/:id`
 - Auth-protected via API keys (project settings) and/or session cookies for dashboard use.
 - No mandatory client SDK for v1 — any framework can call these endpoints with plain HTTP. A thin JS/Python convenience SDK is a v2+ wrapper around this same API, not a separate system.
+- **JSON columns:** On write (`POST` / `PATCH`), a JSON-typed column accepts a JSON object, array, boolean, number, or a pre-encoded JSON string. Objects/arrays are serialized with `json.dumps` before binding to SQLite. On read, stored JSON strings are deserialized back to objects/arrays in the response body. Sending an object/array to a non-JSON column is rejected with `400` (`code: invalid_value`).
+- **Atomic row writes:** `POST /tables/:table` and `PATCH /tables/:table/:id` are all-or-nothing for the request body. Every field is validated and coerced before any SQL runs; if any field is invalid, the whole request fails with a 4xx `{code, message}` that names the offending column — no partial row is written. There is no partial-success contract for multi-field inserts/updates.
+
+
+---
+
+## 4b. Referential integrity & orphan policy
+
+Core relationships (enforced when `PRAGMA foreign_keys=ON`, which `Database.connect()` sets):
+
+| Parent | Child | On parent delete |
+|--------|-------|------------------|
+| `users` | `sessions` | **CASCADE** (migration 0001) |
+| `users` | `password_reset_tokens` | **CASCADE** (migration 0007) |
+| `projects` | `api_keys` (by `project_id` / slug) | **Application-level delete** in `delete_project` — not a SQLite FK (0002 predates multi-project). Keys for that project are removed explicitly before the project row. |
+| `projects` | project SQLite file under `data/projects/` | **File unlink** on delete when the path is not the meta DB. |
+| `projects` | `storage_files` rows / blobs | **Orphan risk on meta-only delete:** removing a project DB file drops that project's tables; for the primary/meta DB, `storage_files` rows for a deleted project may remain unless cleaned via storage APIs. Documented limitation. |
+
+**User-created tables** (via `POST /tables` or SQL editor): the create-table API does not accept `FOREIGN KEY` / `ON DELETE` clauses. Parent/child rows in app schemas are **not** cascade-linked; deleting a "parent" row leaves children in place. Use the SQL editor if you need FK constraints, or handle cleanup in application logic. This is intentional for v1 simplicity, not an oversight on core tables.
 
 ---
 
