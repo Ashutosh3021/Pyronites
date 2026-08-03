@@ -98,7 +98,7 @@ def get_applied_migrations(db: Database) -> Set[str]:
         db: Active database connection.
 
     Returns:
-        Set of applied migration ID strings (e.g. ``{"0001", "0002"}``).
+        Set of applied migration ID strings (e.g. ``{\"0001\", \"0002\"}``).
     """
     try:
         cursor = db.execute(
@@ -141,7 +141,22 @@ def apply_migration(db: Database, file_path: str) -> None:
 
         with db.transaction() as conn:
             for statement in statements:
-                conn.execute(statement)
+                try:
+                    conn.execute(statement)
+                except Exception as stmt_err:
+                    # Idempotent ALTER TABLE ... ADD COLUMN: if the column
+                    # already exists (e.g. schema was patched ad hoc or a
+                    # previous partial attempt left columns without recording
+                    # the migration), treat as success and continue.
+                    msg = str(stmt_err).lower()
+                    if "duplicate column name" in msg:
+                        logger.info(
+                            "Migration %s: skipping already-present column (%s)",
+                            migration_name,
+                            stmt_err,
+                        )
+                        continue
+                    raise
             conn.execute(
                 "INSERT INTO migrations (id, name) VALUES (?, ?)",
                 (migration_id, migration_name),
