@@ -52,3 +52,48 @@ def test_sql_endpoint_requires_admin_scope(client):
     # Unauthenticated → 401 (the SQL editor is admin-only).
     response = client.post("/sql/execute", json={"sql": "SELECT 1"})
     assert response.status_code == 401
+
+
+def _assert_error_envelope(response):
+    """Every non-2xx body must be top-level {code, message} (no FastAPI detail wrapper)."""
+    body = response.json()
+    assert isinstance(body, dict), body
+    assert "code" in body and "message" in body, body
+    assert "detail" not in body, body
+    assert isinstance(body["code"], str) and isinstance(body["message"], str)
+
+
+def test_error_shape_storage_unauthorized(client):
+    response = client.get("/storage")
+    assert response.status_code == 401
+    _assert_error_envelope(response)
+    assert response.json()["code"] == "unauthorized"
+
+
+def test_error_shape_sql_unauthorized(client):
+    response = client.post("/sql/execute", json={"sql": "SELECT 1"})
+    assert response.status_code == 401
+    _assert_error_envelope(response)
+    assert response.json()["code"] == "unauthorized"
+
+
+def test_error_shape_tables_unauthorized(client):
+    response = client.get("/tables")
+    assert response.status_code == 401
+    _assert_error_envelope(response)
+    assert response.json()["code"] == "unauthorized"
+
+
+def test_error_shape_apikeys_unauthorized(client):
+    response = client.get("/api/keys")
+    assert response.status_code == 401
+    _assert_error_envelope(response)
+    assert response.json()["code"] == "unauthorized"
+
+
+def test_error_shape_validation_error(client):
+    # Missing required body fields → 422 with standardized envelope
+    response = client.post("/auth/signup", json={})
+    assert response.status_code == 422
+    _assert_error_envelope(response)
+    assert response.json()["code"] == "validation_error"
