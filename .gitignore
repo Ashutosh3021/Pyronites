@@ -5,3 +5,10 @@ __pycache__/
 # Local secrets / runtime env (keep .env.example tracked)
 .env
 .env.*.local
+
+# SQLite databases and sidecars (never commit live data)
+*.db
+*.db-shm
+*.db-wal
+# Local backup copies
+backups/
