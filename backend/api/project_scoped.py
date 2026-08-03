@@ -37,7 +37,12 @@ from backend.auth.api_keys import (
     revoke_api_key,
 )
 from backend.core.backup import backup_now, list_backups
-from backend.core.db import Database, DatabaseError
+from backend.core.db import Database, DatabaseError, DatabaseIntegrityError
+from backend.api.tables import (
+    get_column_types,
+    prepare_row_for_write,
+    deserialize_row,
+)
 from backend.core.logring import record_event
 from backend.core.storage import (
     FileTooLargeError,
@@ -103,16 +108,35 @@ def get_allowed_columns(db: Database, table: str) -> Set[str]:
     return {row[1] for row in cursor.fetchall()}
 
 
-def validate_identifier(identifier: str, allowed: Set[str]) -> str:
-    if identifier not in allowed:
+def validate_table(table: str, allowed: Set[str]) -> str:
+    """Raise 404 with code table_not_found if table is not in allowed set."""
+    if table not in allowed:
         raise HTTPException(
             status_code=404,
             detail=ErrorResponse(
-                code="not_found",
-                message=f"Identifier '{identifier}' not found",
+                code="table_not_found",
+                message=f"Table '{table}' not found",
             ).model_dump(),
         )
-    return identifier
+    return table
+
+
+def validate_column(column: str, allowed: Set[str]) -> str:
+    """Raise 404 with code column_not_found if column is not in allowed set."""
+    if column not in allowed:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                code="column_not_found",
+                message=f"Column '{column}' not found",
+            ).model_dump(),
+        )
+    return column
+
+
+def validate_identifier(identifier: str, allowed: Set[str]) -> str:
+    """Deprecated alias — prefer validate_table / validate_column."""
+    return validate_table(identifier, allowed)
 
 
 def _storage_for(ctx: Dict[str, Any]) -> LocalFileStorage:
@@ -293,7 +317,7 @@ async def table_schema(
 ):
     require_scopes(_ctx_auth(ctx), {"read"})
     db = _ctx_db(ctx)
-    valid_table = validate_identifier(table, get_allowed_tables(db))
+    valid_table = validate_table(table, get_allowed_tables(db))
     cursor = db.execute(f"PRAGMA table_info({valid_table})")
     return [
         {"name": r[1], "type": r[2], "pk": bool(r[5])}
@@ -313,13 +337,13 @@ async def list_table_rows(
     require_scopes(_ctx_auth(ctx), {"read"})
     db = _ctx_db(ctx)
     allowed_tables = get_allowed_tables(db)
-    valid_table = validate_identifier(table, allowed_tables)
+    valid_table = validate_table(table, allowed_tables)
     allowed_columns = get_allowed_columns(db, valid_table)
 
     base_query = f"SELECT * FROM {valid_table}"
     params: List[Any] = []
     if filter_column and filter_value:
-        valid_col = validate_identifier(filter_column, allowed_columns)
+        valid_col = validate_column(filter_column, allowed_columns)
         base_query += f" WHERE {valid_col} = ?"
         params.append(filter_value)
     base_query += " LIMIT ? OFFSET ?"
@@ -327,9 +351,10 @@ async def list_table_rows(
 
     cursor = db.execute(base_query, tuple(params))
     columns = [desc[0] for desc in cursor.description]
+    col_types = get_column_types(db, valid_table)
     rows = []
     for row in cursor.fetchall():
-        d = dict(zip(columns, row))
+        d = deserialize_row(dict(zip(columns, row)), col_types)
         for c in list(d.keys()):
             if c.lower() in _REDACT_COLS:
                 d[c] = "<redacted>"
@@ -345,7 +370,7 @@ async def get_table_row(
 ):
     require_scopes(_ctx_auth(ctx), {"read"})
     db = _ctx_db(ctx)
-    valid_table = validate_identifier(table, get_allowed_tables(db))
+    valid_table = validate_table(table, get_allowed_tables(db))
     cursor = db.execute(f"SELECT * FROM {valid_table} WHERE id = ?", (id,))
     row = cursor.fetchone()
     if not row:
@@ -354,7 +379,8 @@ async def get_table_row(
             detail=ErrorResponse(code="not_found", message="Row not found").model_dump(),
         )
     columns = [desc[0] for desc in cursor.description]
-    d = dict(zip(columns, row))
+    col_types = get_column_types(db, valid_table)
+    d = deserialize_row(dict(zip(columns, row)), col_types)
     for c in list(d.keys()):
         if c.lower() in _REDACT_COLS:
             d[c] = "<redacted>"
@@ -410,40 +436,45 @@ async def create_table_row(
             ).model_dump(),
         )
     db = _ctx_db(ctx)
-    valid_table = validate_identifier(table, get_allowed_tables(db))
-    allowed_columns = get_allowed_columns(db, valid_table)
+    valid_table = validate_table(table, get_allowed_tables(db))
+    col_types = get_column_types(db, valid_table)
+    allowed_columns = set(col_types.keys())
     for col in data.keys():
-        validate_identifier(col, allowed_columns)
+        validate_column(col, allowed_columns)
 
     if "id" in allowed_columns and "id" not in data:
-        id_type = None
-        try:
-            cur = db.execute(f"PRAGMA table_info({valid_table})")
-            for row in cur.fetchall():
-                if row[1] == "id":
-                    id_type = (row[2] or "").upper()
-                    break
-        except Exception:
-            id_type = None
+        id_type = col_types.get("id", "")
         if id_type != "INTEGER":
             data = {**data, "id": str(uuid.uuid4())}
 
-    columns = list(data.keys())
+    prepared = prepare_row_for_write(data, col_types)
+    columns = list(prepared.keys())
     placeholders = ", ".join(["?"] * len(columns))
     column_names = ", ".join(columns)
-    values = list(data.values())
-    db.execute(
-        f"INSERT INTO {valid_table} ({column_names}) VALUES ({placeholders})",
-        tuple(values),
-    )
+    values = list(prepared.values())
+    try:
+        db.execute(
+            f"INSERT INTO {valid_table} ({column_names}) VALUES ({placeholders})",
+            tuple(values),
+        )
+    except DatabaseIntegrityError as e:
+        raise HTTPException(
+            status_code=409,
+            detail=ErrorResponse(code="constraint_violation", message=str(e)).model_dump(),
+        )
+    except DatabaseError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(code="bad_request", message=f"Insert failed: {e}").model_dump(),
+        )
     row_cursor = db.execute(
         f"SELECT * FROM {valid_table} WHERE rowid = last_insert_rowid()"
     )
     row = row_cursor.fetchone()
     if row:
         col_names = [desc[0] for desc in row_cursor.description]
-        return dict(zip(col_names, row))
-    return data
+        return deserialize_row(dict(zip(col_names, row)), col_types)
+    return deserialize_row(dict(prepared), col_types)
 
 
 @router.patch("/tables/{table}/{id}")
@@ -462,16 +493,29 @@ async def update_table_row(
             ).model_dump(),
         )
     db = _ctx_db(ctx)
-    valid_table = validate_identifier(table, get_allowed_tables(db))
-    allowed_columns = get_allowed_columns(db, valid_table)
+    valid_table = validate_table(table, get_allowed_tables(db))
+    col_types = get_column_types(db, valid_table)
+    allowed_columns = set(col_types.keys())
     for col in data.keys():
-        validate_identifier(col, allowed_columns)
-    set_clauses = ", ".join([f"{col} = ?" for col in data.keys()])
-    values = list(data.values()) + [id]
-    db.execute(
-        f"UPDATE {valid_table} SET {set_clauses} WHERE id = ?",
-        tuple(values),
-    )
+        validate_column(col, allowed_columns)
+    prepared = prepare_row_for_write(data, col_types)
+    set_clauses = ", ".join([f"{col} = ?" for col in prepared.keys()])
+    values = list(prepared.values()) + [id]
+    try:
+        db.execute(
+            f"UPDATE {valid_table} SET {set_clauses} WHERE id = ?",
+            tuple(values),
+        )
+    except DatabaseIntegrityError as e:
+        raise HTTPException(
+            status_code=409,
+            detail=ErrorResponse(code="constraint_violation", message=str(e)).model_dump(),
+        )
+    except DatabaseError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(code="bad_request", message=f"Update failed: {e}").model_dump(),
+        )
     cursor = db.execute(f"SELECT * FROM {valid_table} WHERE id = ?", (id,))
     row = cursor.fetchone()
     if not row:
@@ -480,7 +524,7 @@ async def update_table_row(
             detail=ErrorResponse(code="not_found", message="Row not found").model_dump(),
         )
     columns = [desc[0] for desc in cursor.description]
-    return dict(zip(columns, row))
+    return deserialize_row(dict(zip(columns, row)), col_types)
 
 
 @router.delete("/tables/{table}/{id}")
@@ -491,7 +535,7 @@ async def delete_table_row(
 ):
     require_scopes(_ctx_auth(ctx), {"write"})
     db = _ctx_db(ctx)
-    valid_table = validate_identifier(table, get_allowed_tables(db))
+    valid_table = validate_table(table, get_allowed_tables(db))
     cursor = db.execute(f"SELECT id FROM {valid_table} WHERE id = ?", (id,))
     if not cursor.fetchone():
         raise HTTPException(
