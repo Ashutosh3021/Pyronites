@@ -200,42 +200,48 @@ async def execute_sql(
                 ).model_dump(),
             )
 
+    # Atomic batch: all statements share one transaction. A failure mid-batch
+    # rolls back prior statements in this request (no partial commit).
     results: List[Dict[str, Any]] = []
-    for stmt in statements:
-        try:
-            cursor = db.execute(stmt)
-        except DatabaseError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=ErrorResponse(
-                    code="sql_error", message=str(e)
-                ).model_dump(),
-            )
+    try:
+        with db.transaction() as conn:
+            for stmt in statements:
+                try:
+                    cursor = conn.execute(stmt)
+                except Exception as e:
+                    raise DatabaseError(f"SQL error: {e}") from e
 
-        if cursor.description is not None:
-            columns = [d[0] for d in cursor.description]
-            rows = [_redact_row(columns, row) for row in cursor.fetchall()]
-            results.append(
-                {
-                    "statement": stmt,
-                    "kind": "select",
-                    "columns": columns,
-                    "rows": rows,
-                    "row_count": len(rows),
-                    "changes": cursor.rowcount,
-                }
-            )
-        else:
-            results.append(
-                {
-                    "statement": stmt,
-                    "kind": "write",
-                    "columns": [],
-                    "rows": [],
-                    "row_count": 0,
-                    "changes": cursor.rowcount,
-                }
-            )
+                if cursor.description is not None:
+                    columns = [d[0] for d in cursor.description]
+                    rows = [_redact_row(columns, row) for row in cursor.fetchall()]
+                    results.append(
+                        {
+                            "statement": stmt,
+                            "kind": "select",
+                            "columns": columns,
+                            "rows": rows,
+                            "row_count": len(rows),
+                            "changes": cursor.rowcount,
+                        }
+                    )
+                else:
+                    results.append(
+                        {
+                            "statement": stmt,
+                            "kind": "write",
+                            "columns": [],
+                            "rows": [],
+                            "row_count": 0,
+                            "changes": cursor.rowcount,
+                        }
+                    )
+    except DatabaseError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                code="sql_error", message=str(e)
+            ).model_dump(),
+        )
 
     return {
         "results": results,
