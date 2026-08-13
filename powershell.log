@@ -1,0 +1,45 @@
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+PS C:\Users\ashut> curl.exe -s http://localhost:8000/health
+{"status":"ok","database":true}
+PS C:\Users\ashut> curl.exe -X POST http://localhost:8000/auth/signup ` -H "Content-Type: application/json" ` -d '{\"email\": \"test@example.com\", \"password\": \"testpassword123\"}'
+{"id":"03fdc129-8e7a-4533-a0ad-1cadc5fc5819","email":"test@example.com","created_at":"2026-08-13T18:51:50.231555Z","default_project":{"id":"1e7bc440-ded3-4f51-a242-87590157482a","slug":"default","name":"Default"}}
+PS C:\Users\ashut> curl.exe -X POST http://localhost:8000/auth/login ` -H "Content-Type: application/json" ` -d '{\"email\": \"test@example.com\", \"password\": \"testpassword123\"}' ` -c cookies.txt
+{"email":"test@example.com"}
+PS C:\Users\ashut> curl.exe -s http://localhost:8000/auth/me -b cookies.txt
+{"authenticated":true,"email":"test@example.com","id":"03fdc129-8e7a-4533-a0ad-1cadc5fc5819"}
+PS C:\Users\ashut> curl.exe -X POST http://localhost:8000/api/projects ` -H "Content-Type: application/json" ` -b cookies.txt ` -d '{\"project_id\": \"test-project\", \"project_name\": \"Test Project\"}'
+{"id":"f4872aba-80ff-4107-8adb-50d0954d132e","project_id":"test-project","slug":"test-project","name":"Test Project","project_name":"Test Project","status":"active","storage_location":"local","backup_interval":"1hour","enable_public_api":true,"created_at":"2026-08-13T18:53:00.450533+00:00","updated_at":"2026-08-13T18:53:00.450533+00:00","api_key":{"key":"pyro_live_nAqVPvvNI_W5m_nbOQVbF3ciAbanvr_l1Penccx-pEY","id":"115f7f53-b38f-4de3-b1b2-d32d14a11147","name":"default","scopes":["read","write"],"created_at":"2026-08-13T18:53:00.506155Z"}}
+PS C:\Users\ashut> curl.exe -s http://localhost:8000/api/projects -b cookies.txt
+{"projects":[{"id":"1e7bc440-ded3-4f51-a242-87590157482a","project_id":"default","slug":"default","name":"Default","project_name":"Default","status":"active","storage_location":"local","backup_interval":"1hour","enable_public_api":true,"created_at":"2026-08-13T18:51:50.312993+00:00","updated_at":"2026-08-13T18:51:50.312993+00:00"},{"id":"f4872aba-80ff-4107-8adb-50d0954d132e","project_id":"test-project","slug":"test-project","name":"Test Project","project_name":"Test Project","status":"active","storage_location":"local","backup_interval":"1hour","enable_public_api":true,"created_at":"2026-08-13T18:53:00.450533+00:00","updated_at":"2026-08-13T18:53:00.450533+00:00"}]}
+PS C:\Users\ashut> curl.exe -X POST http://localhost:8000/tables ` -H "Content-Type: application/json" ` -b cookies.txt ` -d '{\"table\": \"items\", \"columns\": [{\"name\": \"id\", \"type\": \"INTEGER\"}, {\"name\": \"name\", \"type\": \"TEXT\"}], \"primary_key\": \"id\"}'
+{"table":"items","columns":[{"name":"id","type":"INTEGER"},{"name":"name","type":"TEXT"}]}
+PS C:\Users\ashut> curl.exe -X POST http://localhost:8000/tables/items ` -H "Content-Type: application/json" ` -b cookies.txt ` -d '{\"name\": \"Test Item\"}'
+{"id":1,"name":"Test Item"}
+PS C:\Users\ashut> curl.exe -X POST http://localhost:8000/sql/execute ` -H "Content-Type: application/json" ` -b cookies.txt ` -d '{\"sql\": \"SELECT * FROM items\"}'
+{"results":[{"statement":"SELECT * FROM items","kind":"select","columns":["id","name"],"rows":[[1,"Test Item"]],"row_count":1,"changes":-1}],"backup":{"taken":false}}
+PS C:\Users\ashut> curl.exe -X POST http://localhost:8000/api/keys ` -H "Content-Type: application/json" ` -b cookies.txt ` -d '{\"name\": \"test-key\", \"scopes\": [\"read\", \"write\"]}'
+{"key":"pyro_live_KbxLUCa6wBKtrPsfC0VMdgQ6puJyokqAIARbYHgk39Q","id":"78602650-9345-4e52-a7b5-d6e6a316f4e7","name":"test-key","project_id":"default","scopes":["read","write"],"created_at":"2026-08-13T18:54:12.526218Z"}
+PS C:\Users\ashut> $API_KEY="pyro_live_KbxLUCa6wBKtrPsfC0VMdgQ6puJyokqAIARbYHgk39Q"
+PS C:\Users\ashut> curl.exe -X POST http://localhost:8000/sql/execute ` -H "Content-Type: application/json" ` -H "Authorization: Bearer $API_KEY" ` -d '{\"sql\": \"SELECT * FROM items\"}'
+{"code":"forbidden","message":"Insufficient permissions"}
+PS C:\Users\ashut> "Hello from PowerShell" | Out-File -Encoding utf8 test.txt
+PS C:\Users\ashut> curl.exe -X POST http://localhost:8000/storage/upload ` -b cookies.txt ` -F "file=@test.txt"
+{"id":"2bb62407-5c80-4fc8-a5c8-c53c0a5112a2","original_filename":"test.txt","content_type":"text/plain","size_bytes":26,"uploaded_at":"2026-08-13T18:55:21.916123Z","project_id":"default"}
+PS C:\Users\ashut> curl.exe -s http://localhost:8000/storage/{id} -b cookies.txt -o downloaded.txt
+curl.exe : A value that is not valid (downloaded.txt) was specified for the outputFormat parameter. Valid values are
+Text and Xml.
+At line:1 char:1
++ curl.exe -s http://localhost:8000/storage/{id} -b cookies.txt -o down ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (:) [], ParameterBindingException
+    + FullyQualifiedErrorId : IncorrectValueForFormatParameter
+
+PS C:\Users\ashut> curl.exe -X POST http://localhost:8000/api/backup -b cookies.txt
+{"path":"backups\\pyrocore_2026-08-13T18-55-47-113663.db","created_at":"2026-08-13T18:55:47.139250Z"}
+PS C:\Users\ashut> curl.exe -s http://localhost:8000/api/backups -b cookies.txt
+[{"path":"backups\\pyrocore_2026-08-13T18-55-47-113663.db","name":"pyrocore_2026-08-13T18-55-47-113663.db","created_at":"2026-08-13T18:55:47.113663Z","size_bytes":102400},{"path":"backups\\pyrocore_2026-08-13T18-43-18-355214.db","name":"pyrocore_2026-08-13T18-43-18-355214.db","created_at":"2026-08-13T18:43:18.355214Z","size_bytes":98304}]
+PS C:\Users\ashut> curl.exe -s http://localhost:8000/api/stats -b cookies.txt
+{"table_count":2,"file_count":1,"key_count":2,"db_size_bytes":102400,"last_backup":"2026-08-13T18:55:47.113663Z","project":{"project_id":"test-project","project_name":"Test Project","backup_interval":"1hour","created_at":"2026-08-13T18:53:00.450533+00:00"}}
+PS C:\Users\ashut>
