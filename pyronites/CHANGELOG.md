@@ -4,6 +4,12 @@ All notable changes to the **pyronites** client package are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/). Versioning follows [SemVer](https://semver.org/).
 
+## [1.1.0] — 2026-08-13
+
+### Changed
+- Bumped package version from `0.1.0` to `1.1.0`.
+- Added `LICENSE` (MIT) file and shipped it in both wheel and sdist builds.
+
 ## [0.1.0] — 2026-07-25
 
 ### Added

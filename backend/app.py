@@ -69,16 +69,16 @@ def create_app() -> FastAPI:
                 )
 
         logger.info("Running pending migrations...")
-        db = Database(db_path)
-        db.connect()
+        database = Database(db_path)
+        database.connect()
         try:
-            run_pending_migrations(db, migrations_dir)
+            run_pending_migrations(database, migrations_dir)
             logger.info("Migrations complete!")
         except Exception as e:
             logger.error("Failed to run migrations!", exc_info=True)
             raise
         finally:
-            db.close()
+            database.close()
 
         record_event("info", "Server started")
 

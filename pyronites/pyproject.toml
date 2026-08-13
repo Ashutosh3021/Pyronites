@@ -1,6 +1,6 @@
 [project]
 name = "pyronites"
-version = "0.1.0"
+version = "1.1.0"
 description = "Official Python client for the Pyronites (PyroCore) backend"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -49,6 +49,7 @@ include = [
     "docs/",
     "README.md",
     "CHANGELOG.md",
+    "LICENSE",
     "pyproject.toml",
 ]
 

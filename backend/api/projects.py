@@ -73,11 +73,18 @@ def _current_user_id(request: Request, db: Database) -> str:
 
 
 def _public(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert a project dict to public response format.
+
+    For backward compatibility, include both 'name' and 'project_name' fields.
+    The client (test) expects 'project_name' in the response even though
+    the internal field is 'name'.
+    """
     return {
         "id": p["id"],
         "project_id": p["project_id"],
         "slug": p.get("slug") or p["project_id"],
-        "name": p["name"],
+        "name": p["name"],  # Internal canonical field name
+        "project_name": p["name"],  # Include for client compatibility (especially tests)
         "status": p.get("status") or "active",
         "storage_location": p.get("storage_location") or "local",
         "backup_interval": p.get("backup_interval") or "1hour",
@@ -99,12 +106,19 @@ class CreateProjectBody(BaseModel):
 
     @model_validator(mode="after")
     def _require_name(self) -> "CreateProjectBody":
+        # For backward compatibility, accept both "name" and "project_name"
+        # Standardize on "name" field internally
         resolved = (self.name or self.project_name or "").strip()
         if not resolved:
             raise ValueError("name or project_name is required")
+
+        # Use "name" as the canonical field for the project name
         self.name = resolved
+
+        # project_id takes precedence for slug if provided
         if not self.slug and self.project_id:
             self.slug = self.project_id
+
         return self
 
 

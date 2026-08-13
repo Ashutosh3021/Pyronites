@@ -33,7 +33,7 @@ def temp_db_path():
 @pytest.fixture
 def temp_migrations_dir():
     temp_dir = tempfile.mkdtemp()
-    real_migrations_dir = Path(__file__).parent.parent.parent / "migrations"
+    real_migrations_dir = Path(__file__).parent.parent / "migrations"
     # Copy all migrations so run_pending_migrations has the full sequence
     for migration_file in sorted(real_migrations_dir.glob("*.sql")):
         shutil.copy(migration_file, temp_dir)
