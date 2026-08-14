@@ -14,9 +14,10 @@ import {
   TrendingUp,
   Menu,
   X,
+  LogOut,
 } from 'lucide-react'
 import { ProjectSwitcher } from '@/components/project-switcher'
-import { API_BASE, getStoredProjectName, PROJECT_CHANGE_EVENT } from '@/lib/api'
+import { API_BASE, getStoredProjectName, PROJECT_CHANGE_EVENT, clearStoredProject } from '@/lib/api'
 
 const navItems = [
   { href: '/', icon: BarChart3, label: 'Overview' },
@@ -71,6 +72,10 @@ export function PyroCoreLayout({
 
   const [authChecked, setAuthChecked] = useState(false)
   const [slowAuth, setSlowAuth] = useState(false)
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [confirmLogout, setConfirmLogout] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -82,10 +87,15 @@ export function PyroCoreLayout({
       .then((res) => {
         if (cancelled) return
         if (res.ok) {
-          setAuthChecked(true)
-        } else {
-          router.replace('/login')
+          return res.json()
         }
+        throw new Error('Not authenticated')
+      })
+      .then((data) => {
+        if (!cancelled && data?.email) {
+          setUserEmail(data.email)
+        }
+        setAuthChecked(true)
       })
       .catch(() => {
         if (!cancelled) router.replace('/login')
@@ -120,6 +130,24 @@ export function PyroCoreLayout({
   }, [])
 
   const currentPage = navItems.find((item) => item.href === pathname)?.label ?? 'PyroCore'
+
+  const handleLogout = async () => {
+    setLoggingOut(true)
+    try {
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+    } catch {
+      // Proceed with client-side cleanup even if the request fails
+    } finally {
+      clearStoredProject()
+      setConfirmLogout(false)
+      setUserMenuOpen(false)
+      setLoggingOut(false)
+      router.replace('/login')
+    }
+  }
 
   if (!authChecked) {
     return <AuthGateShell slow={slowAuth} />
@@ -217,11 +245,85 @@ export function PyroCoreLayout({
             />
             <span className="hidden sm:block text-xs text-muted-foreground">Online</span>
           </div>
+
+          {userEmail && (
+            <div className="relative">
+              <button
+                onClick={() => setUserMenuOpen((v) => !v)}
+                className="flex items-center gap-2 px-2.5 py-1.5 border border-border hover:bg-muted transition-colors min-h-[44px]"
+                aria-haspopup="listbox"
+                aria-expanded={userMenuOpen}
+              >
+                <span className="hidden sm:block text-xs text-foreground truncate max-w-32">{userEmail}</span>
+                <span className="sm:hidden text-xs text-muted-foreground">Account</span>
+              </button>
+
+              {userMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setUserMenuOpen(false)}
+                    aria-hidden="true"
+                  />
+                  <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border shadow-lg min-w-48 overflow-hidden">
+                    <button
+                      onClick={() => { setConfirmLogout(true); setUserMenuOpen(false) }}
+                      className="w-full px-4 py-3 text-left text-sm text-foreground hover:bg-muted transition-colors flex items-center gap-2 min-h-[44px]"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Log out
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </header>
 
         <main className="flex-1 overflow-auto">
           <div className="p-4 lg:p-6">{children}</div>
         </main>
+
+        {confirmLogout && (
+          <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+            <div className="bg-card border border-border w-full sm:max-w-sm flex flex-col">
+              <div className="flex items-center justify-between p-6 pb-4">
+                <h2 className="text-lg font-semibold text-foreground">Log out</h2>
+                <button
+                  onClick={() => setConfirmLogout(false)}
+                  className="p-2 text-muted-foreground hover:text-foreground min-w-[44px] min-h-[44px] flex items-center justify-center"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-sm text-muted-foreground px-6 pb-2">
+                Are you sure you want to log out of <span className="font-semibold text-foreground">{userEmail}</span>?
+              </p>
+              <div className="flex gap-3 px-6 pb-6 pt-2">
+                <button
+                  onClick={() => setConfirmLogout(false)}
+                  disabled={loggingOut}
+                  className="flex-1 px-4 py-3 border border-border text-sm font-medium text-foreground hover:bg-muted transition-colors min-h-[44px] disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleLogout}
+                  disabled={loggingOut}
+                  className="flex-1 px-4 py-3 bg-error text-error-foreground text-sm font-medium hover:bg-error/90 transition-colors min-h-[44px] disabled:opacity-70"
+                >
+                  {loggingOut ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block mr-2" aria-hidden="true" />
+                      Logging out…
+                    </>
+                  ) : 'Log out'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
