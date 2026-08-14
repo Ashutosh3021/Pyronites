@@ -66,7 +66,7 @@ _ALLOWED_COL_TYPES = {
 }
 _RESERVED_TABLES = {
     "users", "sessions", "api_keys", "migrations", "projects",
-    "sqlite_sequence", "storage_files",
+    "sqlite_sequence", "storage_files", "password_reset_tokens",
 }
 _READONLY_KEYWORDS = {"SELECT", "WITH", "EXPLAIN", "VALUES", "PRAGMA"}
 MAX_STATEMENTS = 50
@@ -821,8 +821,9 @@ class CreateKeyBody(BaseModel):
 async def list_keys(ctx: Dict[str, Any] = Depends(get_project_context)):
     require_scopes(_ctx_auth(ctx), {"read"})
     meta = _ctx_meta(ctx)
-    slug = _slug(_ctx_project(ctx))
-    keys = [k for k in list_api_keys(meta) if k.project_id == slug]
+    project = _ctx_project(ctx)
+    project_ids = [_slug(project), project["id"]]
+    keys = list_api_keys(meta, project_ids=project_ids)
     return [
         {
             "id": k.id,

@@ -102,7 +102,7 @@ async def list_keys(
             ).model_dump(),
         )
 
-    keys = list_api_keys(meta, project_id=effective_project)
+    keys = list_api_keys(meta, project_ids=[effective_project])
     return [
         {
             "id": k.id,

@@ -228,12 +228,13 @@ def revoke_api_key(db: Database, key_id: str) -> None:
         raise
 
 
-def list_api_keys(db: Database, project_id: Optional[str] = None) -> List["ApiKey"]:
+def list_api_keys(db: Database, project_ids: Optional[List[str]] = None) -> List["ApiKey"]:
     """
     Return non-revoked API keys ordered newest-first.
 
-    If ``project_id`` is provided, filter to keys matching that project
-    identifier (by slug or UUID).
+    If ``project_ids`` is provided, filter to keys matching any of the given
+    project identifiers (by slug or UUID). This allows callers to match keys
+    stored under either the project slug or the project UUID.
 
     Note: ``key_hash`` is included in each record so callers can verify the
     stored hash independently.  The raw key is never returned here — it is
@@ -241,7 +242,7 @@ def list_api_keys(db: Database, project_id: Optional[str] = None) -> List["ApiKe
 
     Args:
         db: Active database connection.
-        project_id: Optional project slug or UUID to filter by.
+        project_ids: Optional list of project slugs/UUIDs to filter by.
 
     Returns:
         List of ``ApiKey`` objects; empty list if none exist.
@@ -255,9 +256,10 @@ def list_api_keys(db: Database, project_id: Optional[str] = None) -> List["ApiKe
         WHERE is_revoked = FALSE
     """
     params: tuple = ()
-    if project_id:
-        query += " AND project_id = ?"
-        params = (project_id,)
+    if project_ids:
+        placeholders = ",".join("?" for _ in project_ids)
+        query += f" AND project_id IN ({placeholders})"
+        params = tuple(project_ids)
     query += " ORDER BY created_at DESC"
     try:
         cursor = db.execute(query, params)
