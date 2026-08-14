@@ -2,17 +2,35 @@
 
 from __future__ import annotations
 
+import hashlib
 import time
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Optional, Set, Tuple
 
 import httpx
 
 from pyronites.config import ClientConfig
 from pyronites.errors import ApiError, AuthError, NotFoundError
 
-_RETRYABLE_STATUS: Set[int] = {502, 503, 504}
+_RETRYABLE_STATUS: Set[int] = {429, 502, 503, 504}
 _DEFAULT_MAX_RETRIES = 2
 _DEFAULT_BACKOFF_BASE = 0.3
+_MAX_RETRY_AFTER_SECONDS = 60.0
+
+
+def _parse_retry_after(response: httpx.Response) -> Optional[float]:
+    """Parse the Retry-After header from a 429 response.
+
+    Returns the number of seconds to wait, or ``None`` if the header is
+    missing or malformed.
+    """
+    value = response.headers.get("Retry-After")
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return None
 
 
 class HttpTransport:
@@ -37,6 +55,7 @@ class HttpTransport:
             timeout=config.timeout,
             follow_redirects=True,
         )
+        self._inflight: Dict[str, Tuple[Any, bool]] = {}
 
     @property
     def config(self) -> ClientConfig:
@@ -44,6 +63,12 @@ class HttpTransport:
 
     def close(self) -> None:
         self._client.close()
+
+    def _request_key(
+        self, method: str, path: str, params: Optional[Dict[str, Any]]
+    ) -> str:
+        raw = f"{method.upper()}:{path}:{sorted((params or {}).items())}"
+        return hashlib.sha256(raw.encode()).hexdigest()
 
     def request(
         self,
@@ -55,10 +80,39 @@ class HttpTransport:
         files: Any = None,
         data: Any = None,
     ) -> Any:
-        """Perform a request with conservative retries on transient failures."""
+        """Perform a request with conservative retries on transient failures.
+
+        Identical in-flight requests are coalesced so burst traffic does not
+        double up on the same endpoint.
+        """
         if not path.startswith("/"):
             path = "/" + path
 
+        key = self._request_key(method, path, params)
+        if key in self._inflight:
+            future, done = self._inflight[key]
+            if done and future:
+                return future[0]
+
+        future: list[Any] = []
+        self._inflight[key] = (future, False)
+        try:
+            result = self._do_request(method, path, json=json, params=params, files=files, data=data)
+            future.append(result)
+            return result
+        finally:
+            self._inflight[key] = (future, True)
+
+    def _do_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: Any = None,
+        params: Optional[Dict[str, Any]] = None,
+        files: Any = None,
+        data: Any = None,
+    ) -> Any:
         last_exc: Optional[Exception] = None
         attempts = self._max_retries + 1
 
@@ -81,6 +135,15 @@ class HttpTransport:
                     time.sleep(self._backoff_base * (2 ** attempt))
                     continue
                 raise last_exc from exc
+
+            if response.status_code == 429 and attempt < self._max_retries:
+                retry_after = _parse_retry_after(response)
+                if retry_after is not None:
+                    wait = min(retry_after, _MAX_RETRY_AFTER_SECONDS)
+                else:
+                    wait = self._backoff_base * (2 ** attempt)
+                time.sleep(wait)
+                continue
 
             if response.status_code in _RETRYABLE_STATUS and attempt < self._max_retries:
                 time.sleep(self._backoff_base * (2 ** attempt))

@@ -189,6 +189,28 @@ For real (non-demo) data on free tier, enable **S3/R2 sync** (see docs/DEPLOY.md
 
 Open source (license TBD — MIT or Apache 2.0 recommended).
 
+## Suggestions
+
+Running into "429 Too Many Requests" errors? Here's what's happening and what you can do about it, in plain language.
+
+### Why this happens
+
+Your PyroCore backend is probably hosted on a free-tier service (like Render's free plan). These free tiers put a strict limit on how many requests your backend can handle per minute. When your app — or even just a single page load — sends a burst of requests at once (like checking auth, loading tables, and syncing data all at the same time), the hosting service temporarily blocks further requests and returns a 429 error.
+
+### What you can do
+
+1. **Upgrade your hosting plan.** The simplest and most reliable fix. Free tiers are great for testing, but they aren't built for real traffic. A basic paid plan on Render, Fly.io, or any VPS will remove these limits entirely.
+
+2. **Avoid firing too many requests at once.** If you're building a frontend app, don't load everything simultaneously. For example, wait for auth to finish before you start fetching table data. The official `pyronites` Python client now automatically handles rate-limit retries and deduplicates identical requests, so upgrading to the latest version helps a lot.
+
+3. **Use local / cache tables.** If you have data that doesn't need to be perfectly fresh every time, configure tables as `cache_tables` or `local_tables` in the Python client. This keeps a copy on the user's device and only hits the remote backend occasionally, drastically cutting down on requests.
+
+4. **Don't poll the same endpoint repeatedly.** Calling `client.auth.user()` over and over in a tight loop will hammer the `/auth/me` endpoint. The client now caches this for a short window, but it's still good practice to call it only when you actually need to check auth status.
+
+5. **Combine or batch requests when you can.** If your app needs several pieces of data, try to fetch them in fewer, bigger requests rather than many tiny ones.
+
+The bottom line: 429 errors are a hosting quota issue, not a bug in PyroCore. The code changes we've made help your app play nicer with rate limits, but a paid hosting plan is the real fix for production use.
+
 ## Contributing
 
 Core is stable enough for outside contributions. Open an issue or PR.

@@ -125,3 +125,85 @@ def test_no_retry_on_404():
             t.request("GET", "/tables/notes/x")
     assert mock_req.call_count == 1
     t.close()
+
+
+def test_retry_on_429_with_retry_after():
+    t = HttpTransport(
+        ClientConfig(url="https://example.com", key="k", timeout=5),
+        max_retries=2,
+        backoff_base=0.01,
+    )
+    fail = MagicMock()
+    fail.status_code = 429
+    fail.text = "rate limited"
+    fail.headers = {"Retry-After": "1"}
+    fail.json.return_value = {"detail": {"code": "rate_limited", "message": "slow down"}}
+    ok = MagicMock()
+    ok.status_code = 200
+    ok.content = b'{"ok": true}'
+    ok.json.return_value = {"ok": True}
+    with patch.object(t._client, "request", side_effect=[fail, ok]) as mock_req:
+        result = t.request("GET", "/tables/notes")
+    assert result == {"ok": True}
+    assert mock_req.call_count == 2
+    t.close()
+
+
+def test_retry_on_429_without_retry_after():
+    t = HttpTransport(
+        ClientConfig(url="https://example.com", key="k", timeout=5),
+        max_retries=1,
+        backoff_base=0.01,
+    )
+    fail = MagicMock()
+    fail.status_code = 429
+    fail.text = "rate limited"
+    fail.headers = {}
+    fail.json.return_value = {"detail": {"code": "rate_limited", "message": "slow down"}}
+    ok = MagicMock()
+    ok.status_code = 200
+    ok.content = b'{"ok": true}'
+    ok.json.return_value = {"ok": True}
+    with patch.object(t._client, "request", side_effect=[fail, ok]) as mock_req:
+        result = t.request("GET", "/tables/notes")
+    assert result == {"ok": True}
+    assert mock_req.call_count == 2
+    t.close()
+
+
+def test_429_retry_exhausted():
+    t = HttpTransport(
+        ClientConfig(url="https://example.com", key="k", timeout=5),
+        max_retries=1,
+        backoff_base=0.01,
+    )
+    fail = MagicMock()
+    fail.status_code = 429
+    fail.text = "rate limited"
+    fail.headers = {}
+    fail.json.return_value = {"detail": {"code": "rate_limited", "message": "slow down"}}
+    with patch.object(t._client, "request", return_value=fail) as mock_req:
+        with pytest.raises(ApiError) as exc:
+            t.request("GET", "/tables/notes")
+    assert "slow down" in str(exc.value).lower()
+    assert mock_req.call_count == 2
+    t.close()
+
+
+def test_request_deduplication():
+    t = HttpTransport(
+        ClientConfig(url="https://example.com", key="k", timeout=5),
+        max_retries=2,
+        backoff_base=0.01,
+    )
+    ok = MagicMock()
+    ok.status_code = 200
+    ok.content = b'{"ok": true}'
+    ok.json.return_value = {"ok": True}
+    with patch.object(t._client, "request", return_value=ok) as mock_req:
+        first = t.request("GET", "/tables/notes")
+        second = t.request("GET", "/tables/notes")
+    assert first == {"ok": True}
+    assert second == {"ok": True}
+    assert mock_req.call_count == 1
+    t.close()
