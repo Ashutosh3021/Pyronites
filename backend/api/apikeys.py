@@ -1,16 +1,19 @@
 """
 API key management (create / list / revoke).
 
-Works at:
-  /api/keys
-  /api/projects/{project_id}/api/keys  (via dual-mount; prefix becomes .../api/keys)
+.. deprecated::
+   Unscoped ``/api/keys`` endpoints are deprecated. They operate exclusively
+   against the **meta** DB keys table and will be removed in a future release.
+   Clients must migrate to the project-scoped plane::
+
+       /api/projects/{project_id}/api/keys
 
 Keys always live in the **meta** DB. When the path is project-scoped, list/create
 are limited to that project's slug.
 """
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, field_validator
@@ -41,6 +44,7 @@ def _mask(key_hash: str) -> str:
 class CreateKeyBody(BaseModel):
     name: str
     scopes: List[str]
+    project_id: Optional[str] = None
 
     @field_validator("name")
     @classmethod
@@ -65,17 +69,40 @@ class CreateKeyBody(BaseModel):
             )
         return v
 
+    @field_validator("project_id")
+    @classmethod
+    def _project_id(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v = (v or "").strip()
+            if not v:
+                raise ValueError("project_id must not be blank")
+        return v
+
+
+class ListKeysQuery(BaseModel):
+    project_id: Optional[str] = None
+
 
 @router.get("")
-async def list_keys(request: Request, db: Database = Depends(get_db)):
+async def list_keys(
+    request: Request,
+    db: Database = Depends(get_db),
+    project_id: Optional[str] = None,
+):
     require_scopes(_auth(request, db), {"read"})
     meta = auth_db(request, db)
-    keys = list_api_keys(meta)
-    project = getattr(request.state, "project", None)
-    if project:
-        slug = project["project_id"]
-        pid = project["id"]
-        keys = [k for k in keys if k.project_id in (slug, pid)]
+
+    effective_project = project_id or current_project_slug(request, meta)
+    if not effective_project:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                code="bad_request",
+                message="project_id is required for unscoped key listing",
+            ).model_dump(),
+        )
+
+    keys = list_api_keys(meta, project_id=effective_project)
     return [
         {
             "id": k.id,
@@ -94,7 +121,15 @@ async def list_keys(request: Request, db: Database = Depends(get_db)):
 async def create_key(body: CreateKeyBody, request: Request, db: Database = Depends(get_db)):
     require_scopes(_auth(request, db), {"admin"})
     meta = auth_db(request, db)
-    project_id = current_project_slug(request, meta)
+    project_id = body.project_id or current_project_slug(request, meta)
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                code="bad_request",
+                message="project_id is required to create an API key",
+            ).model_dump(),
+        )
     try:
         raw_key, api_key = create_api_key(meta, project_id, body.name, body.scopes)
     except ValueError as e:

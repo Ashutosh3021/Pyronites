@@ -90,6 +90,7 @@ export default function SQLEditorPage() {
           <h1 className="text-xl lg:text-2xl font-semibold text-foreground">SQL Editor</h1>
           <p className="text-muted-foreground text-sm mt-1">
             Queries run against{projectName ? <> <span className="text-foreground font-medium">{projectName}</span></> : ' the selected project'}
+            {' '}— data is isolated per project.
           </p>
         </div>
 

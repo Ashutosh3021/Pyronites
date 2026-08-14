@@ -8,6 +8,7 @@ import {
   getStoredProjectId,
   getStoredProjectName,
   setStoredProject,
+  isDefaultProject,
   PROJECT_CHANGE_EVENT,
   type ProjectSummary,
 } from '@/lib/api'
@@ -33,11 +34,10 @@ export function ProjectSwitcher() {
       setCurrentId(match.id)
       setCurrentName(match.name)
     } else if (list.length > 0) {
-      // Default to first active project
-      const first = list[0]
-      setStoredProject({ id: first.id, name: first.name })
-      setCurrentId(first.id)
-      setCurrentName(first.name)
+      const defaultProj = list.find(isDefaultProject) ?? list[0]
+      setStoredProject({ id: defaultProj.id, name: defaultProj.name })
+      setCurrentId(defaultProj.id)
+      setCurrentName(defaultProj.name)
     }
   }, [])
 

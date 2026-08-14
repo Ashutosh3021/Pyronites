@@ -1,9 +1,12 @@
 """
 Dynamic REST API for user-created tables.
 
-Works at:
-  /tables/...
-  /api/projects/{project_id}/tables/...
+.. deprecated::
+   Unscoped ``/tables`` endpoints are deprecated. They operate exclusively
+   against the **meta / Default project** database and will be removed in a
+   future release. Clients must migrate to the project-scoped plane::
+
+       /api/projects/{project_id}/tables/...
 
 Auth uses the meta DB; data ops use the project data DB (see project_deps).
 """
@@ -64,8 +67,8 @@ def validate_identifier(identifier: str, allowed: Set[str]) -> str:
 
 def get_allowed_tables(db: Database) -> Set[str]:
     cursor = db.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' "
-        "AND name NOT IN ('users', 'sessions', 'api_keys', 'migrations', 'projects', 'storage_files')"
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' "
+    "AND name NOT IN ('users', 'sessions', 'api_keys', 'migrations', 'projects', 'storage_files', 'password_reset_tokens')"
     )
     return {row[0] for row in cursor.fetchall()}
 
@@ -168,7 +171,7 @@ _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _ALLOWED_COL_TYPES = {
     "TEXT", "INTEGER", "REAL", "BLOB", "NUMERIC", "BOOLEAN", "DATETIME", "DATE", "JSON",
 }
-_RESERVED_TABLES = {"users", "sessions", "api_keys", "migrations", "projects", "sqlite_sequence", "storage_files"}
+_RESERVED_TABLES = {"users", "sessions", "api_keys", "migrations", "projects", "sqlite_sequence", "storage_files", "password_reset_tokens"}
 
 
 class CreateTableBody(BaseModel):

@@ -182,6 +182,7 @@ def create_app() -> FastAPI:
         )
 
     # Legacy unscoped routes (Default / primary project = meta DB)
+    # These are deprecated; clients should use /api/projects/{project_id}/...
     app.include_router(health_router)
     app.include_router(auth_router)
     app.include_router(tables_router)
@@ -193,13 +194,6 @@ def create_app() -> FastAPI:
 
     # Full project-scoped data plane (tables/sql/storage/keys/stats)
     app.include_router(project_scoped_router)
-
-    # Also keep dual-mounted legacy routers under project prefix for clients
-    # that still call /api/projects/{id}/tables via the original table handlers.
-    app.include_router(tables_router, prefix="/api/projects/{project_id}")
-    app.include_router(storage_router, prefix="/api/projects/{project_id}")
-    app.include_router(sql_router, prefix="/api/projects/{project_id}")
-    app.include_router(apikeys_router, prefix="/api/projects/{project_id}")
 
     return app
 

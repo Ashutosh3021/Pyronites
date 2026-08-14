@@ -1,6 +1,13 @@
 """
 SQL Editor API — raw SQL execution against the live project database.
 
+.. deprecated::
+   Unscoped ``/sql/execute`` is deprecated. It operates exclusively against
+   the **meta / Default project** database and will be removed in a future
+   release. Clients must migrate to the project-scoped plane::
+
+       /api/projects/{project_id}/sql/execute
+
 This is the backend half of the dashboard's SQL editor (ARCHITECTURE.md §5).
 It is intentionally powerful: it runs arbitrary SQL, so it is gated behind the
 ``admin`` scope and is only reachable by dashboard sessions or admin-scoped API

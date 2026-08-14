@@ -151,6 +151,7 @@ export default function StoragePage() {
             <h1 className="text-xl lg:text-2xl font-semibold text-foreground">Storage</h1>
             <p className="text-muted-foreground text-sm mt-1">
               Files for <span className="text-foreground font-medium">{projectLabel ?? 'selected project'}</span>
+              {' '}— data is isolated per project.
             </p>
           </div>
           <button onClick={() => setShowUpload(true)} className="btn-primary flex items-center gap-2 min-h-[44px]">

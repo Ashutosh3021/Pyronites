@@ -179,7 +179,7 @@ export default function DatabaseExplorerPage() {
         <p className="text-sm text-muted-foreground mt-1">
           Tables for{' '}
           <span className="text-foreground font-medium">{projectLabel ?? 'selected project'}</span>
-          {' '}only — switch projects in the sidebar.
+          {' '}only — data is isolated per project. Switch projects in the sidebar.
         </p>
       </div>
 

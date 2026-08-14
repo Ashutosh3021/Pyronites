@@ -4,6 +4,10 @@
  * When a project is selected (localStorage `pyronites_project_id`), data routes
  * are rewritten to `/api/projects/{id}/...` so tables/storage/sql/keys hit the
  * correct SQLite file. Auth and project registry stay unscoped.
+ *
+ * Data isolation: each project has its own SQLite database under `data/projects/`.
+ * The "Default" project may share the meta DB for legacy compatibility. Unscoped
+ * legacy routes (`/tables`, `/sql`, `/api/keys`) only see the Default/meta data.
  */
 
 export const API_BASE =
@@ -20,6 +24,11 @@ export type ProjectSummary = {
   name: string;
   status?: string;
 };
+
+export function isDefaultProject(p: ProjectSummary): boolean {
+  const slug = (p.slug || p.project_id || "").toLowerCase()
+  return slug === "default"
+}
 
 export function getStoredProjectId(): string | null {
   if (typeof window === "undefined") return null;

@@ -25,7 +25,11 @@ const EMPTY_FORM: CreateForm = {
   scopes: { read: false, write: false, admin: false },
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+import {
+  apiUrl,
+  getStoredProjectName,
+  PROJECT_CHANGE_EVENT,
+} from '@/lib/api'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -72,7 +76,7 @@ export default function APIKeysPage() {
     setLoading(true)
     setFetchError(null)
     try {
-      const res = await fetch(`${API_BASE}/api/keys`, { credentials: 'include' })
+      const res = await fetch(apiUrl('/api/keys'), { credentials: 'include' })
       if (!res.ok) throw new Error(`Server error ${res.status}`)
       const data: ApiKey[] = await res.json()
       setKeys(data)
@@ -102,7 +106,7 @@ export default function APIKeysPage() {
     setCreating(true)
     setCreateError(null)
     try {
-      const res = await fetch(`${API_BASE}/api/keys`, {
+      const res = await fetch(apiUrl('/api/keys'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -158,7 +162,7 @@ export default function APIKeysPage() {
     setRevoking(true)
     setRevokeError(null)
     try {
-      const res = await fetch(`${API_BASE}/api/keys/${revokeTarget.id}`, {
+      const res = await fetch(apiUrl(`/api/keys/${revokeTarget.id}`), {
         method: 'DELETE',
         credentials: 'include',
       })

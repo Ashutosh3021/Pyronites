@@ -98,7 +98,7 @@ def get_allowed_tables(db: Database) -> Set[str]:
         "SELECT name FROM sqlite_master WHERE type='table' "
         "AND name NOT LIKE 'sqlite_%' "
         "AND name NOT IN ('users', 'sessions', 'api_keys', 'migrations', "
-        "'projects', 'storage_files')"
+        "'projects', 'storage_files', 'password_reset_tokens')"
     )
     return {row[0] for row in cursor.fetchall()}
 
