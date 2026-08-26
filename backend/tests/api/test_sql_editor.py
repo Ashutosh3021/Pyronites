@@ -103,11 +103,12 @@ def test_drop_triggers_auto_backup(client, db_path):
 
 
 def test_non_admin_key_is_forbidden(client, db_path):
-    read_key = _seed_key(db_path, ["read", "write"])
+    # A read-only key (no `write`/`admin` scope) must be forbidden from SQL,
+    # which is a write-capable surface. (read+write keys ARE allowed — see E1.)
+    read_key = _seed_key(db_path, ["read"])
     c = client()
     c.headers.update({"Authorization": f"Bearer {read_key}"})
     r = c.post("/sql/execute", json={"sql": "SELECT 1"})
-    # SQL editor requires the `admin` scope.
     assert r.status_code == 403
 
 

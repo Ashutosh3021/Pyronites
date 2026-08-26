@@ -10,8 +10,8 @@ SQL Editor API — raw SQL execution against the live project database.
 
 This is the backend half of the dashboard's SQL editor (ARCHITECTURE.md §5).
 It is intentionally powerful: it runs arbitrary SQL, so it is gated behind the
-``admin`` scope and is only reachable by dashboard sessions or admin-scoped API
-keys.
+``write`` scope (and also allowed for ``admin``) and is only reachable by
+dashboard sessions or write/admin-scoped API keys.
 
 Safety guard (ARCHITECTURE.md §2)
 ---------------------------------
@@ -40,7 +40,7 @@ from pydantic import BaseModel, Field
 from backend.core.db import Database, DatabaseError
 from backend.core.backup import backup_now
 from backend.api.schemas import ErrorResponse
-from backend.api.auth_deps import resolve_auth, require_scopes
+from backend.api.auth_deps import resolve_auth, require_scopes, require_sql_scopes
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sql", tags=["sql"])
@@ -164,10 +164,11 @@ async def execute_sql(
     """
     Execute raw SQL against the project database.
 
-    Destructive statements trigger an automatic backup first. Requires admin scope.
-    Sensitive columns are redacted in SELECT results.
+    Destructive statements trigger an automatic backup first. Requires at least
+    the ``write`` scope (SQL is inherently a write-capable surface). Sensitive
+    columns are redacted in SELECT results.
     """
-    require_scopes(resolve_auth(request, db), {"admin"})
+    require_sql_scopes(resolve_auth(request, db))
 
     statements = _split_statements(payload.sql)
     if not statements:

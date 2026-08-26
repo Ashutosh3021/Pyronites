@@ -182,6 +182,7 @@ async def signup(body: _EmailBody, response: Response, request: Request, db: Dat
     default_project = None
     try:
         default_project = projmod.ensure_default_project(db, user.id)
+        projmod.set_last_project(db, user.id, default_project["id"])
     except Exception:
         logger.exception("Failed to ensure Default project on signup")
 
@@ -214,7 +215,8 @@ async def login(body: _EmailBody, response: Response, request: Request, db: Data
             ).model_dump(),
         )
     try:
-        projmod.ensure_default_project(db, user.id)
+        default_project = projmod.ensure_default_project(db, user.id)
+        projmod.set_last_project(db, user.id, default_project["id"])
     except Exception:
         logger.exception("ensure_default_project on login failed")
 
@@ -248,7 +250,19 @@ async def me(request: Request, db: Database = Depends(get_db)):
                 code="unauthorized", message="Not authenticated"
             ).model_dump(),
         )
-    return {"authenticated": True, "email": user.email, "id": user.id}
+    last_project_id = None
+    try:
+        cur = db.execute("SELECT last_project_id FROM users WHERE id = ?", (user.id,))
+        row = cur.fetchone()
+        last_project_id = row[0] if row and row[0] else None
+    except Exception:
+        logger.warning("Failed to read last_project_id for /auth/me", exc_info=True)
+    return {
+        "authenticated": True,
+        "email": user.email,
+        "id": user.id,
+        "last_project_id": last_project_id,
+    }
 
 
 @router.post("/forgot-password")

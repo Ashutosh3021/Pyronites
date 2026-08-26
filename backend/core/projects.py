@@ -209,6 +209,9 @@ def create_project(
     row = get_project(db, project_uuid)
     assert row is not None
 
+    # Newly created project becomes the user's active project.
+    set_last_project(db, owner_id, row["id"])
+
     if not use_meta_db:
         path = project_file_path(project_uuid)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -228,6 +231,7 @@ def create_project(
 def ensure_default_project(db: Database, owner_id: str) -> Dict[str, Any]:
     existing = list_projects_for_owner(db, owner_id)
     if existing:
+        set_last_project(db, owner_id, existing[0]["id"])
         return existing[0]
 
     cur = db.execute(
@@ -241,15 +245,43 @@ def ensure_default_project(db: Database, owner_id: str) -> Dict[str, Any]:
         )
         proj = get_project(db, orphan[0])
         if proj:
+            set_last_project(db, owner_id, proj["id"])
             return proj
 
-    return create_project(
+    proj = create_project(
         db,
         owner_id=owner_id,
         name=DEFAULT_PROJECT_NAME,
         slug=DEFAULT_PROJECT_SLUG,
         use_meta_db=True,
     )
+    set_last_project(db, owner_id, proj["id"])
+    return proj
+
+
+def set_last_project(db: Database, user_id: str, project_id: str) -> None:
+    """Record the user's most-recently-used project.
+
+    Used by the dashboard to resolve the active project on load so writes and
+    reads always target the same database file (prevents the "data disappeared"
+    class of bugs caused by a stale/missing client-side project selection).
+    """
+    try:
+        db.execute(
+            "UPDATE users SET last_project_id = ? WHERE id = ?",
+            (project_id, user_id),
+        )
+    except Exception:
+        logger.warning("set_last_project failed for user %s", user_id, exc_info=True)
+
+
+def get_last_project(db: Database, user_id: str) -> Optional[str]:
+    try:
+        cur = db.execute("SELECT last_project_id FROM users WHERE id = ?", (user_id,))
+        row = cur.fetchone()
+        return row[0] if row and row[0] else None
+    except Exception:
+        return None
 
 
 def update_project(

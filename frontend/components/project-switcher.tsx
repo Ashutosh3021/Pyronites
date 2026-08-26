@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { ChevronDown, FolderKanban, Plus } from 'lucide-react'
 import {
   fetchProjects,
+  fetchCurrentProjectId,
+  selectProject,
   getStoredProjectId,
   getStoredProjectName,
   setStoredProject,
@@ -33,11 +35,18 @@ export function ProjectSwitcher() {
       setStoredProject({ id: match.id, name: match.name })
       setCurrentId(match.id)
       setCurrentName(match.name)
-    } else if (list.length > 0) {
-      const defaultProj = list.find(isDefaultProject) ?? list[0]
-      setStoredProject({ id: defaultProj.id, name: defaultProj.name })
-      setCurrentId(defaultProj.id)
-      setCurrentName(defaultProj.name)
+      return
+    }
+    // Prefer the server-side "current project" (last used) so reads and writes
+    // target the same database file, even with no client-side selection.
+    const serverId = await fetchCurrentProjectId()
+    const serverMatch =
+      serverId && list.find((p) => p.id === serverId || p.project_id === serverId)
+    const chosen = serverMatch ?? list.find(isDefaultProject) ?? list[0]
+    if (chosen) {
+      setStoredProject({ id: chosen.id, name: chosen.name })
+      setCurrentId(chosen.id)
+      setCurrentName(chosen.name)
     }
   }, [])
 
@@ -55,6 +64,8 @@ export function ProjectSwitcher() {
     setCurrentId(p.id)
     setCurrentName(p.name)
     setOpen(false)
+    // Persist server-side so other clients / reloads resolve the same DB.
+    void selectProject(p.id)
     // Soft reload page data without full navigation
     window.location.reload()
   }

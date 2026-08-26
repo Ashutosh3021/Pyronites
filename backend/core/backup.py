@@ -53,6 +53,18 @@ def backup_now(db_path: str, backup_dir: str) -> Path:
     backup_filename = f"{db_name}_{timestamp}.db"
     backup_file = backup_path / backup_filename
 
+    # Fold any un-checkpointed WAL into the main database file first, so the
+    # subsequent snapshot is fully consistent and contains the latest committed
+    # transactions (RCA-5).  Non-fatal: if it fails we still attempt the backup.
+    try:
+        chk = sqlite3.connect(f"file:{db_path}?mode=rw", uri=True)
+        try:
+            chk.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        finally:
+            chk.close()
+    except Exception as e:
+        logger.warning("Pre-backup WAL checkpoint skipped: %s", e)
+
     source_conn = None
     backup_conn = None
     try:
@@ -194,6 +206,57 @@ def prune_backups(backup_dir: str, keep: int = 10) -> None:
             logger.info("Pruned old backup: %s", backup.path)
         except OSError as e:
             logger.error("Failed to delete backup %s: %s", backup.path, e)
+
+
+def restore_into_live(backup_path: str, target_db_path: str) -> None:
+    """
+    Restore a database from a backup *into* the live database file.
+
+    Unlike :func:`restore_from_backup` (which renames files), this copies the
+    backup's contents into the existing target file using SQLite's online
+    backup API.  This works even while the server holds the target file open
+    (required on Windows, where renaming a file in use fails with
+    ``WinError 32`` — see RCA-3).  It is the safe path for the server-side
+    ``POST /api/backup/restore`` endpoint.
+
+    Args:
+        backup_path: Path to the backup file.
+        target_db_path: Path to the live (currently open) database file.
+
+    Raises:
+        DatabaseError: If the backup is invalid or restore fails.
+        FileNotFoundError: If the backup file does not exist.
+    """
+    from .db import DatabaseError
+
+    backup_file = Path(backup_path)
+    if not backup_file.exists():
+        raise FileNotFoundError(f"Backup file not found: {backup_path}")
+
+    try:
+        verify_conn = sqlite3.connect(str(backup_file))
+        try:
+            verify_conn.execute("SELECT 1")
+        finally:
+            verify_conn.close()
+
+        src = sqlite3.connect(str(backup_file))
+        try:
+            tgt = sqlite3.connect(str(target_db_path))
+            try:
+                # Copy the backup's contents into the live database, replacing
+                # it in place.  In WAL mode this is safe alongside the server's
+                # other connections (they simply read the restored state after
+                # this transaction commits).
+                src.backup(tgt)
+            finally:
+                tgt.close()
+        finally:
+            src.close()
+    except sqlite3.Error as e:
+        raise DatabaseError(f"Invalid backup file: {e}") from e
+
+    logger.info("Restored (in-place) into %s from %s", target_db_path, backup_path)
 
 
 def restore_from_backup(backup_path: str, target_db_path: str) -> None:

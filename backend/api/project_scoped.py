@@ -27,7 +27,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
-from backend.api.auth_deps import require_scopes
+from backend.api.auth_deps import require_scopes, require_sql_scopes
 from backend.api.project_deps import get_project_context
 from backend.api.schemas import ErrorResponse, MAX_NAME_LEN, to_utc_iso
 from backend.auth.api_keys import (
@@ -690,7 +690,7 @@ async def execute_sql(
     payload: SqlExecuteRequest,
     ctx: Dict[str, Any] = Depends(get_project_context),
 ):
-    require_scopes(_ctx_auth(ctx), {"admin"})
+    require_sql_scopes(_ctx_auth(ctx))
     db = _ctx_db(ctx)
     project = _ctx_project(ctx)
 

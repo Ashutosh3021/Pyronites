@@ -6,6 +6,7 @@ need, plus an operator backup trigger.  Most are session-authenticated; the
 backup trigger requires the ``admin`` scope (it performs a filesystem copy).
 """
 
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -18,7 +19,7 @@ from backend.core.db import Database
 from backend.api.schemas import ErrorResponse
 from backend.api.auth_deps import resolve_auth, require_scopes
 from backend.api.tables import get_allowed_tables
-from backend.core.backup import backup_now, list_backups
+from backend.core.backup import backup_now, list_backups, restore_from_backup, restore_into_live
 from backend.core.logring import get_logs, record_event
 from backend.auth.users import set_user_active, delete_user
 from backend.auth.sessions import revoke_session
@@ -137,6 +138,38 @@ def _now_iso() -> str:
     from datetime import datetime, timezone
 
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+class RestoreBody(BaseModel):
+    path: str
+
+
+@router.post("/backup/restore")
+async def restore_backup(body: RestoreBody, request: Request, db: Database = Depends(get_db)):
+    """Restore the live database from a backup file (admin only, coordinated).
+
+    This is the safe, server-aware restore path (preferred over the CLI file
+    swap while the server is running). It checkpoints the live WAL and performs
+    an atomic replace of the database file.  Callers should still avoid issuing
+    writes during the brief swap window.
+    """
+    require_scopes(resolve_auth(request, db), {"admin"})
+    db_path = os.environ.get("DATABASE_PATH", "pyrocore.db")
+    try:
+        # In-place restore: copies the backup into the live (open) database
+        # file instead of renaming it, so it works even while the server holds
+        # the file open (required on Windows — see RCA-3).
+        await asyncio.to_thread(restore_into_live, body.path, db_path)
+    except Exception as e:
+        logger.error("Restore failed: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=ErrorResponse(
+                code="restore_failed", message=f"Restore failed: {e}"
+            ).model_dump(),
+        )
+    record_event("warning", f"Database restored from {body.path}")
+    return {"message": "restored", "path": body.path}
 
 
 @router.get("/backups")

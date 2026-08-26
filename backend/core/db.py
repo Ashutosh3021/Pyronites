@@ -95,6 +95,12 @@ class Database:
             
             # Enable foreign key constraints for referential integrity
             self._connection.execute("PRAGMA foreign_keys=ON")
+
+            # Wait (up to 30s) when the database is locked instead of failing
+            # immediately.  The scheduled backup loop and request handlers can
+            # briefly contend; busy_timeout degrades contention to a wait and
+            # prevents spurious "database is locked" errors under load.
+            self._connection.execute("PRAGMA busy_timeout=30000")
             
         except sqlite3.OperationalError as e:
             raise DatabaseOperationalError(

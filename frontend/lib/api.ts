@@ -100,3 +100,38 @@ export async function fetchProjects(): Promise<ProjectSummary[]> {
   const list = (body?.projects ?? body) as ProjectSummary[];
   return Array.isArray(list) ? list : [];
 }
+
+/**
+ * Resolve the server-side "current project" (the user's most-recently-used
+ * project, persisted in `users.last_project_id`). This is the authoritative
+ * source of truth so writes and reads always target the same database file,
+ * eliminating the "data disappeared" class of bugs caused by a stale or missing
+ * client-side selection.
+ */
+export async function fetchCurrentProjectId(): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_BASE}/auth/me`, {
+      credentials: "include",
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    return body?.last_project_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persist the active project server-side so future loads (and other clients)
+ * resolve to the same database. Falls back silently if it fails.
+ */
+export async function selectProject(id: string): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/api/projects/${encodeURIComponent(id)}/select`, {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch {
+    /* non-fatal */
+  }
+}

@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 from pathlib import Path
 from typing import Any, Dict, Generator, Optional
 
@@ -33,6 +34,14 @@ from backend.core import projects as projmod
 from backend.core.migrations import run_pending_migrations
 
 logger = logging.getLogger(__name__)
+
+# Paths whose schema has already been migrated in this process.  Migrations are
+# idempotent but re-running the pending-check on every request serializes
+# traffic behind the DB lock, so we only run them once per database file per
+# process.  The meta DB is migrated at startup in app.py; project files are
+# migrated lazily on first access here.
+_MIGRATED_PATHS: set[str] = set()
+_MIGRATED_LOCK = threading.Lock()
 
 _PROJECT_PATH_RE = re.compile(r"^/api/projects/([^/]+)/")
 
@@ -84,12 +93,17 @@ def open_data_db_for_project(project: Dict[str, Any]) -> Database:
 
     db = Database(path)
     db.connect()
-    try:
-        run_pending_migrations(db, migrations_dir())
-    except Exception:
-        logger.error("project db migrations failed for %s", path, exc_info=True)
-        db.close()
-        raise
+    with _MIGRATED_LOCK:
+        already = path in _MIGRATED_PATHS
+    if not already:
+        try:
+            run_pending_migrations(db, migrations_dir())
+        except Exception:
+            logger.error("project db migrations failed for %s", path, exc_info=True)
+            db.close()
+            raise
+        with _MIGRATED_LOCK:
+            _MIGRATED_PATHS.add(path)
     return db
 
 

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { AuthShell } from '@/components/auth-shell'
 import { PasswordStrength, getPasswordStrength } from '@/components/password-strength'
+import { setStoredProject, selectProject } from '@/lib/api'
 
 // ─── Password generator ─────────────────────────────────────────────────────
 const UPPER  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -146,6 +147,14 @@ export default function NewProjectPage() {
         const body = await res.json().catch(() => ({}))
         setCreateError(body?.message ?? `Server error (${res.status}). Please try again.`)
         return
+      }
+      // Select the newly created project so its data shows immediately, and
+      // persist it server-side as the active project.
+      const created = await res.json().catch(() => ({} as any))
+      const newId = created?.id ?? state.projectId
+      if (newId) {
+        setStoredProject({ id: newId, name: state.projectName || newId })
+        void selectProject(newId)
       }
       router.push('/')
     } catch {

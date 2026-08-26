@@ -152,6 +152,42 @@ curl -X GET https://pyrocore-backend.onrender.com/api/backups \
 - [x] File storage — `POST /storage/upload`, `GET /storage/{id}` verified live ✅
 - [x] Deployment guides — `docs/DEPLOY.md`, `docs/DEPLOY_STATE.md`, `README.md` present ✅
 
+## Post-fix Regression Checks (v0.2.0)
+
+These cover the bugs fixed after the 2026-08-13 baseline.
+
+### Storage download path (E2)
+- `/storage/{id}` returns **JSON metadata only**.
+- `/storage/{id}/download` returns the **file bytes**.
+- Verify with a literal file id and `curl.exe --output` (avoid the PowerShell
+  `curl` alias and the unsubstituted `{id}` placeholder that masked the original
+  failure):
+  ```powershell
+  $ID = (curl.exe -s -X POST http://localhost:8000/storage/upload -b cookies.txt -F "file=@test.txt" | python -c "import sys,json;print(json.load(sys.stdin)['id'])")
+  curl.exe -s http://localhost:8000/storage/$ID/download -b cookies.txt --output downloaded.bin
+  # Compare-Object (Get-Content test.txt -Raw) (Get-Content downloaded.bin -Raw)
+  ```
+
+### API-key SQL execution (E1)
+- `POST /sql/execute` (and `/api/projects/{id}/sql/execute`) now requires the
+  **`write`** scope (admin also allowed), not `admin`. A `read`+`write` API key
+  must succeed:
+  ```bash
+  KEY=$(curl -s -X POST http://localhost:8000/api/projects/$PID/api/keys -b cookies.txt -H "Content-Type: application/json" -d '{"name":"k","scopes":["read","write"]}' | python -c "import sys,json;print(json.load(sys.stdin)['key'])")
+  curl -s -X POST http://localhost:8000/api/projects/$PID/sql/execute -H "Content-Type: application/json" -H "Authorization: Bearer $KEY" -d '{"sql":"SELECT 1"}'
+  # Expect rows, NOT {"code":"forbidden",...}
+  ```
+
+### Active-project resolution
+- `GET /auth/me` now returns `last_project_id`.
+- `POST /api/projects/{id}/select` persists the active project server-side.
+- New project creation sets it as the active project automatically.
+
+### Backup restore (Windows-safe)
+- `POST /api/backup/restore` performs an **in-place** restore (online backup
+  API) so it works while the server holds the DB open on Windows. Prefer this
+  over the CLI file-swap while the server is running.
+
 ## Current Status Summary (verified 2026-08-13)
 
 - Phase 1 (MVP Core): ✅ Completed and verified live (see checkboxes above)

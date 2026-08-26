@@ -87,17 +87,23 @@ class S3Sync:
 
     # --- download (restore) -------------------------------------------------
     def download(self, db_path: str) -> bool:
-        """Download the DB from the bucket if the local file is missing/empty.
+        """Download the DB from the bucket only when the local file is absent.
 
-        Returns True if a download happened.  If the local DB already exists and
-        is non-empty we leave it alone — we never overwrite live local data with
-        a (possibly older) remote copy.  Callers invoke this only when the local
-        DB does not yet exist (fresh ephemeral container), so the guard is just
-        defensive.
+        Returns True if a download happened.  We NEVER overwrite an existing
+        local database with a (possibly stale) remote copy — preserving local
+        data takes precedence over restoring remote state.  This prevents a
+        fresh-but-present local DB (e.g. just-created from migrations, or newer
+        local writes) from being clobbered by an older S3 snapshot on a warm
+        restart or cold start.  Callers invoke this before migrations run, so a
+        truly fresh ephemeral container (no local file) downloads the latest
+        remote copy and a container that already has a DB keeps its own.
         """
         local = Path(db_path)
-        if local.exists() and local.stat().st_size > 0:
-            logger.info("S3 restore skipped: local %s already present", db_path)
+        if local.exists():
+            logger.info(
+                "S3 restore skipped: local %s already present — keeping local data",
+                db_path,
+            )
             return False
 
         key = self._object_key(db_path)

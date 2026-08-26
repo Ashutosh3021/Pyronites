@@ -200,6 +200,30 @@ async def create_project(
     return out
 
 
+@router.post("/{project_id}/select")
+async def select_project(
+    project_id: str,
+    request: Request,
+    db: Database = Depends(get_db),
+):
+    """Record the user's most-recently-used project (server-side source of truth)."""
+    require_scopes(resolve_auth(request, db), {"read"})
+    user_id = _current_user_id(request, db)
+    project = projmod.get_project(db, project_id)
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(code="not_found", message="Project not found").model_dump(),
+        )
+    if project.get("owner_id") and project["owner_id"] != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail=ErrorResponse(code="forbidden", message="Not project owner").model_dump(),
+        )
+    projmod.set_last_project(db, user_id, project["id"])
+    return {"message": "Active project updated", "project_id": project["id"]}
+
+
 @router.get("/{project_id}")
 async def get_project(
     project_id: str,

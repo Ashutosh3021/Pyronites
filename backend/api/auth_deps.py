@@ -65,6 +65,33 @@ def require_scopes(
     return auth_info
 
 
+def require_sql_scopes(
+    auth_info: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    SQL execution is a write-capable surface, so it is permitted for holders of
+    the ``write`` scope (e.g. normal API keys) *or* the ``admin`` scope.  This
+    replaces the old admin-only gate so that ``read``+``write`` keys work while
+    admin-only keys remain allowed.
+    """
+    if not auth_info:
+        raise HTTPException(
+            status_code=401,
+            detail=ErrorResponse(
+                code="unauthorized", message="Missing or invalid authentication"
+            ).model_dump(),
+        )
+    scopes = auth_info["scopes"]
+    if "write" in scopes or "admin" in scopes:
+        return auth_info
+    raise HTTPException(
+        status_code=403,
+        detail=ErrorResponse(
+            code="forbidden", message="Insufficient permissions"
+        ).model_dump(),
+    )
+
+
 def resolve_auth(request: Request, db: Database) -> Optional[Dict[str, Any]]:
     """
     Determine the identity and permissions of the incoming request.
