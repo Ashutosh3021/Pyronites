@@ -7,6 +7,12 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      # Auth cookies — required for cross-origin dashboard (non-localhost).
+      # Override in .env for production: FRONTEND_ORIGIN=https://your-domain.com
+      - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-http://localhost:3000}
+      - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-false}
+      - SESSION_COOKIE_SAMESITE=${SESSION_COOKIE_SAMESITE:-lax}
     volumes:
       # Named volume for persistent data: db file, storage, backups survive container recreation
       - pyrocore-data:/data

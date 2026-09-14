@@ -5,8 +5,10 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Eye, EyeOff } from 'lucide-react'
 import { AuthShell } from '@/components/auth-shell'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { AlertBanner } from '@/components/alert-banner'
+import { API_BASE } from '@/lib/api'
 
 function LoginForm() {
   const router = useRouter()
@@ -57,23 +59,17 @@ function LoginForm() {
       </div>
 
       {justReset && (
-        <p className="text-sm" style={{ color: 'var(--success)' }}>
-          Password updated. You can log in now.
-        </p>
+        <AlertBanner variant="success" message="Password updated. You can log in now." />
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-        {error && (
-          <p role="alert" className="text-sm" style={{ color: 'var(--error)' }}>
-            {error}
-          </p>
-        )}
+        {error && <AlertBanner variant="error" message={error} onDismiss={() => setError(null)} />}
 
         <div className="space-y-1.5">
           <label htmlFor="email" className="block text-sm font-medium text-foreground">
             Email
           </label>
-          <input
+          <Input
             id="email"
             type="email"
             autoComplete="email"
@@ -81,7 +77,6 @@ function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            className="w-full px-3 py-2 bg-background border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:border-accent min-h-[44px]"
           />
         </div>
 
@@ -99,7 +94,7 @@ function LoginForm() {
             </Link>
           </div>
           <div className="relative">
-            <input
+            <Input
               id="password"
               type={showPassword ? 'text' : 'password'}
               autoComplete="current-password"
@@ -107,31 +102,33 @@ function LoginForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full px-3 py-2 pr-10 bg-background border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:border-accent min-h-[44px] font-mono"
+              className="pr-10 font-mono"
             />
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-0 top-0 bottom-0 px-3 text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center min-w-[44px]"
+              className="absolute right-0 top-0 h-full"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
+            </Button>
           </div>
         </div>
 
-        <button
+        <Button
           type="submit"
           disabled={loading}
-          className="w-full btn-primary min-h-[44px] flex items-center justify-center gap-2"
+          className="w-full"
         >
           {loading ? (
             <>
-              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" aria-hidden="true" />
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" aria-hidden="true" />
               Signing in…
             </>
           ) : 'Log in'}
-        </button>
+        </Button>
       </form>
 
       <p className="text-sm text-muted-foreground text-center">

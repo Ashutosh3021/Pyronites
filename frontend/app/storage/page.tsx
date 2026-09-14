@@ -2,8 +2,12 @@
 
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
 import { useState, useEffect, useCallback } from 'react'
-import { Upload, Download, Trash2, FileIcon, MoreVertical, Grid, List, X } from 'lucide-react'
+import { Upload, Download, Trash2, FileIcon } from 'lucide-react'
 import { apiUrl, getStoredProjectName, PROJECT_CHANGE_EVENT } from '@/lib/api'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
+import { AlertBanner } from '@/components/alert-banner'
 
 interface StorageFile {
   id: string
@@ -39,8 +43,6 @@ function iconForType(contentType: string): string {
 
 export default function StoragePage() {
   const [files, setFiles] = useState<StorageFile[]>([])
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
-  const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadErr, setLoadErr] = useState<string | null>(null)
@@ -109,7 +111,6 @@ export default function StoragePage() {
 
   const handleDownload = async (file: StorageFile) => {
     setDownloading(file.id)
-    setOpenMenu(null)
     try {
       const res = await fetch(apiUrl(`/storage/${file.id}/download`), { credentials: 'include' })
       if (!res.ok) throw new Error('Download failed.')
@@ -154,64 +155,105 @@ export default function StoragePage() {
               {' '}— data is isolated per project.
             </p>
           </div>
-          <button onClick={() => setShowUpload(true)} className="btn-primary flex items-center gap-2 min-h-[44px]">
-            <Upload className="w-4 h-4" /> Upload
-          </button>
+          <Button onClick={() => setShowUpload(true)}>
+            <Upload className="w-4 h-4 mr-2" /> Upload
+          </Button>
         </div>
 
-        {loadErr && <p role="alert" className="text-sm" style={{ color: 'var(--error)' }}>{loadErr}</p>}
+        {loadErr && <AlertBanner variant="error" message={loadErr} onDismiss={() => setLoadErr(null)} />}
 
-        <div className="bg-card border border-border p-4 text-sm text-muted-foreground">
-          <span className="text-foreground font-medium">{formatFileSize(totalSize)}</span> used · {files.length} file(s)
-        </div>
+        <Card>
+          <CardContent className="p-4 text-sm text-muted-foreground">
+            <span className="text-foreground font-medium">{formatFileSize(totalSize)}</span> used · {files.length} file(s)
+          </CardContent>
+        </Card>
 
         {loading && files.length === 0 ? (
           <div className="p-12 text-center text-muted-foreground">Loading…</div>
         ) : files.length === 0 ? (
-          <div className="bg-card border border-border p-12 text-center text-muted-foreground">No files in this project yet.</div>
+          <Card>
+            <CardContent className="p-12 text-center text-muted-foreground">
+              No files in this project yet.
+            </CardContent>
+          </Card>
         ) : (
-          <div className="bg-card border border-border overflow-hidden">
-            {files.map((file) => (
-              <div key={file.id} className="flex items-center gap-3 px-4 py-3 border-b border-border">
-                <FileIcon className="w-4 h-4 text-muted-foreground" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate">{file.name}</p>
-                  <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+          <Card>
+            <div className="divide-y divide-border">
+              {files.map((file) => (
+                <div key={file.id} className="flex items-center gap-3 px-4 py-3">
+                  <FileIcon className="w-4 h-4 text-muted-foreground" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm truncate">{file.name}</p>
+                    <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleDownload(file)}
+                    disabled={downloading === file.id}
+                    aria-label={`Download ${file.name}`}
+                  >
+                    <Download className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setDeleteConfirm(file.id)}
+                    aria-label={`Delete ${file.name}`}
+                    className="text-error hover:text-error"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </div>
-                <button onClick={() => handleDownload(file)} disabled={downloading === file.id} className="p-2 min-w-[44px] min-h-[44px]"><Download className="w-4 h-4" /></button>
-                <button onClick={() => setDeleteConfirm(file.id)} className="p-2 min-w-[44px] min-h-[44px] text-error"><Trash2 className="w-4 h-4" /></button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </Card>
         )}
       </div>
 
-      {showUpload && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border w-full max-w-sm p-6 space-y-4">
-            <h2 className="text-lg font-semibold">Upload File</h2>
-            {uploadErr && <p className="text-sm" style={{ color: 'var(--error)' }}>{uploadErr}</p>}
-            <input type="file" onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)} />
-            <div className="flex gap-3">
-              <button onClick={() => setShowUpload(false)} className="flex-1 border border-border py-3 min-h-[44px]">Cancel</button>
-              <button onClick={handleUpload} disabled={!uploadFile || uploading} className="flex-1 btn-primary min-h-[44px]">{uploading ? 'Uploading…' : 'Upload'}</button>
+      <Dialog open={showUpload} onOpenChange={(isOpen) => !isOpen && setShowUpload(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Upload File</DialogTitle>
+            <DialogDescription>Select a file to upload to your project storage.</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            {uploadErr && <AlertBanner variant="error" message={uploadErr} onDismiss={() => setUploadErr(null)} />}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Select File</label>
+              <input
+                type="file"
+                onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                className="w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+              />
             </div>
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowUpload(false)}>Cancel</Button>
+            <Button onClick={handleUpload} disabled={!uploadFile || uploading}>
+              {uploading ? 'Uploading…' : 'Upload'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border w-full max-w-sm p-6 space-y-4">
-            <h2 className="text-lg font-semibold">Delete File</h2>
-            <p className="text-sm text-muted-foreground">This cannot be undone.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 border border-border py-3 min-h-[44px]">Cancel</button>
-              <button onClick={() => handleDelete(deleteConfirm)} className="flex-1 bg-error text-error-foreground py-3 min-h-[44px]">Delete</button>
-            </div>
+      <Dialog open={!!deleteConfirm} onOpenChange={(isOpen) => !isOpen && setDeleteConfirm(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete File</DialogTitle>
+            <DialogDescription>This action cannot be undone. The file will be permanently deleted.</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">Are you sure you want to delete this file?</p>
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => deleteConfirm && handleDelete(deleteConfirm)}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PyroCoreLayout>
   )
 }

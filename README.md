@@ -1,5 +1,5 @@
 # PYRO-CORE — Open Source Backend Platform for Small Projects
-<img src="docs\frame_000140.jpg" alt="App Preview">
+<img src="docs/frame_000140.jpg" alt="App Preview">
 
 > A free, open-source, self-hosted backend platform for students, hobbyists, and indie developers building projects with fewer than ~100 users. No paid tiers. No hosted database bills. You own your data.
 
@@ -187,7 +187,7 @@ For real (non-demo) data on free tier, enable **S3/R2 sync** (see docs/DEPLOY.md
 
 ## License
 
-Open source (license TBD — MIT or Apache 2.0 recommended).
+Open source under the [MIT License](LICENSE).
 
 ## Suggestions
 

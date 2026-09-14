@@ -2,7 +2,7 @@
 // lib/pyrocore.ts
 // Minimal Next.js fetch wrapper for PyroCore API
 
-const API_URL = process.env.PYROCORE_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const API_KEY = process.env.PYROCORE_API_KEY;
 
 if (!API_KEY) {

@@ -134,11 +134,6 @@ def validate_column(column: str, allowed: Set[str]) -> str:
     return column
 
 
-def validate_identifier(identifier: str, allowed: Set[str]) -> str:
-    """Deprecated alias — prefer validate_table / validate_column."""
-    return validate_table(identifier, allowed)
-
-
 def _storage_for(ctx: Dict[str, Any]) -> LocalFileStorage:
     root = os.environ.get("STORAGE_ROOT", "storage_files")
     project = _ctx_project(ctx)

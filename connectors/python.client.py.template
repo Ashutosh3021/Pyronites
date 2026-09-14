@@ -9,8 +9,8 @@ from typing import Any, Optional
 
 class PyroCoreClient:
     def __init__(self, api_url: Optional[str] = None, api_key: Optional[str] = None):
-        self.api_url = api_url or os.getenv("PYROCORE_API_URL", "http://localhost:8000")
-        self.api_key = api_key or os.getenv("PYROCORE_API_KEY")
+        self.api_url = api_url or os.getenv("PYRONITES_URL", "http://localhost:8000")
+        self.api_key = api_key or os.getenv("PYRONITES_KEY")
         self.session = requests.Session()
         if self.api_key:
             self.session.headers.update({"Authorization": f"Bearer {self.api_key}"})
@@ -30,7 +30,7 @@ class PyroCoreClient:
         return self.request("GET", "/storage", params=params)
 
     def execute_sql(self, sql: str) -> dict:
-        """Run raw SQL via the SQL editor endpoint (requires an admin-scoped key).
+        """Run raw SQL via the SQL editor endpoint (requires a write-scoped key).
 
         Before any destructive statement (DROP/DELETE/TRUNCATE/...) the server
         takes an automatic backup first.  Returns the structured result dict.

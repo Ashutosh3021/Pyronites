@@ -12,3 +12,6 @@ __pycache__/
 *.db-wal
 # Local backup copies
 backups/
+bug_report(14_sept).md
+bug_report(OPENCODE).md
+frontend_fix.txt

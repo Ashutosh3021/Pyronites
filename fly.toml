@@ -29,14 +29,14 @@ primary_region = "iad"
   # CORS: the origin the dashboard is served from.  Comma-separate multiple.
   # WITHOUT this the backend only allows http://localhost:3000 and every
   # cross-origin dashboard request is blocked by the browser.
+  # IMPORTANT: Replace with your actual Vercel URL before deploying.
   FRONTEND_ORIGIN = "https://your-frontend.example.com"
   # Cookie policy for a cross-origin HTTPS dashboard (credentials: 'include').
   # SameSite=None REQUIRES Secure; the app forces Secure when samesite=none.
   SESSION_COOKIE_SECURE = "true"
   SESSION_COOKIE_SAMESITE = "none"
-  # Backups: immediate on startup, then every hour.  Lower this (e.g. 300) to
-  # verify the scheduled backup loop quickly after first deploy.
-  BACKUP_INTERVAL_SECONDS = "3600"
+  # Backups: every 5 minutes (300s).  Raise to 3600 for production.
+  BACKUP_INTERVAL_SECONDS = "300"
 
 # Persist the DB / storage / backups across deploys & restarts.
 # The volume name MUST match `fly volumes create pyrocore_data ...` below.

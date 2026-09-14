@@ -60,11 +60,6 @@ def validate_column(column: str, allowed: Set[str]) -> str:
     return column
 
 
-def validate_identifier(identifier: str, allowed: Set[str]) -> str:
-    """Deprecated alias — prefer validate_table / validate_column."""
-    return validate_table(identifier, allowed)
-
-
 def get_allowed_tables(db: Database) -> Set[str]:
     cursor = db.execute(
     "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' "

@@ -13,15 +13,13 @@ import {
   API_BASE,
   PROJECT_CHANGE_EVENT,
 } from '@/lib/api'
-
-const settingsTabs = [
-  { id: 'general', label: 'General' },
-  { id: 'database', label: 'Database' },
-  { id: 'api', label: 'API' },
-  { id: 'danger', label: 'Danger Zone' },
-] as const
-
-type Tab = typeof settingsTabs[number]['id']
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
+import { AlertBanner } from '@/components/alert-banner'
 
 interface ProjectDetail {
   id: string
@@ -68,7 +66,7 @@ function fmtDate(iso: string | null | undefined): string {
 
 export default function SettingsPage() {
   const router = useRouter()
-  const [tab, setTab] = useState<Tab>('general')
+  const [tab, setTab] = useState('general')
   const [project, setProject] = useState<ProjectDetail | null>(null)
   const [projectName, setProjectName] = useState('')
   const [confirmName, setConfirmName] = useState('')
@@ -87,7 +85,13 @@ export default function SettingsPage() {
   const [backingUp, setBackingUp] = useState(false)
   const [backupMsg, setBackupMsg] = useState<string | null>(null)
 
-  const copyToClipboard = (text: string) => { navigator.clipboard.writeText(text) }
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // Fallback: could show a toast notification
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -96,7 +100,6 @@ export default function SettingsPage() {
     const storedId = getStoredProjectId()
 
     try {
-      // 1) Project registry for the selected project (source of truth for name/id)
       let detail: ProjectDetail | null = null
       if (storedId) {
         const pRes = await fetch(
@@ -109,17 +112,14 @@ export default function SettingsPage() {
           setProjectName(detail.name || '')
           setConfirmName(detail.name || '')
           if (detail.backup_interval) setBackupInterval(detail.backup_interval)
-          // Keep localStorage name in sync
           setStoredProject({ id: detail.id, name: detail.name })
         }
       }
 
-      // 2) Scoped stats (tables/keys/files for THIS project)
       const sRes = await fetch(apiUrl('/api/stats'), { credentials: 'include' })
       if (sRes.ok) {
         const s = (await sRes.json()) as Stats
         setStats(s)
-        // If we had no stored project yet, adopt stats project
         if (!detail && s.project) {
           const name = s.project.project_name ?? ''
           setProjectName(name)
@@ -262,105 +262,83 @@ export default function SettingsPage() {
           </p>
         </div>
 
-        {loadErr && (
-          <p role="alert" className="text-sm" style={{ color: 'var(--error)' }}>{loadErr}</p>
-        )}
+        {loadErr && <AlertBanner variant="error" message={loadErr} onDismiss={() => setLoadErr(null)} />}
 
-        <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
-          <div className="flex lg:hidden gap-1 border-b border-border overflow-x-auto pb-0 -mb-px">
-            {settingsTabs.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setTab(item.id)}
-                className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors min-h-[44px] flex-shrink-0 ${
-                  tab === item.id
-                    ? 'border-accent text-foreground'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList className="w-full sm:w-auto justify-start">
+            <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="database">Database</TabsTrigger>
+            <TabsTrigger value="api">API</TabsTrigger>
+            <TabsTrigger value="danger">Danger Zone</TabsTrigger>
+          </TabsList>
 
-          <div className="hidden lg:flex w-48 flex-col gap-1 flex-shrink-0">
-            {settingsTabs.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setTab(item.id)}
-                className={`px-4 py-2 text-sm font-medium text-left transition-colors min-h-[44px] ${
-                  tab === item.id
-                    ? 'bg-muted text-accent'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex-1 min-w-0">
-            {tab === 'general' && (
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Project Name</label>
-                  <input
+          <TabsContent value="general">
+            <Card>
+              <CardContent className="p-6 space-y-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Project Name</label>
+                  <Input
                     type="text"
                     value={projectName}
                     onChange={(e) => setProjectName(e.target.value)}
-                    className="w-full px-3 py-2 bg-background border border-border text-sm text-foreground focus:outline-none focus:border-accent min-h-[44px]"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Project ID (slug)</label>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Project ID (slug)</label>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 px-3 py-2 bg-background border border-border text-sm font-mono text-muted-foreground truncate min-h-[44px] flex items-center">
                       {projectId}
                     </code>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => copyToClipboard(String(projectId))}
-                      className="p-2 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                      aria-label="Copy project ID"
                     >
                       <Copy className="w-4 h-4" />
-                    </button>
+                    </Button>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Created</label>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Created</label>
                   <p className="px-3 py-2 text-sm text-muted-foreground">{fmtDate(createdAt)}</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button
-                    type="button"
+                  <Button
                     onClick={handleSave}
                     disabled={saving || !projectName.trim()}
-                    className="btn-primary min-h-[44px] disabled:opacity-60"
                   >
                     {saving ? 'Saving…' : 'Save Changes'}
-                  </button>
+                  </Button>
                   {saveMsg && (
-                    <p className="text-sm" style={{ color: saveMsg === 'Saved.' ? 'var(--success)' : 'var(--error)' }}>
-                      {saveMsg}
-                    </p>
+                    <AlertBanner
+                      variant={saveMsg === 'Saved.' ? 'success' : 'error'}
+                      message={saveMsg}
+                      onDismiss={() => setSaveMsg(null)}
+                    />
                   )}
                 </div>
-              </div>
-            )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-            {tab === 'database' && (
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Connection</label>
+          <TabsContent value="database">
+            <Card>
+              <CardContent className="p-6 space-y-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Connection</label>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 px-3 py-2 bg-background border border-border text-sm font-mono text-muted-foreground truncate min-h-[44px] flex items-center">
                       {connectionString}
                     </code>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => copyToClipboard(connectionString)}
-                      className="p-2 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                      aria-label="Copy connection string"
                     >
                       <Copy className="w-4 h-4" />
-                    </button>
+                    </Button>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
                     Tables / files for this project only. Switch projects from the sidebar.
@@ -379,14 +357,14 @@ export default function SettingsPage() {
                         : '—',
                     },
                   ].map((c) => (
-                    <div key={c.label} className="p-3 border border-border">
+                    <div key={c.label} className="p-3 border border-border rounded-lg">
                       <p className="text-xs text-muted-foreground">{c.label}</p>
                       <p className="text-lg font-semibold text-foreground mt-1">{c.value}</p>
                     </div>
                   ))}
                 </div>
 
-                <div className="flex items-center justify-between p-4 border border-border">
+                <div className="flex items-center justify-between p-4 border border-border rounded-lg">
                   <div>
                     <h3 className="text-sm font-medium text-foreground">WAL Mode</h3>
                     <p className="text-xs text-muted-foreground mt-1">Write-Ahead Logging improves concurrency and durability</p>
@@ -396,47 +374,46 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Backup Interval</label>
-                  <select
-                    value={backupInterval}
-                    onChange={(e) => setBackupInterval(e.target.value)}
-                    className="w-full px-3 py-2 bg-background border border-border text-sm text-foreground focus:outline-none focus:border-accent min-h-[44px]"
-                  >
-                    <option value="15min">Every 15 minutes</option>
-                    <option value="1hour">Every 1 hour</option>
-                    <option value="6hours">Every 6 hours</option>
-                    <option value="daily">Daily</option>
-                  </select>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Backup Interval</label>
+                  <Select value={backupInterval} onValueChange={setBackupInterval}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="15min">Every 15 minutes</SelectItem>
+                      <SelectItem value="1hour">Every 1 hour</SelectItem>
+                      <SelectItem value="6hours">Every 6 hours</SelectItem>
+                      <SelectItem value="daily">Daily</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  <button onClick={handleBackup} disabled={backingUp} className="px-4 py-2 border border-border text-sm font-medium text-foreground hover:bg-muted transition-colors min-h-[44px] flex items-center gap-2 disabled:opacity-70">
-                    {backingUp ? <><RefreshCw className="w-4 h-4 animate-spin" />Backing up…</> : 'Back Up Now'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="btn-primary min-h-[44px] disabled:opacity-60"
-                  >
+                  <Button variant="outline" onClick={handleBackup} disabled={backingUp}>
+                    {backingUp ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Backing up…</> : 'Back Up Now'}
+                  </Button>
+                  <Button onClick={handleSave} disabled={saving}>
                     {saving ? 'Saving…' : 'Save Changes'}
-                  </button>
+                  </Button>
                 </div>
+                
                 {backupMsg && (
-                  <p className="text-sm flex items-center gap-2" style={{ color: 'var(--success)' }}>
-                    <CheckCircle2 className="w-4 h-4" />{backupMsg}
-                  </p>
+                  <AlertBanner 
+                    variant={backupMsg.includes('failed') || backupMsg.includes('Error') ? 'error' : 'success'} 
+                    message={backupMsg} 
+                    onDismiss={() => setBackupMsg(null)} 
+                  />
                 )}
 
                 <div>
                   <h3 className="text-sm font-semibold text-foreground mb-3">Recent Backups</h3>
                   {backups.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No backups yet. Run one with “Back Up Now”.</p>
+                    <p className="text-sm text-muted-foreground">No backups yet. Run one with "Back Up Now".</p>
                   ) : (
                     <div className="space-y-2">
                       {backups.map((b) => (
-                        <div key={b.name} className="flex items-center justify-between px-3 py-2 border border-border text-sm min-h-[44px]">
+                        <div key={b.name} className="flex items-center justify-between px-3 py-2 border border-border rounded-lg text-sm min-h-[44px]">
                           <span className="font-mono text-muted-foreground truncate">{b.name}</span>
                           <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">{fmtDate(b.created_at)}</span>
                         </div>
@@ -444,106 +421,98 @@ export default function SettingsPage() {
                     </div>
                   )}
                 </div>
-              </div>
-            )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-            {tab === 'api' && (
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Base URL</label>
+          <TabsContent value="api">
+            <Card>
+              <CardContent className="p-6 space-y-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Base URL</label>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 px-3 py-2 bg-background border border-border text-sm font-mono text-muted-foreground truncate min-h-[44px] flex items-center">
                       {API_BASE}
                     </code>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => copyToClipboard(API_BASE)}
-                      className="p-2 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                      aria-label="Copy base URL"
                     >
                       <Copy className="w-4 h-4" />
-                    </button>
+                    </Button>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Project-scoped data URL</label>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Project-scoped data URL</label>
                   <code className="block px-3 py-2 bg-background border border-border text-sm font-mono text-muted-foreground truncate min-h-[44px] flex items-center">
                     {API_BASE}/api/projects/{projectId}/…
                   </code>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">API Keys</label>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">API Keys</label>
                   <p className="px-3 py-2 text-sm text-muted-foreground">
                     {stats?.key_count ?? 0} key(s) for this project. Manage on the{' '}
                     <a href="/api-keys" className="underline hover:text-foreground" style={{ color: 'var(--pyro-orange)' }}>API Keys</a> page.
                   </p>
                 </div>
-              </div>
-            )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-            {tab === 'danger' && (
-              <div className="space-y-6 border-t-2 border-error pt-6">
-                <div className="p-4 bg-error/10 border border-error">
-                  <div className="flex gap-3">
-                    <AlertTriangle className="w-5 h-5 text-error flex-shrink-0" />
-                    <div>
-                      <h3 className="text-sm font-semibold text-error mb-1">Danger Zone</h3>
-                      <p className="text-xs text-error/80">
-                        Deletes <strong>{displayName}</strong> and its data. You cannot delete your last active project.
-                      </p>
-                    </div>
-                  </div>
-                </div>
+          <TabsContent value="danger">
+            <Card className="border-error/30">
+              <CardContent className="p-6 space-y-6">
+                <AlertBanner
+                  variant="error"
+                  message={`Deletes ${displayName} and its data. You cannot delete your last active project.`}
+                />
 
                 {!deleteConfirm ? (
-                  <button
+                  <Button
+                    variant="destructive"
                     onClick={() => setDeleteConfirm(true)}
-                    className="px-4 py-2 bg-error/20 text-error text-sm font-medium hover:bg-error/30 transition-colors min-h-[44px]"
                   >
                     Delete Project
-                  </button>
+                  </Button>
                 ) : (
-                  <div className="space-y-4 p-4 border border-error/30">
+                  <div className="space-y-4 p-4 border border-error/30 rounded-lg">
                     <p className="text-sm text-foreground">
                       To confirm, type the project name:{' '}
                       <span className="font-mono text-accent">{confirmName || '—'}</span>
                     </p>
-                    <input
+                    <Input
                       type="text"
                       value={deleteInput}
                       onChange={(e) => setDeleteInput(e.target.value)}
                       placeholder="Type project name..."
-                      className="w-full px-3 py-2 bg-background border border-border text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:border-error min-h-[44px]"
+                      className="focus:border-error"
                     />
-                    {deleteError && (
-                      <p role="alert" className="text-sm" style={{ color: 'var(--error)' }}>
-                        {deleteError}
-                      </p>
-                    )}
+                    {deleteError && <AlertBanner variant="error" message={deleteError} onDismiss={() => setDeleteError(null)} />}
                     <div className="flex flex-wrap gap-3">
-                      <button
+                      <Button
+                        variant="outline"
                         onClick={() => { setDeleteConfirm(false); setDeleteInput(''); setDeleteError(null) }}
-                        className="flex-1 px-4 py-3 border border-border text-sm font-medium text-foreground hover:bg-muted transition-colors min-h-[44px]"
+                        className="flex-1"
                       >
                         Cancel
-                      </button>
-                      <button
-                        type="button"
+                      </Button>
+                      <Button
+                        variant="destructive"
                         disabled={deleteInput !== confirmName || !confirmName || deleting}
                         onClick={handleDelete}
-                        className={`flex-1 px-4 py-3 text-sm font-medium transition-colors min-h-[44px] ${
-                          deleteInput === confirmName && confirmName && !deleting
-                            ? 'bg-error text-error-foreground hover:bg-error/90'
-                            : 'bg-muted text-muted-foreground cursor-not-allowed'
-                        }`}
+                        className="flex-1"
                       >
                         {deleting ? 'Deleting…' : 'Delete Project'}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )}
-              </div>
-            )}
-          </div>
-        </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </PyroCoreLayout>
   )

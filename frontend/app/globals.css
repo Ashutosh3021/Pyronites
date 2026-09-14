@@ -4,15 +4,8 @@
 
 @custom-variant dark (&:is(.dark *));
 
-@font-face {
-  font-family: 'Inter';
-  src: url('https://rsms.me/inter/inter.css');
-}
-
-@font-face {
-  font-family: 'JetBrains Mono';
-  src: url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
-}
+/* Fonts loaded via Google Fonts link in layout.tsx or via CSS @import */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @theme inline {
   --color-sidebar-ring: var(--sidebar-ring);

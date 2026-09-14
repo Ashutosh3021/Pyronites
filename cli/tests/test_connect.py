@@ -27,7 +27,7 @@ def test_connect_generates_configs(runner):
             result = runner.invoke(cli, ["connect", "nextjs"])
             assert result.exit_code == 0
             assert Path(".env.local").exists()
-            assert "PYROCORE_API_URL" in Path(".env.local").read_text()
+            assert "NEXT_PUBLIC_API_URL" in Path(".env.local").read_text()
             
             # Test Python
             result = runner.invoke(cli, ["connect", "python"])

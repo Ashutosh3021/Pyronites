@@ -142,8 +142,8 @@ Compare-Object (Get-Content test.txt -Raw) (Get-Content downloaded.bin -Raw)
 - **Do NOT change or remove the `pyrocore` console script.** Keep `cli/main.py` entry point and all subcommands (`init`, `db`, `connect`, `serve`, `backup`, `keys`) working (`pyproject.toml:[project.scripts]`).
 - **Do NOT change the PyPI package layout.** Keep `pyronites` as a separately-published client; keep `hatchling` wheel packages = `["cli", "backend"]` (`pyproject.toml:[tool.hatch.build.targets.wheel]`).
 - After all fixes pass, **increment the version** in `pyproject.toml`:
-  - Current: `version = "0.1.0"`
-  - New: `version = "0.2.0"` (minor bump — new behavior: project-context unification, API-key SQL scope, S3 safety). Update the changelog/README "Status" if present.
+  - Current: `version = "0.2.0"`
+  - New: `version = "0.3.0"` (minor bump — new behavior: project-context unification, API-key SQL scope, S3 safety). Update the changelog/README "Status" if present.
 - Run `pip install -e ".[dev]"` and `pytest` to confirm the wheel still builds and tests pass before publish.
 
 ---

@@ -41,24 +41,6 @@ def get_db() -> Database:
         db.close()
 
 
-def _resolve_project_id(db: Database) -> str:
-    try:
-        cur = db.execute(
-            """
-            SELECT project_id FROM projects
-            WHERE status IS NULL OR status = 'active'
-            ORDER BY created_at ASC
-            LIMIT 1
-            """
-        )
-        row = cur.fetchone()
-        if row and row[0]:
-            return row[0]
-    except Exception:
-        logger.warning("_resolve_project_id failed", exc_info=True)
-    return "default"
-
-
 def _current_user_id(request: Request, db: Database) -> str:
     token = request.cookies.get("session_token")
     user = validate_session(db, token) if token else None

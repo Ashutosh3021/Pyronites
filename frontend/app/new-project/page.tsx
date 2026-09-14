@@ -107,10 +107,14 @@ export default function NewProjectPage() {
   }, [])
 
   // ── Copy helper ──────────────────────────────────────────────────────────
-  const copyText = (text: string, field: string) => {
-    navigator.clipboard.writeText(text)
-    setCopiedField(field)
-    setTimeout(() => setCopiedField(null), 1800)
+  const copyText = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedField(field)
+      setTimeout(() => setCopiedField(null), 1800)
+    } catch {
+      // Fallback: could show a toast notification
+    }
   }
 
   // ── Validation per step ─────────────────────────────────────────────────
