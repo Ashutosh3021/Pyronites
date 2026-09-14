@@ -111,11 +111,15 @@ def get_allowed_columns(db: Database, table: str) -> Set[str]:
 def validate_table(table: str, allowed: Set[str]) -> str:
     """Raise 404 with code table_not_found if table is not in allowed set."""
     if table not in allowed:
+        available = sorted(allowed) if allowed else []
+        msg = f"Table '{table}' not found"
+        if available:
+            msg += f". Available tables: {', '.join(available)}"
         raise HTTPException(
             status_code=404,
             detail=ErrorResponse(
                 code="table_not_found",
-                message=f"Table '{table}' not found",
+                message=msg,
             ).model_dump(),
         )
     return table
@@ -414,6 +418,41 @@ async def create_table(
         )
     record_event("success", f"Table created: {body.table}")
     return {"table": body.table, "columns": body.columns}
+
+
+class DropTableBody(BaseModel):
+    confirm_name: str
+
+
+@router.delete("/tables/{table}")
+async def drop_table(
+    table: str,
+    body: DropTableBody,
+    ctx: Dict[str, Any] = Depends(get_project_context),
+):
+    """Drop (permanently delete) a table and all its data. Requires admin scope + name confirmation."""
+    require_scopes(_ctx_auth(ctx), {"admin"})
+    db = _ctx_db(ctx)
+    allowed = get_allowed_tables(db)
+    if table not in allowed:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(code="table_not_found", message=f"Table '{table}' not found").model_dump(),
+        )
+    if (body.confirm_name or "").strip() != table:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(code="bad_request", message="confirm_name must match the table name").model_dump(),
+        )
+    PROTECTED = {"users", "sessions", "api_keys", "migrations", "projects", "storage_files", "password_reset_tokens"}
+    if table in PROTECTED:
+        raise HTTPException(
+            status_code=403,
+            detail=ErrorResponse(code="forbidden", message=f"Cannot drop protected table '{table}'").model_dump(),
+        )
+    db.execute(f"DROP TABLE IF EXISTS {table}")
+    record_event("warning", f"Table dropped: {table}")
+    return {"message": f"Table '{table}' dropped"}
 
 
 @router.post("/tables/{table}")
@@ -737,40 +776,47 @@ async def execute_sql(
             )
 
     results: List[Dict[str, Any]] = []
-    for stmt in statements:
-        try:
-            cursor = db.execute(stmt)
-        except DatabaseError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=ErrorResponse(code="sql_error", message=str(e)).model_dump(),
-            )
-        if cursor.description is not None:
-            columns = [d[0] for d in cursor.description]
-            rows = [
-                _redact_row(columns, list(row)) for row in cursor.fetchall()
-            ]
-            results.append(
-                {
-                    "statement": stmt,
-                    "kind": "select",
-                    "columns": columns,
-                    "rows": rows,
-                    "row_count": len(rows),
-                    "changes": cursor.rowcount,
-                }
-            )
-        else:
-            results.append(
-                {
-                    "statement": stmt,
-                    "kind": "write",
-                    "columns": [],
-                    "rows": [],
-                    "row_count": 0,
-                    "changes": cursor.rowcount,
-                }
-            )
+    try:
+        with db.transaction() as conn:
+            for stmt in statements:
+                try:
+                    cursor = conn.execute(stmt)
+                except DatabaseError as e:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=ErrorResponse(code="sql_error", message=str(e)).model_dump(),
+                    )
+                if cursor.description is not None:
+                    columns = [d[0] for d in cursor.description]
+                    rows = [
+                        _redact_row(columns, list(row)) for row in cursor.fetchall()
+                    ]
+                    results.append(
+                        {
+                            "statement": stmt,
+                            "kind": "select",
+                            "columns": columns,
+                            "rows": rows,
+                            "row_count": len(rows),
+                            "changes": cursor.rowcount,
+                        }
+                    )
+                else:
+                    results.append(
+                        {
+                            "statement": stmt,
+                            "kind": "write",
+                            "columns": [],
+                            "rows": [],
+                            "row_count": 0,
+                            "changes": cursor.rowcount,
+                        }
+                    )
+    except DatabaseError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(code="sql_error", message=str(e)).model_dump(),
+        )
 
     return {
         "results": results,
@@ -867,8 +913,9 @@ async def revoke_key(
     require_scopes(_ctx_auth(ctx), {"admin"})
     meta = _ctx_meta(ctx)
     slug = _slug(_ctx_project(ctx))
-    # Only revoke if key belongs to this project
-    matching = [k for k in list_api_keys(meta) if k.id == key_id and k.project_id == slug]
+    # Only revoke if key belongs to this project (matches both slug and UUID)
+    project_ids = [_slug(project), project["id"]]
+    matching = [k for k in list_api_keys(meta, project_ids=project_ids) if k.id == key_id]
     if not matching:
         raise HTTPException(
             status_code=404,

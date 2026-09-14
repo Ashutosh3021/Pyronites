@@ -385,7 +385,7 @@ def hard_delete_project(
     row = cur.fetchone()
     if not row:
         raise KeyError("project not found")
-    pid, pslug, pname, owner = row[0], row[1], row[2], row[5]
+    pid, pproject_id, pname, pslug, _, owner = row
     if (confirm_name or "").strip() != pname:
         raise ValueError("confirmation name does not match project name")
 
@@ -401,8 +401,8 @@ def hard_delete_project(
             )
 
     db.execute(
-        "DELETE FROM api_keys WHERE project_id = ? OR project_id = ?",
-        (pslug, pid),
+        "DELETE FROM api_keys WHERE project_id = ? OR project_id = ? OR project_id = ?",
+        (pproject_id, pslug, pid),
     )
     db.execute("DELETE FROM projects WHERE id = ?", (pid,))
 

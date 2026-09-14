@@ -16,7 +16,9 @@ from backend.auth.users import (
     create_user,
     authenticate_user,
     get_user_by_email,
+    get_user_by_id,
     set_user_password,
+    delete_user,
 )
 from backend.auth.sessions import (
     create_session,
@@ -101,17 +103,6 @@ def _set_session_cookie(response: Response, raw_token: str, request: Request | N
         path="/",
         max_age=SESSION_MAX_AGE,
     )
-    if samesite == "none" and secure:
-        parts = [
-            f"session_token={raw_token}",
-            "Path=/",
-            "HttpOnly",
-            "Secure",
-            "SameSite=None",
-            "Partitioned",
-            f"Max-Age={SESSION_MAX_AGE}",
-        ]
-        response.headers.append("Set-Cookie", "; ".join(parts))
 
 
 def _clear_session_cookie(response: Response, request: Request | None = None) -> None:
@@ -351,3 +342,73 @@ async def reset_password(
 
     record_event("success", "Password reset completed")
     return {"message": "Password updated. You can log in with your new password."}
+
+
+# ── Account deletion ─────────────────────────────────────────────────────────
+
+
+class DeleteAccountBody(BaseModel):
+    password: str
+
+
+@router.delete("/account")
+async def delete_account(
+    body: DeleteAccountBody,
+    request: Request,
+    response: Response,
+    db: Database = Depends(get_db),
+):
+    """Self-service account deletion. Requires password confirmation."""
+    session_token = request.cookies.get("session_token")
+    if not session_token:
+        raise HTTPException(
+            status_code=401,
+            detail=ErrorResponse(code="unauthorized", message="Not authenticated").model_dump(),
+        )
+
+    user = validate_session(db, session_token)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail=ErrorResponse(code="unauthorized", message="Invalid session").model_dump(),
+        )
+
+    authenticated = authenticate_user(db, user.email, body.password)
+    if not authenticated:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(code="bad_request", message="Incorrect password").model_dump(),
+        )
+
+    user_id = user.id
+
+    # Delete user's projects (hard delete all)
+    user_projects = projmod.list_projects_for_owner(db, user_id)
+    for proj in user_projects:
+        try:
+            projmod.hard_delete_project(db, proj["id"], proj["project_name"], owner_id=user_id)
+        except Exception:
+            logger.warning("Failed to delete project %s during account deletion", proj["id"], exc_info=True)
+
+    # Delete user's API keys
+    from backend.auth.api_keys import list_api_keys, revoke_api_key
+
+    keys = list_api_keys(db)
+    user_keys = [k for k in keys if k.project_id in [p["id"] for p in user_projects] or k.project_id in [p.get("project_id") for p in user_projects]]
+    for key in user_keys:
+        try:
+            revoke_api_key(db, key.id)
+        except Exception:
+            logger.warning("Failed to revoke key %s during account deletion", key.id, exc_info=True)
+
+    # Revoke all sessions
+    revoke_all_sessions_for_user(db, user_id)
+
+    # Delete the user
+    delete_user(db, user_id)
+
+    # Clear session cookie
+    _clear_session_cookie(response, request)
+
+    record_event("warning", f"Account deleted: {user.email}")
+    return {"message": "Account deleted successfully"}

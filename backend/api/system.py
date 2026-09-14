@@ -87,7 +87,7 @@ async def stats(request: Request, db: Database = Depends(get_db)):
                 "created_at": row[3],
             }
     except Exception:
-        logger.warning("Could not fetch project info for stats", exp_info=True)
+        logger.warning("Could not fetch project info for stats", exc_info=True)
 
     return {
         "table_count": table_count,
@@ -107,7 +107,7 @@ async def trigger_backup(request: Request, db: Database = Depends(get_db)):
     try:
         backup_file = await _run_backup(db_path, _backup_dir())
     except Exception as e:
-        logger.error("Manual backup failed", exp_info=True)
+        logger.error("Manual backup failed", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -124,7 +124,7 @@ async def trigger_backup(request: Request, db: Database = Depends(get_db)):
         if s3 is not None:
             await asyncio.to_thread(s3.upload, db_path)
     except Exception as e:
-        logger.warning("Manual backup S3 upload failed: %s", e, exp_info=True)
+        logger.warning("Manual backup S3 upload failed: %s", e, exc_info=True)
     return {"path": str(backup_file), "created_at": _now_iso()}
 
 
@@ -216,7 +216,7 @@ async def users(request: Request, db: Database = Depends(get_db)):
             for r in cur.fetchall()
         ]
     except Exception as e:
-        logger.error("Failed to list users", exp_info=True)
+        logger.error("Failed to list users", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -242,7 +242,7 @@ async def sessions(request: Request, db: Database = Depends(get_db)):
             for r in cur.fetchall()
         ]
     except Exception as e:
-        logger.error("Failed to list sessions", exp_info=True)
+        logger.error("Failed to list sessions", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -267,7 +267,7 @@ async def patch_user(
     try:
         updated = set_user_active(db, user_id, body.is_active)
     except Exception as e:
-        logger.error("Failed to update user %s", user_id, exp_info=True)
+        logger.error("Failed to update user %s", user_id, exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -295,7 +295,7 @@ async def remove_user(
     try:
         deleted = delete_user(db, user_id)
     except Exception as e:
-        logger.error("Failed to delete user %s", user_id, exp_info=True)
+        logger.error("Failed to delete user %s", user_id, exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(
@@ -331,7 +331,7 @@ async def remove_session(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to revoke session %s", session_id, exp_info=True)
+        logger.error("Failed to revoke session %s", session_id, exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=ErrorResponse(

@@ -31,7 +31,9 @@ def _auth(request: Request, db: Database):
 
 def _storage(db: Database) -> LocalFileStorage:
     root_dir = os.environ.get("STORAGE_ROOT", "storage_files")
-    return LocalFileStorage(db, root_dir=root_dir)
+    # Use Default project subdirectory for consistency with project-scoped routes.
+    project_root = os.path.join(root_dir, "default")
+    return LocalFileStorage(db, root_dir=project_root)
 
 
 def _record_to_dict(record: FileRecord) -> Dict[str, Any]:

@@ -55,11 +55,12 @@ def require_scopes(
             ).model_dump(),
         )
     if not required_scopes.issubset(auth_info["scopes"]):
+        missing = required_scopes - set(auth_info["scopes"])
         raise HTTPException(
             status_code=403,
             detail=ErrorResponse(
                 code="forbidden",
-                message="Insufficient permissions",
+                message=f"Insufficient permissions — requires: {', '.join(sorted(missing))} scope",
             ).model_dump(),
         )
     return auth_info

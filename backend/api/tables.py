@@ -37,11 +37,15 @@ def _auth(request: Request, db: Database):
 def validate_table(table: str, allowed: Set[str]) -> str:
     """Raise 404 with code table_not_found if table is not in allowed set."""
     if table not in allowed:
+        available = sorted(allowed) if allowed else []
+        msg = f"Table '{table}' not found"
+        if available:
+            msg += f". Available tables: {', '.join(available)}"
         raise HTTPException(
             status_code=404,
             detail=ErrorResponse(
                 code="table_not_found",
-                message=f"Table '{table}' not found",
+                message=msg,
             ).model_dump(),
         )
     return table
@@ -310,6 +314,42 @@ async def create_table(body: CreateTableBody, request: Request, db: Database = D
         )
     record_event("success", f"Table created: {body.table}")
     return {"table": body.table, "columns": body.columns}
+
+
+class DropTableBody(BaseModel):
+    confirm_name: str
+
+
+@router.delete("/{table}")
+async def drop_table(
+    table: str,
+    body: DropTableBody,
+    request: Request,
+    db: Database = Depends(get_db),
+):
+    """Drop (permanently delete) a table and all its data. Requires admin scope + name confirmation."""
+    require_scopes(_auth(request, db), {"admin"})
+    allowed = get_allowed_tables(db)
+    if table not in allowed:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(code="table_not_found", message=f"Table '{table}' not found").model_dump(),
+        )
+    if (body.confirm_name or "").strip() != table:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(code="bad_request", message="confirm_name must match the table name").model_dump(),
+        )
+    # Prevent dropping platform-protected tables (belt-and-suspenders)
+    PROTECTED = {"users", "sessions", "api_keys", "migrations", "projects", "storage_files", "password_reset_tokens"}
+    if table in PROTECTED:
+        raise HTTPException(
+            status_code=403,
+            detail=ErrorResponse(code="forbidden", message=f"Cannot drop protected table '{table}'").model_dump(),
+        )
+    db.execute(f"DROP TABLE IF EXISTS {table}")
+    record_event("warning", f"Table dropped: {table}")
+    return {"message": f"Table '{table}' dropped"}
 
 
 @router.post("/{table}")

@@ -108,6 +108,17 @@ def write_api_key(initialized_db):
     return raw_key
 
 
+@pytest.fixture
+def admin_api_key(initialized_db):
+    raw_key, _ = create_api_key(
+        initialized_db,
+        project_id="test-project",
+        name="Test Admin Key",
+        scopes=["read", "write", "admin"]
+    )
+    return raw_key
+
+
 class TestTablesApi:
     def test_crud_workflow(self, client, write_api_key, initialized_db):
         # Create an item
@@ -253,4 +264,111 @@ class TestTablesApi:
         """Requests with no auth header must return 401."""
         response = client.get("/tables/test_items")
         assert response.status_code == 401
+
+
+class TestCreateTableEndpoint:
+    def test_create_table_success(self, client, admin_api_key):
+        """POST /tables creates a new table."""
+        response = client.post(
+            "/tables",
+            json={
+                "table": "new_test_table",
+                "columns": [
+                    {"name": "id", "type": "INTEGER"},
+                    {"name": "name", "type": "TEXT"},
+                ],
+                "primary_key": "id",
+            },
+            headers={"Authorization": f"Bearer {admin_api_key}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["table"] == "new_test_table"
+
+    def test_create_table_requires_admin(self, client, write_api_key):
+        """POST /tables requires admin scope."""
+        response = client.post(
+            "/tables",
+            json={
+                "table": "should_fail",
+                "columns": [{"name": "id", "type": "INTEGER"}],
+            },
+            headers={"Authorization": f"Bearer {write_api_key}"},
+        )
+        assert response.status_code == 403
+
+    def test_create_table_duplicate_name_idempotent(self, client, admin_api_key):
+        """CREATE TABLE IF NOT EXISTS is idempotent."""
+        payload = {
+            "table": "idempotent_table",
+            "columns": [{"name": "id", "type": "INTEGER"}],
+        }
+        r1 = client.post("/tables", json=payload, headers={"Authorization": f"Bearer {admin_api_key}"})
+        r2 = client.post("/tables", json=payload, headers={"Authorization": f"Bearer {admin_api_key}"})
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+
+
+class TestDropTableEndpoint:
+    def test_drop_table_success(self, client, admin_api_key):
+        """DELETE /tables/{table} drops a table with confirmation."""
+        client.post(
+            "/tables",
+            json={
+                "table": "drop_me",
+                "columns": [{"name": "id", "type": "INTEGER"}],
+            },
+            headers={"Authorization": f"Bearer {admin_api_key}"},
+        )
+        response = client.request(
+            "DELETE",
+            "/tables/drop_me",
+            json={"confirm_name": "drop_me"},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
+        )
+        assert response.status_code == 200
+        assert "dropped" in response.json()["message"]
+
+    def test_drop_table_wrong_confirmation(self, client, admin_api_key):
+        """DELETE /tables/{table} rejects mismatched confirmation."""
+        client.post(
+            "/tables",
+            json={"table": "keep_me", "columns": [{"name": "id", "type": "INTEGER"}]},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
+        )
+        response = client.request(
+            "DELETE",
+            "/tables/keep_me",
+            json={"confirm_name": "wrong_name"},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
+        )
+        assert response.status_code == 400
+
+    def test_drop_nonexistent_table_returns_404(self, client, admin_api_key):
+        response = client.request(
+            "DELETE",
+            "/tables/ghost_table",
+            json={"confirm_name": "ghost_table"},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
+        )
+        assert response.status_code == 404
+
+    def test_drop_table_requires_admin(self, client, write_api_key):
+        """DELETE /tables/{table} requires admin scope."""
+        response = client.request(
+            "DELETE",
+            "/tables/some_table",
+            json={"confirm_name": "some_table"},
+            headers={"Authorization": f"Bearer {write_api_key}"},
+        )
+        assert response.status_code == 403
+
+    def test_drop_protected_table_not_in_allowed_set(self, client, admin_api_key):
+        """Platform-protected tables are filtered from allowed set, so DELETE returns 404."""
+        response = client.request(
+            "DELETE",
+            "/tables/users",
+            json={"confirm_name": "users"},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
+        )
+        assert response.status_code == 404
 
