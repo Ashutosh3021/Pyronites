@@ -172,3 +172,167 @@ def test_protected_routes_reject_anonymous(app_env):
         assert client.post("/api/projects", json={"project_id": "x", "project_name": "y"}).status_code == 401
         # Health remains public.
         assert client.get("/health").status_code == 200
+
+
+def test_rest_drop_table(session_client):
+    """DELETE /tables/{table} drops a table with confirmation (REST, not SQL)."""
+    client = session_client
+
+    # Create a table via DDL
+    ddl = client.post(
+        "/tables",
+        json={
+            "table": "droppable",
+            "columns": [{"name": "id", "type": "INTEGER"}, {"name": "val", "type": "TEXT"}],
+            "primary_key": "id",
+        },
+    )
+    assert ddl.status_code == 200, ddl.text
+
+    # Verify it exists
+    tables = client.get("/tables")
+    assert any(t["name"] == "droppable" for t in tables.json())
+
+    # Drop via REST with confirmation
+    drop = client.request(
+        "DELETE",
+        "/tables/droppable",
+        json={"confirm_name": "droppable"},
+    )
+    assert drop.status_code == 200, drop.text
+    assert "dropped" in drop.json()["message"]
+
+    # Verify it's gone
+    tables_after = client.get("/tables")
+    assert not any(t["name"] == "droppable" for t in tables_after.json())
+
+
+def test_rest_drop_table_wrong_confirmation_rejected(session_client):
+    """DELETE /tables/{table} rejects mismatched confirmation name."""
+    client = session_client
+
+    client.post(
+        "/tables",
+        json={
+            "table": "keep_me",
+            "columns": [{"name": "id", "type": "INTEGER"}],
+            "primary_key": "id",
+        },
+    )
+
+    drop = client.request(
+        "DELETE",
+        "/tables/keep_me",
+        json={"confirm_name": "wrong_name"},
+    )
+    assert drop.status_code == 400
+    # Table should still exist
+    tables = client.get("/tables")
+    assert any(t["name"] == "keep_me" for t in tables.json())
+
+
+def test_forgot_password_token_flow(app_env):
+    """Forgot-password → reset-password round-trip works end-to-end."""
+    from backend.auth.password_reset import create_reset_token
+    from backend.core.db import Database
+
+    with TestClient(create_app()) as client:
+        # Create user
+        client.post(
+            "/auth/signup",
+            json={"email": "reset@example.com", "password": "oldpass123"},
+        )
+
+        # Create a reset token directly (bypasses email)
+        db = Database(os.environ.get("DATABASE_PATH", "pyrocore.db"))
+        db.connect()
+        row = db.execute("SELECT id FROM users WHERE email = ?", ("reset@example.com",)).fetchone()
+        user_id = row[0]
+        raw_token = create_reset_token(db, user_id)
+        db.close()
+
+        # Reset password using the token
+        reset = client.post(
+            "/auth/reset-password",
+            json={"token": raw_token, "password": "newpass456"},
+        )
+        assert reset.status_code == 200, reset.text
+
+        # Old password should no longer work
+        old_login = client.post(
+            "/auth/login",
+            json={"email": "reset@example.com", "password": "oldpass123"},
+        )
+        assert old_login.status_code == 401
+
+        # New password should work
+        new_login = client.post(
+            "/auth/login",
+            json={"email": "reset@example.com", "password": "newpass456"},
+        )
+        assert new_login.status_code == 200
+
+
+def test_self_service_delete_account(app_env):
+    """DELETE /auth/account removes the user and all their data."""
+    with TestClient(create_app()) as client:
+        # Create user + project + table
+        client.post(
+            "/auth/signup",
+            json={"email": "deleteme@example.com", "password": "secretpass"},
+        )
+        client.post(
+            "/api/projects",
+            json={"project_id": "temp", "project_name": "Temp"},
+        )
+        client.post(
+            "/tables",
+            json={
+                "table": "ephemeral",
+                "columns": [{"name": "id", "type": "INTEGER"}],
+                "primary_key": "id",
+            },
+        )
+
+        # Delete account
+        delete = client.request(
+            "DELETE",
+            "/auth/account",
+            json={"password": "secretpass"},
+        )
+        assert delete.status_code == 200, delete.text
+        assert delete.json()["message"] == "Account deleted successfully"
+
+        # Session should be invalid
+        tables = client.get("/tables")
+        assert tables.status_code == 401
+
+        # Re-login should fail (user deleted)
+        login = client.post(
+            "/auth/login",
+            json={"email": "deleteme@example.com", "password": "secretpass"},
+        )
+        assert login.status_code == 401
+
+
+def test_self_service_delete_account_wrong_password(app_env):
+    """DELETE /auth/account rejects incorrect password."""
+    with TestClient(create_app()) as client:
+        client.post(
+            "/auth/signup",
+            json={"email": "nodelete@example.com", "password": "realpass"},
+        )
+
+        delete = client.request(
+            "DELETE",
+            "/auth/account",
+            json={"password": "wrongpass"},
+        )
+        assert delete.status_code == 400
+
+        # User should still exist and be able to login
+        login = client.post(
+            "/auth/login",
+            json={"email": "nodelete@example.com", "password": "realpass"},
+        )
+        assert login.status_code == 200
