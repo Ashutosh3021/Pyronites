@@ -195,21 +195,31 @@ Running into "429 Too Many Requests" errors? Here's what's happening and what yo
 
 ### Why this happens
 
-Your PyroCore backend is probably hosted on a free-tier service (like Render's free plan). These free tiers put a strict limit on how many requests your backend can handle per minute. When your app — or even just a single page load — sends a burst of requests at once (like checking auth, loading tables, and syncing data all at the same time), the hosting service temporarily blocks further requests and returns a 429 error.
+PyroCore enforces rate limits on auth endpoints to protect against brute-force attacks and abuse:
 
-### What you can do
+| Endpoint | Default Limit | Window |
+|----------|--------------|--------|
+| `POST /auth/signup` | 20 requests | per minute per IP |
+| `POST /auth/login` | 20 requests | per minute per IP |
+| `POST /auth/forgot-password` | 5 requests | per hour per IP+email |
 
-1. **Upgrade your hosting plan.** The simplest and most reliable fix. Free tiers are great for testing, but they aren't built for real traffic. A basic paid plan on Render, Fly.io, or any VPS will remove these limits entirely.
+Free-tier hosting services (Render, Fly.io, etc.) may also impose their own limits on top of these.
 
-2. **Avoid firing too many requests at once.** If you're building a frontend app, don't load everything simultaneously. For example, wait for auth to finish before you start fetching table data. The official `pyronites` Python client now automatically handles rate-limit retries and deduplicates identical requests, so upgrading to the latest version helps a lot.
+### How to handle 429s properly
 
-3. **Use local / cache tables.** If you have data that doesn't need to be perfectly fresh every time, configure tables as `cache_tables` or `local_tables` in the Python client. This keeps a copy on the user's device and only hits the remote backend occasionally, drastically cutting down on requests.
+1. **Read the `Retry-After` header.** Every 429 response includes a `Retry-After: <seconds>` header telling you exactly how long to wait. The official `pyronites` Python client reads this automatically and backs off — upgrade to the latest version (`pip install pyronites --upgrade`) for proper retry behavior.
 
-4. **Don't poll the same endpoint repeatedly.** Calling `client.auth.user()` over and over in a tight loop will hammer the `/auth/me` endpoint. The client now caches this for a short window, but it's still good practice to call it only when you actually need to check auth status.
+2. **Check rate limit headers.** All responses include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers so you can throttle *before* hitting the limit.
 
-5. **Combine or batch requests when you can.** If your app needs several pieces of data, try to fetch them in fewer, bigger requests rather than many tiny ones.
+3. **Avoid firing too many requests at once.** Wait for auth to finish before fetching table data. The `pyronites` client deduplicates identical in-flight requests automatically.
 
-The bottom line: 429 errors are a hosting quota issue, not a bug in PyroCore. The code changes we've made help your app play nicer with rate limits, but a paid hosting plan is the real fix for production use.
+4. **Use local / cache tables.** Configure tables as `cache_tables` or `local_tables` in the Python client to keep a copy on the user's device and reduce backend hits.
+
+5. **Combine or batch requests.** Fetch data in fewer, bigger requests rather than many tiny ones.
+
+### For production use
+
+Rate limits are configurable per API key via the `rate_limit_rpm` field. A paid hosting plan removes the *hosting-level* limits on top of these application-level ones.
 
 ## Contributing
 

@@ -162,7 +162,8 @@ def create_app() -> FastAPI:
             body = detail
         else:
             body = ErrorResponse(code="error", message=str(detail)).model_dump()
-        return JSONResponse(status_code=exc.status_code, content=body)
+        headers = exc.headers or {}
+        return JSONResponse(status_code=exc.status_code, content=body, headers=headers)
 
     @app.exception_handler(Exception)
     async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:

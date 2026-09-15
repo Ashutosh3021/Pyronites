@@ -3,10 +3,9 @@ Authentication endpoints: signup / login / logout / password reset.
 """
 
 import logging
+import math
 import os
 import time
-from collections import defaultdict
-from threading import Lock
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -32,30 +31,41 @@ from backend.core.db import Database, DatabaseError
 from backend.api.schemas import ErrorResponse, to_utc_iso
 from backend.core.logring import record_event
 from backend.core import projects as projmod
+from backend.core.rate_limit import check_and_record, get_client_ip
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 SESSION_MAX_AGE = int(os.environ.get("SESSION_MAX_AGE_SECONDS", str(7 * 24 * 3600)))
 
-_FORGOT_LOCK = Lock()
-_FORGOT_HITS: dict[str, list[float]] = defaultdict(list)
-_FORGOT_WINDOW_SEC = 3600
-_FORGOT_MAX_PER_KEY = 5
+# Rate limit defaults (env-configurable, read at request time for testability)
+_AUTH_RATE_WINDOW = 60  # seconds
+_FORGOT_RATE_WINDOW = 3600  # seconds
 
 
-def _rate_limit_forgot(ip: str, email: str) -> bool:
-    now = time.time()
-    keys = [f"ip:{ip or 'unknown'}", f"email:{(email or '').lower()}"]
-    with _FORGOT_LOCK:
-        for key in keys:
-            hits = [t for t in _FORGOT_HITS[key] if now - t < _FORGOT_WINDOW_SEC]
-            _FORGOT_HITS[key] = hits
-            if len(hits) >= _FORGOT_MAX_PER_KEY:
-                return False
-        for key in keys:
-            _FORGOT_HITS[key].append(now)
-    return True
+def _get_auth_rate_limit() -> int:
+    return int(os.environ.get("AUTH_RATE_LIMIT_PER_MIN", "20"))
+
+
+def _get_forgot_rate_limit() -> int:
+    return int(os.environ.get("FORGOT_RATE_LIMIT_PER_HOUR", "5"))
+
+
+def _rate_limit_response(retry_after: int, limit: int, remaining: int, reset_at: float) -> HTTPException:
+    """Build a 429 HTTPException with Retry-After and X-RateLimit-* headers."""
+    return HTTPException(
+        status_code=429,
+        detail=ErrorResponse(
+            code="rate_limited",
+            message=f"Rate limit exceeded. Try again in {retry_after}s.",
+        ).model_dump(),
+        headers={
+            "Retry-After": str(retry_after),
+            "X-RateLimit-Limit": str(limit),
+            "X-RateLimit-Remaining": str(remaining),
+            "X-RateLimit-Reset": str(int(reset_at)),
+        },
+    )
 
 
 def _is_https(request: Request | None) -> bool:
@@ -154,6 +164,15 @@ _GENERIC_FORGOT_MSG = (
 
 @router.post("/signup")
 async def signup(body: _EmailBody, response: Response, request: Request, db: Database = Depends(get_db)):
+    client_ip = get_client_ip(request)
+    limit = _get_auth_rate_limit()
+    allowed, remaining, reset_at = check_and_record(
+        db, f"ip:{client_ip}", "auth:signup", limit, _AUTH_RATE_WINDOW,
+    )
+    if not allowed:
+        retry_after = max(1, int(reset_at - time.time()))
+        raise _rate_limit_response(retry_after, limit, remaining, reset_at)
+
     try:
         user = create_user(db, body.email, body.password)
     except UserAlreadyExistsError:
@@ -197,6 +216,15 @@ async def signup(body: _EmailBody, response: Response, request: Request, db: Dat
 
 @router.post("/login")
 async def login(body: _EmailBody, response: Response, request: Request, db: Database = Depends(get_db)):
+    client_ip = get_client_ip(request)
+    limit = _get_auth_rate_limit()
+    allowed, remaining, reset_at = check_and_record(
+        db, f"ip:{client_ip}", "auth:login", limit, _AUTH_RATE_WINDOW,
+    )
+    if not allowed:
+        retry_after = max(1, int(reset_at - time.time()))
+        raise _rate_limit_response(retry_after, limit, remaining, reset_at)
+
     user = authenticate_user(db, body.email, body.password)
     if user is None:
         raise HTTPException(
@@ -262,15 +290,16 @@ async def forgot_password(
     request: Request,
     db: Database = Depends(get_db),
 ):
-    client_ip = request.client.host if request.client else "unknown"
-    if not _rate_limit_forgot(client_ip, body.email):
-        raise HTTPException(
-            status_code=429,
-            detail=ErrorResponse(
-                code="rate_limited",
-                message="Too many reset requests. Try again later.",
-            ).model_dump(),
+    client_ip = get_client_ip(request)
+    limit = _get_forgot_rate_limit()
+    # Rate limit by both IP and email
+    for key in [f"ip:{client_ip}", f"email:{body.email.lower()}"]:
+        allowed, remaining, reset_at = check_and_record(
+            db, key, "auth:forgot", limit, _FORGOT_RATE_WINDOW,
         )
+        if not allowed:
+            retry_after = max(1, int(reset_at - time.time()))
+            raise _rate_limit_response(retry_after, limit, remaining, reset_at)
 
     try:
         user = get_user_by_email(db, body.email)
