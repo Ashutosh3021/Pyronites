@@ -191,7 +191,7 @@ Open source under the [MIT License](LICENSE).
 
 ## Suggestions
 
-Running into "429 Too Many Requests" errors? Here's what's happening and what you can do about it, in plain language.
+Running into "429 Too Many Requests" errors? See **[docs/DEBUGGING_429.md](docs/DEBUGGING_429.md)** for a full debugging guide with curl tests, header explanations, and code examples.
 
 ### Why this happens
 

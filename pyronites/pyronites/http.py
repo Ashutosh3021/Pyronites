@@ -11,10 +11,10 @@ import httpx
 from pyronites.config import ClientConfig
 from pyronites.errors import ApiError, AuthError, NotFoundError
 
-_RETRYABLE_STATUS: Set[int] = {429, 502, 503, 504}
+_RETRYABLE_STATUS: Set[int] = {502, 503, 504}
 _DEFAULT_MAX_RETRIES = 2
-_DEFAULT_BACKOFF_BASE = 0.3
-_MAX_RETRY_AFTER_SECONDS = 60.0
+_DEFAULT_BACKOFF_BASE = 1.0
+_MAX_RETRY_AFTER_SECONDS = 120.0
 
 
 def _parse_retry_after(response: httpx.Response) -> Optional[float]:
