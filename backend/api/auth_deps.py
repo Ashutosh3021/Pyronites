@@ -93,6 +93,28 @@ def require_sql_scopes(
     )
 
 
+def enforce_legacy_plane_key(auth: Optional[Dict[str, Any]], meta: Database) -> None:
+    """
+    The unscoped legacy plane (``/tables``, ``/storage``, ``/sql``) is
+    tenancy-blind — it serves the shared meta DB.  Keys minted on the scoped
+    plane (``/api/projects/{id}/api/keys``) are bound to one tenant and must
+    not be usable there.  Keys minted on the unscoped plane (or predating the
+    ``plane`` column) keep their historical behaviour until the PyPI client
+    migrates and the unscoped routes are retired (H1 strangler).
+    """
+    if not auth or auth.get("type") != "api_key":
+        return
+    if auth.get("plane", "legacy") == "scoped":
+        raise HTTPException(
+            status_code=403,
+            detail=ErrorResponse(
+                code="forbidden",
+                message="This API key belongs to a project-scoped endpoint; "
+                "use /api/projects/{project_id}/...",
+            ).model_dump(),
+        )
+
+
 def resolve_auth(request: Request, db: Database) -> Optional[Dict[str, Any]]:
     """
     Determine the identity and permissions of the incoming request.
@@ -127,6 +149,7 @@ def resolve_auth(request: Request, db: Database) -> Optional[Dict[str, Any]]:
                     "scopes": set(api_key.scopes),
                     "project_id": api_key.project_id,
                     "key_id": api_key.id,
+                    "plane": api_key.plane,
                 }
             # Present but invalid — log for intrusion detection
             logger.warning(

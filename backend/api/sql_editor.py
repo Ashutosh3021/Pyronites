@@ -37,10 +37,10 @@ from typing import Any, Dict, List, Optional, Set
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from backend.core.db import Database, DatabaseError
+from backend.core.db import Database, DatabaseError, acquire_database, release_database
 from backend.core.backup import backup_now
 from backend.api.schemas import ErrorResponse
-from backend.api.auth_deps import resolve_auth, require_scopes, require_sql_scopes
+from backend.api.auth_deps import resolve_auth, require_scopes, require_sql_scopes, enforce_legacy_plane_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sql", tags=["sql"])
@@ -61,13 +61,12 @@ class SqlExecuteRequest(BaseModel):
 
 
 def get_db() -> Database:
-    """Yield a single Database connection for the lifetime of the request."""
-    db = Database(os.environ.get("DATABASE_PATH", "pyrocore.db"))
-    db.connect()
+    """Yield a pooled Database connection for the lifetime of the request."""
+    db = acquire_database(os.environ.get("DATABASE_PATH", "pyrocore.db"))
     try:
         yield db
     finally:
-        db.close()
+        release_database(db)
 
 
 def _split_statements(sql: str) -> List[str]:
@@ -168,7 +167,9 @@ async def execute_sql(
     the ``write`` scope (SQL is inherently a write-capable surface). Sensitive
     columns are redacted in SELECT results.
     """
-    require_sql_scopes(resolve_auth(request, db))
+    _auth_info = resolve_auth(request, db)
+    enforce_legacy_plane_key(_auth_info, db)
+    require_sql_scopes(_auth_info)
 
     statements = _split_statements(payload.sql)
     if not statements:

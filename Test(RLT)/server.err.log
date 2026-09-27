@@ -1,0 +1,138 @@
+INFO:backend.app:CORS allow_origins=['http://127.0.0.1:8111'] allow_origin_regex=https://.*\.vercel\.app
+INFO:     Started server process [14508]
+INFO:     Waiting for application startup.
+INFO:backend.app:Starting up: db=C:\Users\ashut\Downloads\Pyronites\Test(RLT)\DB\pyrocore.db migrations=C:\Users\ashut\Downloads\Pyronites\backend\migrations
+INFO:backend.app:Running pending migrations...
+INFO:backend.app:Migrations complete!
+INFO:backend.app:Scheduled backup loop started (interval=3600s)
+INFO:backend.core.backup:Starting scheduled backup loop
+INFO:backend.core.backup:Performing scheduled backup
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8111 (Press CTRL+C to quit)
+INFO:backend.core.backup:Successfully created backup at C:\Users\ashut\Downloads\Pyronites\Test(RLT)\DB\backups\pyrocore_2026-09-27T14-21-01-500219.db
+INFO:backend.core.projects:Primary project 379c2151-a27b-427c-a24d-a4ac90f0f8b3 uses meta DB C:\Users\ashut\Downloads\Pyronites\Test(RLT)\DB\pyrocore.db
+WARNING:backend.core.email_brevo:Password reset email not sent: BREVO_API_KEY or BREVO_SENDER_EMAIL unset
+WARNING:backend.api.auth_deps:Invalid API key presented (ip=127.0.0.1, path=/tables)
+INFO:backend.core.projects:Primary project 2f355f24-3785-4a04-a5f0-2c6f2d7b92bf uses meta DB C:\Users\ashut\Downloads\Pyronites\Test(RLT)\DB\pyrocore.db
+INFO:backend.core.backup:Successfully created backup at C:\Users\ashut\Downloads\Pyronites\Test(RLT)\DB\backups\pyrocore_2026-09-27T14-21-03-252279.db
+INFO:backend.core.backup:Successfully created backup at C:\Users\ashut\Downloads\Pyronites\Test(RLT)\DB\backups\pyrocore_2026-09-27T14-21-03-318965.db
+INFO:backend.core.backup:Successfully created backup at C:\Users\ashut\Downloads\Pyronites\Test(RLT)\DB\backups\pyrocore_2026-09-27T14-21-03-368827.db
+INFO:backend.core.migrations:Running 9 pending migration(s) from C:\Users\ashut\Downloads\Pyronites\backend\migrations
+INFO:backend.core.migrations:Applying migration 0001_init.sql
+INFO:backend.core.migrations:Migration 0001_init.sql applied successfully
+INFO:backend.core.migrations:Applying migration 0002_add_api_keys.sql
+INFO:backend.core.migrations:Migration 0002_add_api_keys.sql applied successfully
+INFO:backend.core.migrations:Applying migration 0003_add_storage_table.sql
+INFO:backend.core.migrations:Migration 0003_add_storage_table.sql applied successfully
+INFO:backend.core.migrations:Applying migration 0004_add_is_active_to_users.sql
+INFO:backend.core.migrations:Migration 0004_add_is_active_to_users.sql applied successfully
+INFO:backend.core.migrations:Applying migration 0005_add_projects.sql
+INFO:backend.core.migrations:Migration 0005_add_projects.sql applied successfully
+INFO:backend.core.migrations:Applying migration 0006_multi_project.sql
+INFO:backend.core.migrations:Migration 0006_multi_project.sql applied successfully
+INFO:backend.core.migrations:Applying migration 0007_password_reset_tokens.sql
+INFO:backend.core.migrations:Migration 0007_password_reset_tokens.sql applied successfully
+INFO:backend.core.migrations:Applying migration 0008_last_project.sql
+INFO:backend.core.migrations:Migration 0008_last_project.sql applied successfully
+INFO:backend.core.migrations:Applying migration 0009_add_rate_limits.sql
+INFO:backend.core.migrations:Migration 0009_add_rate_limits.sql applied successfully
+INFO:backend.core.migrations:All migrations complete
+INFO:backend.core.projects:Created project DB C:\Users\ashut\Downloads\Pyronites\Test(RLT)\DB\data\projects\a03e3de0-b547-43a3-805d-9a1d4313ef3b.db
+INFO:backend.core.backup:Successfully created backup at C:\Users\ashut\Downloads\Pyronites\Test(RLT)\DB\data\projects\backups\a03e3de0-b547-43a3-805d-9a1d4313ef3b_2026-09-27T14-21-04-035113.db
+INFO:backend.core.backup:Successfully created backup at C:\Users\ashut\Downloads\Pyronites\Test(RLT)\DB\data\projects\backups\a03e3de0-b547-43a3-805d-9a1d4313ef3b_2026-09-27T14-21-04-085277.db
+INFO:backend.core.backup:Successfully created backup at C:\Users\ashut\Downloads\Pyronites\Test(RLT)\DB\data\projects\backups\a03e3de0-b547-43a3-805d-9a1d4313ef3b_2026-09-27T14-21-04-135146.db
+ERROR:backend.app:Unhandled exception on DELETE /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/api/keys/9278ea5e-1ead-4057-8204-3cedfd8b597b: NameError
+Traceback (most recent call last):
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\middleware\errors.py", line 165, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\middleware\exceptions.py", line 62, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\routing.py", line 715, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\routing.py", line 735, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\routing.py", line 288, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\routing.py", line 76, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\routing.py", line 73, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 301, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 212, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ashut\Downloads\Pyronites\backend\api\project_scoped.py", line 917, in revoke_key
+    project_ids = [_slug(project), project["id"]]
+                         ^^^^^^^
+NameError: name 'project' is not defined
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 401, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\applications.py", line 1054, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\applications.py", line 112, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\middleware\errors.py", line 187, in __call__
+    raise exc
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\middleware\errors.py", line 165, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\middleware\exceptions.py", line 62, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\routing.py", line 715, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\routing.py", line 735, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\routing.py", line 288, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\routing.py", line 76, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\starlette\routing.py", line 73, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 301, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ashut\AppData\Local\Programs\Python\Python311\Lib\site-packages\fastapi\routing.py", line 212, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ashut\Downloads\Pyronites\backend\api\project_scoped.py", line 917, in revoke_key
+    project_ids = [_slug(project), project["id"]]
+                         ^^^^^^^
+NameError: name 'project' is not defined
+WARNING:backend.api.auth_deps:Invalid API key presented (ip=127.0.0.1, path=/tables)
+INFO:backend.core.backup:Successfully created backup at C:\Users\ashut\Downloads\Pyronites\Test(RLT)\DB\backups\pyrocore_2026-09-27T14-21-04-769851.db
+INFO:backend.core.backup:Restored (in-place) into C:\Users\ashut\Downloads\Pyronites\Test(RLT)\DB\pyrocore.db from C:\Users\ashut\Downloads\Pyronites\Test(RLT)\DB\backups\pyrocore_2026-09-27T14-21-04-769851.db
+WARNING:backend.api.auth:Failed to delete project 379c2151-a27b-427c-a24d-a4ac90f0f8b3 during account deletion
+Traceback (most recent call last):
+  File "C:\Users\ashut\Downloads\Pyronites\backend\api\auth.py", line 418, in delete_account
+    projmod.hard_delete_project(db, proj["id"], proj["project_name"], owner_id=user_id)
+                                                ~~~~^^^^^^^^^^^^^^^^
+KeyError: 'project_name'

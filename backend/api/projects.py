@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 
-from backend.core.db import Database
+from backend.core.db import Database, acquire_database, release_database
 from backend.auth.api_keys import create_api_key
 from backend.auth.sessions import validate_session
 from backend.api.schemas import ErrorResponse, to_utc_iso
@@ -33,12 +33,11 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 
 def get_db() -> Database:
-    db = Database(os.environ.get("DATABASE_PATH", "pyrocore.db"))
-    db.connect()
+    db = acquire_database(os.environ.get("DATABASE_PATH", "pyrocore.db"))
     try:
         yield db
     finally:
-        db.close()
+        release_database(db)
 
 
 def _current_user_id(request: Request, db: Database) -> str:

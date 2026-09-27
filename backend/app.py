@@ -23,7 +23,12 @@ from backend.core.db import Database
 from backend.core.migrations import get_migration_files, run_pending_migrations
 from backend.core.backup import scheduled_backup_loop
 from backend.core.s3_sync import load_s3_config
+from backend.core.env import load_env
 from backend.core.logring import install as install_logring, record_event
+
+# Load the repo-root .env (setdefault semantics — real env always wins; the
+# container/test/harness paths are kept). Runs before create_app() reads config.
+load_env()
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -48,7 +53,9 @@ def create_app() -> FastAPI:
 
         storage_root = os.environ.get("STORAGE_ROOT", "storage_files")
         backup_dir = str(Path(db_path).parent / "backups")
-        projects_data = str(Path(db_path).parent / "data" / "projects")
+        from backend.core.projects import projects_dir
+
+        projects_data = str(projects_dir())
         for d in (os.path.dirname(db_path) or ".", storage_root, backup_dir, projects_data):
             try:
                 Path(d).mkdir(parents=True, exist_ok=True)
@@ -58,10 +65,12 @@ def create_app() -> FastAPI:
         s3 = load_s3_config()
         if s3 is not None:
             try:
-                restored = await asyncio.to_thread(s3.download, db_path)
+                restored = await asyncio.to_thread(
+                    s3.download_all, db_path, projects_data, storage_root
+                )
                 logger.info(
                     "S3 restore: %s",
-                    "downloaded latest DB" if restored else "no remote DB / local present",
+                    "downloaded remote data" if restored else "no remote data / local present",
                 )
             except Exception as e:
                 logger.error(
@@ -83,7 +92,20 @@ def create_app() -> FastAPI:
         record_event("info", "Server started")
 
         backup_interval = int(os.environ.get("BACKUP_INTERVAL_SECONDS", "3600"))
-        s3_upload = (lambda p: s3.upload(p)) if s3 is not None else None
+        # H3/C1: after each backup, push the *consistent backup file* (not the
+        # live DB) plus project DBs and storage files to the bucket.
+        s3_upload = (
+            (
+                lambda backup_file: s3.upload_all(
+                    db_path,
+                    snapshot_file=str(backup_file),
+                    projects_dir=projects_data,
+                    storage_root=storage_root,
+                )
+            )
+            if s3 is not None
+            else None
+        )
         backup_task = None
         try:
             backup_task = asyncio.create_task(
@@ -98,18 +120,37 @@ def create_app() -> FastAPI:
         yield
 
         logger.info("Shutting down...")
-        if s3 is not None:
-            try:
-                await asyncio.to_thread(s3.upload, db_path)
-                logger.info("S3: final upload on shutdown complete")
-            except Exception as e:
-                logger.error("S3: final upload on shutdown failed: %s", e, exc_info=True)
         if backup_task is not None:
             backup_task.cancel()
             try:
                 await backup_task
             except (asyncio.CancelledError, Exception):
                 pass
+        if s3 is not None:
+            try:
+                from backend.core.backup import backup_now
+
+                def _final_sync():
+                    # H3: snapshot first, then push the snapshot + full data
+                    # dir so the bucket never holds a torn live-file copy.
+                    final_backup = backup_now(db_path, backup_dir)
+                    s3.upload_all(
+                        db_path,
+                        snapshot_file=str(final_backup),
+                        projects_dir=projects_data,
+                        storage_root=storage_root,
+                    )
+
+                await asyncio.to_thread(_final_sync)
+                logger.info("S3: final backup + full sync on shutdown complete")
+            except Exception as e:
+                logger.error("S3: final sync on shutdown failed: %s", e, exc_info=True)
+        try:
+            from backend.core.db import close_shared_databases
+
+            close_shared_databases()
+        except Exception as e:
+            logger.warning("Closing shared DB connections failed: %s", e)
 
     app = FastAPI(lifespan=lifespan, title="PyroCore API")
 
@@ -119,10 +160,9 @@ def create_app() -> FastAPI:
     else:
         allow_origins = list(_DEFAULT_ORIGINS)
 
-    allow_origin_regex = os.environ.get(
-        "FRONTEND_ORIGIN_REGEX",
-        r"https://.*\.vercel\.app",
-    )
+    # C2: no wildcard origin regex by default — CORS is exact-origins only.
+    # Operators can still opt in to an explicit pattern via FRONTEND_ORIGIN_REGEX.
+    allow_origin_regex = os.environ.get("FRONTEND_ORIGIN_REGEX") or None
 
     logger.info(
         "CORS allow_origins=%s allow_origin_regex=%s",
@@ -207,4 +247,7 @@ if __name__ == "__main__":
 
     HOST = os.environ.get("HOST", "0.0.0.0")
     PORT = int(os.environ.get("PORT", "8000"))
-    uvicorn.run(app, host=HOST, port=PORT)
+    # proxy_headers=False: uvicorn's own XFF rewrite (which trusts loopback
+    # unconditionally) would let a local client spoof request.client.host
+    # BEFORE our rate limiter sees it (H2).  get_client_ip() owns XFF logic.
+    uvicorn.run(app, host=HOST, port=PORT, proxy_headers=False)

@@ -369,11 +369,14 @@ def hard_delete_project(
     *,
     confirm_name: str,
     owner_id: Optional[str] = None,
+    force: bool = False,
 ) -> None:
     """
     Permanently delete a project after name confirmation.
 
-    Refuses to delete the owner's last active project (keeps Default usable).
+    Refuses to delete the owner's last active project (keeps Default usable)
+    unless ``force=True`` (used by full account deletion, where every project
+    must go).
     """
     cur = db.execute(
         """
@@ -390,7 +393,7 @@ def hard_delete_project(
         raise ValueError("confirmation name does not match project name")
 
     oid = owner_id or owner
-    if oid:
+    if oid and not force:
         active_n = count_active_projects_for_owner(db, oid)
         # If this row is still active, deleting it would leave active_n - 1
         status = row[4] or "active"

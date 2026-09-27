@@ -102,7 +102,11 @@ def serve(host, port, db_path, backup_interval, verbose):
             host=final_host,
             port=final_port,
             log_level="info" if verbose else "warning",
-            access_log=verbose
+            access_log=verbose,
+            # XFF is owned by backend.core.rate_limit.get_client_ip — uvicorn's
+            # own proxy-header rewrite would let a peer spoof request.client.host
+            # before rate limiting sees it (H2).
+            proxy_headers=False,
         )
         server = uvicorn.Server(uvicorn_config)
 

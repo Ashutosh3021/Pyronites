@@ -1,0 +1,139 @@
+RLT harness  ->  http://127.0.0.1:8111
+  db         =   C:\Users\ashut\Downloads\Pyronites\Test(RLT)\DB\pyrocore.db
+  storage    =   C:\Users\ashut\Downloads\Pyronites\Test(RLT)\DB\storage_files
+INFO:     127.0.0.1:49184 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /tables HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49187 - "POST /tables HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49188 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "POST /auth/signup HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "POST /auth/logout HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49187 - "POST /auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "POST /auth/forgot-password HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "POST /auth/reset-password HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:49188 - "GET /api/keys HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "POST /api/keys HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "POST /api/keys HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "POST /tables HTTP/1.1" 403 Forbidden
+INFO:     127.0.0.1:49188 - "DELETE /api/keys/89d63f90-9064-4d96-98b1-883a7b58637a HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /tables HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49188 - "POST /tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "POST /tables/rlt_notes HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /tables/rlt_notes?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /tables/rlt_notes?limit=10&filter_column=title&filter_value=RLT%20first HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /tables/rlt_notes/8760cee4-1d39-475d-9f08-f6b86024d5e4 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /tables/rlt_notes/schema HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "PATCH /tables/rlt_notes/8760cee4-1d39-475d-9f08-f6b86024d5e4 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /tables/rlt_notes/8760cee4-1d39-475d-9f08-f6b86024d5e4 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "DELETE /tables/rlt_notes/8760cee4-1d39-475d-9f08-f6b86024d5e4 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /tables/rlt_notes/8760cee4-1d39-475d-9f08-f6b86024d5e4 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49187 - "POST /tables HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:49188 - "POST /tables HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:49187 - "GET /tables/nope_table HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49188 - "POST /tables/rlt_notes HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49187 - "POST /auth/signup HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "POST /auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "POST /sql/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "POST /sql/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "POST /sql/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "POST /sql/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "POST /sql/execute HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:49187 - "POST /storage/upload HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /storage HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /storage/01d41604-07ea-4bd2-8e36-f1c39706214d HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /storage/01d41604-07ea-4bd2-8e36-f1c39706214d/download HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "DELETE /storage/01d41604-07ea-4bd2-8e36-f1c39706214d HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /storage/01d41604-07ea-4bd2-8e36-f1c39706214d HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49187 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "POST /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /api/projects/rlt-project HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "PATCH /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "POST /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/select HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "POST /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "POST /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables/rlt_items HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables/rlt_items?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables/rlt_items?limit=10&filter_column=name&filter_value=scoped%20row HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables/rlt_items/schema HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables/rlt_items/29be92e9-2278-47e7-9c5b-ca7dbffa30a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "PATCH /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables/rlt_items/29be92e9-2278-47e7-9c5b-ca7dbffa30a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables/rlt_items/29be92e9-2278-47e7-9c5b-ca7dbffa30a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "DELETE /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables/rlt_items/29be92e9-2278-47e7-9c5b-ca7dbffa30a0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables/rlt_items/29be92e9-2278-47e7-9c5b-ca7dbffa30a0 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49187 - "POST /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/sql/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "POST /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/sql/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "POST /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/sql/execute HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "POST /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/sql/execute HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:49187 - "POST /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/storage/upload HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/storage HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/storage/433d3069-4234-41c6-aef8-e246f50aa233 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/storage/433d3069-4234-41c6-aef8-e246f50aa233/download HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "DELETE /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/storage/433d3069-4234-41c6-aef8-e246f50aa233 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/storage/433d3069-4234-41c6-aef8-e246f50aa233 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49187 - "POST /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/api/keys HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/api/keys HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "GET /tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables HTTP/1.1" 403 Forbidden
+INFO:     127.0.0.1:49188 - "DELETE /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/api/keys/9278ea5e-1ead-4057-8204-3cedfd8b597b HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:49187 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49190 - "DELETE /api/keys/92273390-9dab-4fee-8663-5cc69b45a2a2 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /tables HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49190 - "DELETE /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables/rlt_items HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49191 - "POST /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/archive HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:49191 - "POST /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/restore HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b/tables HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49191 - "DELETE /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /api/projects/a03e3de0-b547-43a3-805d-9a1d4313ef3b HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49192 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /api/logs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49192 - "GET /api/backups HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "POST /api/backup HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49192 - "POST /api/backup/restore HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /api/users HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49192 - "PATCH /api/users/201d46a8-b2d7-4242-9e63-8235a76b6c79 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "PATCH /api/users/201d46a8-b2d7-4242-9e63-8235a76b6c79 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49192 - "DELETE /api/users/201d46a8-b2d7-4242-9e63-8235a76b6c79 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /api/users HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49192 - "GET /api/sessions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "DELETE /api/sessions/0ebb06b2-7e79-4624-97dc-c16ae8a328b1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49192 - "GET /auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49187 - "POST /auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49192 - "GET /health HTTP/1.1" 200 OK
+INFO:     203.0.113.1:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.2:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.3:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.4:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.5:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.6:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.7:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.8:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.9:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.10:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.11:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.12:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.13:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.14:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.15:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.16:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.17:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.18:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.19:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.20:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.21:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.22:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.23:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.24:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     203.0.113.25:0 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:49192 - "DELETE /auth/account HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49187 - "GET /auth/me HTTP/1.1" 401 Unauthorized

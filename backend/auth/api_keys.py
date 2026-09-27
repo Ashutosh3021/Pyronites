@@ -42,6 +42,9 @@ class ApiKey(BaseModel):
     created_at: datetime
     last_used_at: Optional[datetime] = None
     is_revoked: bool = False
+    # Strangler marker: "legacy" = minted on the unscoped plane (allowed on
+    # /tables, /storage, /sql); "scoped" = minted on /api/projects/{id}/...
+    plane: str = "legacy"
 
 
 def create_api_key(
@@ -49,6 +52,7 @@ def create_api_key(
     project_id: str,
     name: str,
     scopes: List[str],
+    plane: str = "legacy",
 ) -> Tuple[str, "ApiKey"]:
     """
     Create a new API key and persist only its SHA-256 hash.
@@ -101,8 +105,8 @@ def create_api_key(
     try:
         db.execute(
             """
-        INSERT INTO api_keys (id, project_id, name, scopes, key_hash, created_at, is_revoked)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO api_keys (id, project_id, name, scopes, key_hash, created_at, is_revoked, plane)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 key_id,
@@ -112,6 +116,7 @@ def create_api_key(
                 key_hash,
                 created_at.isoformat(),
                 False,
+                plane if plane in ("legacy", "scoped") else "legacy",
             ),
         )
     except Exception as e:
@@ -126,6 +131,7 @@ def create_api_key(
         key_hash=key_hash,
         created_at=created_at,
         is_revoked=False,
+        plane=plane if plane in ("legacy", "scoped") else "legacy",
     )
 
     return (raw_key, api_key)
@@ -156,7 +162,7 @@ def validate_api_key(
     try:
         cursor = db.execute(
             """
-        SELECT id, project_id, name, scopes, key_hash, created_at, last_used_at, is_revoked
+        SELECT id, project_id, name, scopes, key_hash, created_at, last_used_at, is_revoked, plane
         FROM api_keys
         WHERE key_hash = ?
         """,
@@ -175,6 +181,7 @@ def validate_api_key(
             created_at_str,
             last_used_at_str,
             is_revoked,
+            plane,
         ) = row
 
         if bool(is_revoked):
@@ -200,6 +207,7 @@ def validate_api_key(
             created_at=created_at,
             last_used_at=last_used_at,
             is_revoked=False,
+            plane=plane or "legacy",
         )
 
     except Exception as e:
@@ -251,7 +259,7 @@ def list_api_keys(db: Database, project_ids: Optional[List[str]] = None) -> List
         DatabaseError: Propagated if the SELECT fails.
     """
     query = """
-        SELECT id, project_id, name, scopes, key_hash, created_at, last_used_at, is_revoked
+        SELECT id, project_id, name, scopes, key_hash, created_at, last_used_at, is_revoked, plane
         FROM api_keys
         WHERE is_revoked = FALSE
     """
@@ -275,6 +283,7 @@ def list_api_keys(db: Database, project_ids: Optional[List[str]] = None) -> List
                 created_at_str,
                 last_used_at_str,
                 is_revoked,
+                plane,
             ) = row
             scopes = scopes_str.split(",") if scopes_str else []
             last_used_at = datetime.fromisoformat(last_used_at_str) if last_used_at_str else None
@@ -289,6 +298,7 @@ def list_api_keys(db: Database, project_ids: Optional[List[str]] = None) -> List
                     created_at=created_at,
                     last_used_at=last_used_at,
                     is_revoked=bool(is_revoked),
+                    plane=plane or "legacy",
                 )
             )
         return keys

@@ -27,7 +27,7 @@ from backend.auth.sessions import (
 )
 from backend.auth.password_reset import create_reset_token, consume_reset_token
 from backend.core.email_brevo import send_password_reset_email
-from backend.core.db import Database, DatabaseError
+from backend.core.db import Database, DatabaseError, acquire_database, release_database
 from backend.api.schemas import ErrorResponse, to_utc_iso
 from backend.core.logring import record_event
 from backend.core import projects as projmod
@@ -91,12 +91,11 @@ def _cookie_samesite(request: Request | None = None) -> str:
 
 
 def get_db() -> Database:
-    db = Database(os.environ.get("DATABASE_PATH", "pyrocore.db"))
-    db.connect()
+    db = acquire_database(os.environ.get("DATABASE_PATH", "pyrocore.db"))
     try:
         yield db
     finally:
-        db.close()
+        release_database(db)
 
 
 def _set_session_cookie(response: Response, raw_token: str, request: Request | None = None) -> None:
@@ -415,7 +414,16 @@ async def delete_account(
     user_projects = projmod.list_projects_for_owner(db, user_id)
     for proj in user_projects:
         try:
-            projmod.hard_delete_project(db, proj["id"], proj["project_name"], owner_id=user_id)
+            projmod.hard_delete_project(
+                db,
+                proj["id"],
+                # _row_to_project maps project_name -> "name"; confirm with the
+                # canonical name and force past the last-active-project guard
+                # (account deletion removes every project by definition).
+                confirm_name=proj.get("name") or "",
+                owner_id=user_id,
+                force=True,
+            )
         except Exception:
             logger.warning("Failed to delete project %s during account deletion", proj["id"], exc_info=True)
 

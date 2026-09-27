@@ -71,4 +71,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 # 500 on the first write.  Running as root sidesteps that entire failure class.
 # If you need to harden this later, pre-chown the mounted volume to your
 # chosen uid and add a `USER` switch + an entrypoint that `chown`s /data.
-CMD exec python -m uvicorn backend.app:app --host ${HOST} --port ${PORT}
+CMD exec python -m uvicorn backend.app:app --host ${HOST} --port ${PORT} --no-proxy-headers

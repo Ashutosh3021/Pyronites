@@ -1,0 +1,3492 @@
+{
+  "total": 110,
+  "pass": 106,
+  "fail": 0,
+  "probe": 4,
+  "probeFail": 0,
+  "results": [
+    {
+      "seq": 1,
+      "id": "unauth.tables",
+      "name": "GET /tables",
+      "method": "GET",
+      "path": "/tables",
+      "status": 401,
+      "ms": 19,
+      "expect": [
+        401
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "unauthorized",
+        "message": "Missing or invalid authentication"
+      }
+    },
+    {
+      "seq": 2,
+      "id": "unauth.create",
+      "name": "POST /tables",
+      "method": "POST",
+      "path": "/tables",
+      "status": 401,
+      "ms": 13,
+      "expect": [
+        401
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "unauthorized",
+        "message": "Missing or invalid authentication"
+      }
+    },
+    {
+      "seq": 3,
+      "id": "health",
+      "name": "GET /health",
+      "method": "GET",
+      "path": "/health",
+      "status": 200,
+      "ms": 3,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "status": "ok",
+        "database": true
+      }
+    },
+    {
+      "seq": 4,
+      "id": "auth.signup",
+      "name": "POST /auth/signup",
+      "method": "POST",
+      "path": "/auth/signup",
+      "status": 200,
+      "ms": 130,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "11685f63-467e-41e3-a1fc-459076fe7049",
+        "email": "rlt_muk65yql@rltharness.dev",
+        "created_at": "2026-09-27T18:45:59.764992Z",
+        "default_project": {
+          "id": "7e27f724-9b30-4f13-a03c-d66b9268aa27",
+          "slug": "default-34",
+          "name": "Default"
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "id": "auth.me",
+      "name": "GET /auth/me",
+      "method": "GET",
+      "path": "/auth/me",
+      "status": 200,
+      "ms": 6,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "authenticated": true,
+        "email": "rlt_muk65yql@rltharness.dev",
+        "id": "11685f63-467e-41e3-a1fc-459076fe7049",
+        "last_project_id": "7e27f724-9b30-4f13-a03c-d66b9268aa27"
+      }
+    },
+    {
+      "seq": 6,
+      "id": "auth.logout",
+      "name": "POST /auth/logout",
+      "method": "POST",
+      "path": "/auth/logout",
+      "status": 200,
+      "ms": 15,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "message": "Logged out"
+      }
+    },
+    {
+      "seq": 7,
+      "id": "auth.me.unauth",
+      "name": "GET /auth/me after logout",
+      "method": "GET",
+      "path": "/auth/me",
+      "status": 401,
+      "ms": 14,
+      "expect": [
+        401
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "unauthorized",
+        "message": "Not authenticated"
+      }
+    },
+    {
+      "seq": 8,
+      "id": "auth.login",
+      "name": "POST /auth/login",
+      "method": "POST",
+      "path": "/auth/login",
+      "status": 200,
+      "ms": 114,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "email": "rlt_muk65yql@rltharness.dev"
+      }
+    },
+    {
+      "seq": 9,
+      "id": "auth.forgot",
+      "name": "POST /auth/forgot-password",
+      "method": "POST",
+      "path": "/auth/forgot-password",
+      "status": 200,
+      "ms": 871,
+      "expect": [
+        200,
+        429
+      ],
+      "pass": true,
+      "probe": false,
+      "note": "429 = per-IP+email limiter (5/hr) engaged",
+      "detail": null,
+      "data": {
+        "message": "If an account exists for that email, we sent password reset instructions."
+      }
+    },
+    {
+      "seq": 10,
+      "id": "auth.reset.bad",
+      "name": "POST /auth/reset-password (bad token)",
+      "method": "POST",
+      "path": "/auth/reset-password",
+      "status": 400,
+      "ms": 8,
+      "expect": [
+        400
+      ],
+      "pass": true,
+      "probe": false,
+      "note": "invalid_token",
+      "detail": null,
+      "data": {
+        "code": "invalid_token",
+        "message": "This reset link is invalid or has expired"
+      }
+    },
+    {
+      "seq": 11,
+      "id": "keys.list",
+      "name": "GET /api/keys",
+      "method": "GET",
+      "path": "/api/keys",
+      "status": 200,
+      "ms": 14,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": []
+    },
+    {
+      "seq": 12,
+      "id": "keys.create.admin",
+      "name": "POST /api/keys (admin scopes)",
+      "method": "POST",
+      "path": "/api/keys",
+      "status": 200,
+      "ms": 18,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "key": "pyro_live_pzmez02NQqsi6tfjK1_lE-5qcDCUK08oOzqPXBDcy2c",
+        "id": "adb30efc-e712-4c3d-9f05-fc89c65cf30b",
+        "name": "rlt-admin-key",
+        "project_id": "7e27f724-9b30-4f13-a03c-d66b9268aa27",
+        "scopes": [
+          "read",
+          "write",
+          "admin"
+        ],
+        "created_at": "2026-09-27T18:46:00.935609Z"
+      }
+    },
+    {
+      "seq": 13,
+      "id": "keys.bearer.tables",
+      "name": "GET /tables (Bearer admin key)",
+      "method": "GET",
+      "path": "/tables",
+      "status": 200,
+      "ms": 5,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "name": "books",
+          "rows": 1
+        },
+        {
+          "name": "rate_limit_hits",
+          "rows": 11
+        },
+        {
+          "name": "rlt_notes",
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "seq": 14,
+      "id": "keys.create.readonly",
+      "name": "POST /api/keys (read-only)",
+      "method": "POST",
+      "path": "/api/keys",
+      "status": 200,
+      "ms": 8,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "key": "pyro_live_5UxZeYhe_dKYAeka65P8vQy5sGdnj20tWsDXeXIRIHA",
+        "id": "9ba8672c-f595-41e1-ad1f-e5cf00f991cf",
+        "name": "rlt-read-key",
+        "project_id": "7e27f724-9b30-4f13-a03c-d66b9268aa27",
+        "scopes": [
+          "read"
+        ],
+        "created_at": "2026-09-27T18:46:00.949341Z"
+      }
+    },
+    {
+      "seq": 15,
+      "id": "keys.ro.get",
+      "name": "GET /tables (Bearer read-only)",
+      "method": "GET",
+      "path": "/tables",
+      "status": 200,
+      "ms": 15,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "name": "books",
+          "rows": 1
+        },
+        {
+          "name": "rate_limit_hits",
+          "rows": 11
+        },
+        {
+          "name": "rlt_notes",
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "seq": 16,
+      "id": "keys.ro.create.denied",
+      "name": "POST /tables (Bearer read-only → 403)",
+      "method": "POST",
+      "path": "/tables",
+      "status": 403,
+      "ms": 5,
+      "expect": [
+        403
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "forbidden",
+        "message": "Insufficient permissions — requires: admin scope"
+      }
+    },
+    {
+      "seq": 17,
+      "id": "keys.ro.revoke",
+      "name": "DELETE /api/keys/{roKey} (session)",
+      "method": "DELETE",
+      "path": "/api/keys/9ba8672c-f595-41e1-ad1f-e5cf00f991cf",
+      "status": 200,
+      "ms": 10,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "message": "API key revoked"
+      }
+    },
+    {
+      "seq": 18,
+      "id": "keys.ro.revoked.bearer",
+      "name": "GET /tables (revoked key → 401)",
+      "method": "GET",
+      "path": "/tables",
+      "status": 401,
+      "ms": 16,
+      "expect": [
+        401
+      ],
+      "pass": true,
+      "probe": false,
+      "note": "no session cookie: proves revoked Bearer itself is rejected",
+      "detail": null,
+      "data": {
+        "code": "unauthorized",
+        "message": "Missing or invalid authentication"
+      }
+    },
+    {
+      "seq": 19,
+      "id": "tbl.create",
+      "name": "POST /tables (create rlt_notes)",
+      "method": "POST",
+      "path": "/tables",
+      "status": 200,
+      "ms": 6,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "table": "rlt_notes",
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT"
+          },
+          {
+            "name": "title",
+            "type": "TEXT"
+          },
+          {
+            "name": "body",
+            "type": "TEXT"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 20,
+      "id": "tbl.list",
+      "name": "GET /tables",
+      "method": "GET",
+      "path": "/tables",
+      "status": 200,
+      "ms": 9,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "name": "books",
+          "rows": 1
+        },
+        {
+          "name": "rate_limit_hits",
+          "rows": 11
+        },
+        {
+          "name": "rlt_notes",
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "seq": 21,
+      "id": "tbl.insert",
+      "name": "POST /tables/rlt_notes (insert)",
+      "method": "POST",
+      "path": "/tables/rlt_notes",
+      "status": 200,
+      "ms": 16,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "fcb12cf2-3b7c-4414-9c03-6789d7e19e58",
+        "title": "RLT first",
+        "body": "hello"
+      }
+    },
+    {
+      "seq": 22,
+      "id": "tbl.list.rows",
+      "name": "GET /tables/rlt_notes?limit=10",
+      "method": "GET",
+      "path": "/tables/rlt_notes?limit=10",
+      "status": 200,
+      "ms": 16,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "id": "fcb12cf2-3b7c-4414-9c03-6789d7e19e58",
+          "title": "RLT first",
+          "body": "hello"
+        }
+      ]
+    },
+    {
+      "seq": 23,
+      "id": "tbl.list.filter",
+      "name": "GET /tables/rlt_notes (filter title)",
+      "method": "GET",
+      "path": "/tables/rlt_notes?limit=10&filter_column=title&filter_value=RLT%20first",
+      "status": 200,
+      "ms": 16,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "id": "fcb12cf2-3b7c-4414-9c03-6789d7e19e58",
+          "title": "RLT first",
+          "body": "hello"
+        }
+      ]
+    },
+    {
+      "seq": 24,
+      "id": "tbl.get",
+      "name": "GET /tables/rlt_notes/{id}",
+      "method": "GET",
+      "path": "/tables/rlt_notes/fcb12cf2-3b7c-4414-9c03-6789d7e19e58",
+      "status": 200,
+      "ms": 15,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "fcb12cf2-3b7c-4414-9c03-6789d7e19e58",
+        "title": "RLT first",
+        "body": "hello"
+      }
+    },
+    {
+      "seq": 25,
+      "id": "tbl.schema",
+      "name": "GET /tables/rlt_notes/schema",
+      "method": "GET",
+      "path": "/tables/rlt_notes/schema",
+      "status": 200,
+      "ms": 16,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "name": "id",
+          "type": "TEXT",
+          "pk": false
+        },
+        {
+          "name": "title",
+          "type": "TEXT",
+          "pk": false
+        },
+        {
+          "name": "body",
+          "type": "TEXT",
+          "pk": false
+        }
+      ]
+    },
+    {
+      "seq": 26,
+      "id": "tbl.patch",
+      "name": "PATCH /tables/rlt_notes/{id}",
+      "method": "PATCH",
+      "path": "/tables/rlt_notes/fcb12cf2-3b7c-4414-9c03-6789d7e19e58",
+      "status": 200,
+      "ms": 17,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "fcb12cf2-3b7c-4414-9c03-6789d7e19e58",
+        "title": "RLT updated",
+        "body": "hello"
+      }
+    },
+    {
+      "seq": 27,
+      "id": "tbl.get.after.patch",
+      "name": "GET row after patch",
+      "method": "GET",
+      "path": "/tables/rlt_notes/fcb12cf2-3b7c-4414-9c03-6789d7e19e58",
+      "status": 200,
+      "ms": 4,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "fcb12cf2-3b7c-4414-9c03-6789d7e19e58",
+        "title": "RLT updated",
+        "body": "hello"
+      }
+    },
+    {
+      "seq": 28,
+      "id": "tbl.delete.row",
+      "name": "DELETE /tables/rlt_notes/{id}",
+      "method": "DELETE",
+      "path": "/tables/rlt_notes/fcb12cf2-3b7c-4414-9c03-6789d7e19e58",
+      "status": 200,
+      "ms": 12,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "message": "Row deleted"
+      }
+    },
+    {
+      "seq": 29,
+      "id": "tbl.get.deleted",
+      "name": "GET deleted row → 404",
+      "method": "GET",
+      "path": "/tables/rlt_notes/fcb12cf2-3b7c-4414-9c03-6789d7e19e58",
+      "status": 404,
+      "ms": 13,
+      "expect": [
+        404
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "not_found",
+        "message": "Row not found"
+      }
+    },
+    {
+      "seq": 30,
+      "id": "tbl.create.badpk",
+      "name": "POST /tables (bad primary_key → 400)",
+      "method": "POST",
+      "path": "/tables",
+      "status": 400,
+      "ms": 17,
+      "expect": [
+        400
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "bad_request",
+        "message": "primary_key must name an existing column"
+      }
+    },
+    {
+      "seq": 31,
+      "id": "tbl.create.reserved",
+      "name": "POST /tables (reserved name → 422)",
+      "method": "POST",
+      "path": "/tables",
+      "status": 422,
+      "ms": 14,
+      "expect": [
+        422
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "validation_error",
+        "message": "body.table: Value error, that table name is reserved"
+      }
+    },
+    {
+      "seq": 32,
+      "id": "tbl.get.missing",
+      "name": "GET /tables/nope_table → 404",
+      "method": "GET",
+      "path": "/tables/nope_table",
+      "status": 404,
+      "ms": 16,
+      "expect": [
+        404
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "table_not_found",
+        "message": "Table 'nope_table' not found. Available tables: books, rate_limit_hits, rlt_notes"
+      }
+    },
+    {
+      "seq": 33,
+      "id": "tbl.insert.badcol",
+      "name": "POST /tables/rlt_notes (unknown column → 404)",
+      "method": "POST",
+      "path": "/tables/rlt_notes",
+      "status": 404,
+      "ms": 15,
+      "expect": [
+        404
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "column_not_found",
+        "message": "Column 'bogus_column' not found"
+      }
+    },
+    {
+      "seq": 34,
+      "id": "tenant.signup2",
+      "name": "POST /auth/signup (user2)",
+      "method": "POST",
+      "path": "/auth/signup",
+      "status": 200,
+      "ms": 106,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "550f8f38-4bb3-418c-be64-3ac3cab08134",
+        "email": "rlt2_muk65yql@rltharness.dev",
+        "created_at": "2026-09-27T18:46:01.205034Z",
+        "default_project": {
+          "id": "259e7c94-813c-468c-ac2a-2c449f34ca9f",
+          "slug": "default-36",
+          "name": "Default"
+        }
+      }
+    },
+    {
+      "seq": 35,
+      "id": "tenant.tables",
+      "name": "GET /tables (as user2) — PROBE",
+      "method": "GET",
+      "path": "/tables",
+      "status": 200,
+      "ms": 4,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": true,
+      "note": "shared meta: is rlt_notes (user1's table) visible to user2?",
+      "detail": "rlt_notes visible to user2: true — tables: [books, rate_limit_hits, rlt_notes]",
+      "data": [
+        {
+          "name": "books",
+          "rows": 1
+        },
+        {
+          "name": "rate_limit_hits",
+          "rows": 12
+        },
+        {
+          "name": "rlt_notes",
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "seq": 36,
+      "id": "tenant.relogin",
+      "name": "POST /auth/login (back to user1)",
+      "method": "POST",
+      "path": "/auth/login",
+      "status": 200,
+      "ms": 116,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "email": "rlt_muk65yql@rltharness.dev"
+      }
+    },
+    {
+      "seq": 37,
+      "id": "sql.read",
+      "name": "POST /sql/execute (SELECT 1)",
+      "method": "POST",
+      "path": "/sql/execute",
+      "status": 200,
+      "ms": 9,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "results": [
+          {
+            "statement": "SELECT 1 AS one",
+            "kind": "select",
+            "columns": [
+              "one"
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ],
+            "row_count": 1,
+            "changes": -1
+          }
+        ],
+        "backup": {
+          "taken": false
+        }
+      }
+    },
+    {
+      "seq": 38,
+      "id": "sql.write",
+      "name": "POST /sql/execute (CREATE+INSERT, auto-backup)",
+      "method": "POST",
+      "path": "/sql/execute",
+      "status": 200,
+      "ms": 48,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": "write → full-file backup of meta first",
+      "detail": null,
+      "data": {
+        "results": [
+          {
+            "statement": "CREATE TABLE IF NOT EXISTS rlt_sql (id TEXT, v TEXT)",
+            "kind": "write",
+            "columns": [],
+            "rows": [],
+            "row_count": 0,
+            "changes": -1
+          },
+          {
+            "statement": "INSERT INTO rlt_sql (id, v) VALUES ('s1','ok')",
+            "kind": "write",
+            "columns": [],
+            "rows": [],
+            "row_count": 0,
+            "changes": 1
+          }
+        ],
+        "backup": {
+          "taken": true,
+          "path": "C:\\Users\\ashut\\Downloads\\Pyronites\\Test(RLT)\\DB\\backups\\pyrocore_2026-09-27T18-46-01-448855.db"
+        }
+      }
+    },
+    {
+      "seq": 39,
+      "id": "sql.read.back",
+      "name": "POST /sql/execute (SELECT from rlt_sql)",
+      "method": "POST",
+      "path": "/sql/execute",
+      "status": 200,
+      "ms": 6,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "results": [
+          {
+            "statement": "SELECT * FROM rlt_sql",
+            "kind": "select",
+            "columns": [
+              "id",
+              "v"
+            ],
+            "rows": [
+              [
+                "s1",
+                "ok"
+              ]
+            ],
+            "row_count": 1,
+            "changes": -1
+          }
+        ],
+        "backup": {
+          "taken": false
+        }
+      }
+    },
+    {
+      "seq": 40,
+      "id": "sql.drop",
+      "name": "POST /sql/execute (DROP rlt_sql)",
+      "method": "POST",
+      "path": "/sql/execute",
+      "status": 200,
+      "ms": 37,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "results": [
+          {
+            "statement": "DROP TABLE rlt_sql",
+            "kind": "write",
+            "columns": [],
+            "rows": [],
+            "row_count": 0,
+            "changes": -1
+          }
+        ],
+        "backup": {
+          "taken": true,
+          "path": "C:\\Users\\ashut\\Downloads\\Pyronites\\Test(RLT)\\DB\\backups\\pyrocore_2026-09-27T18-46-01-496565.db"
+        }
+      }
+    },
+    {
+      "seq": 41,
+      "id": "sql.bad",
+      "name": "POST /sql/execute (syntax error → 400)",
+      "method": "POST",
+      "path": "/sql/execute",
+      "status": 400,
+      "ms": 46,
+      "expect": [
+        400
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "sql_error",
+        "message": "SQL error: near \"SELEC\": syntax error"
+      }
+    },
+    {
+      "seq": 42,
+      "id": "sto.upload",
+      "name": "POST /storage/upload",
+      "method": "POST",
+      "path": "/storage/upload",
+      "status": 200,
+      "ms": 22,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "ff9c5856-5f70-40ba-bfac-a32508b4caaf",
+        "original_filename": "rlt-upload.txt",
+        "content_type": "text/plain",
+        "size_bytes": 39,
+        "uploaded_at": "2026-09-27T18:46:01.590742Z",
+        "project_id": "default"
+      }
+    },
+    {
+      "seq": 43,
+      "id": "sto.list",
+      "name": "GET /storage",
+      "method": "GET",
+      "path": "/storage",
+      "status": 200,
+      "ms": 12,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "id": "ff9c5856-5f70-40ba-bfac-a32508b4caaf",
+          "original_filename": "rlt-upload.txt",
+          "content_type": "text/plain",
+          "size_bytes": 39,
+          "uploaded_at": "2026-09-27T18:46:01.590742Z",
+          "project_id": "default"
+        },
+        {
+          "id": "f3c47c24-7ac2-4d86-a12b-1421fbda6698",
+          "original_filename": "test_dl.txt",
+          "content_type": "text/plain",
+          "size_bytes": 37,
+          "uploaded_at": "2026-08-25T13:33:13.206368Z",
+          "project_id": "default"
+        },
+        {
+          "id": "c2f4303a-3161-4593-aa94-dfa65d942abd",
+          "original_filename": "test_dl.txt",
+          "content_type": "text/plain",
+          "size_bytes": 37,
+          "uploaded_at": "2026-08-25T13:16:03.523511Z",
+          "project_id": "default"
+        }
+      ]
+    },
+    {
+      "seq": 44,
+      "id": "sto.meta",
+      "name": "GET /storage/{id}",
+      "method": "GET",
+      "path": "/storage/ff9c5856-5f70-40ba-bfac-a32508b4caaf",
+      "status": 200,
+      "ms": 14,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "ff9c5856-5f70-40ba-bfac-a32508b4caaf",
+        "original_filename": "rlt-upload.txt",
+        "content_type": "text/plain",
+        "size_bytes": 39,
+        "uploaded_at": "2026-09-27T18:46:01.590742Z",
+        "project_id": "default"
+      }
+    },
+    {
+      "seq": 45,
+      "id": "sto.download",
+      "name": "GET /storage/{id}/download",
+      "method": "GET",
+      "path": "/storage/ff9c5856-5f70-40ba-bfac-a32508b4caaf/download",
+      "status": 200,
+      "ms": 5,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": "PyroCore RLT reference upload muk65yql\n"
+    },
+    {
+      "seq": 46,
+      "id": "sto.delete",
+      "name": "DELETE /storage/{id}",
+      "method": "DELETE",
+      "path": "/storage/ff9c5856-5f70-40ba-bfac-a32508b4caaf",
+      "status": 200,
+      "ms": 11,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "message": "File deleted successfully"
+      }
+    },
+    {
+      "seq": 47,
+      "id": "sto.meta.deleted",
+      "name": "GET /storage/{id} after delete → 404",
+      "method": "GET",
+      "path": "/storage/ff9c5856-5f70-40ba-bfac-a32508b4caaf",
+      "status": 404,
+      "ms": 16,
+      "expect": [
+        404
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "not_found",
+        "message": "File not found"
+      }
+    },
+    {
+      "seq": 48,
+      "id": "prj.list",
+      "name": "GET /api/projects",
+      "method": "GET",
+      "path": "/api/projects",
+      "status": 200,
+      "ms": 14,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "projects": [
+          {
+            "id": "7e27f724-9b30-4f13-a03c-d66b9268aa27",
+            "project_id": "default-34",
+            "slug": "default-34",
+            "name": "Default",
+            "project_name": "Default",
+            "status": "active",
+            "storage_location": "local",
+            "backup_interval": "1hour",
+            "enable_public_api": true,
+            "created_at": "2026-09-27T18:45:59.871768+00:00",
+            "updated_at": "2026-09-27T18:45:59.871768+00:00"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 49,
+      "id": "prj.create",
+      "name": "POST /api/projects (create)",
+      "method": "POST",
+      "path": "/api/projects",
+      "status": 200,
+      "ms": 69,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "27b9a497-9ec4-4539-be91-7c1cd3bc4c33",
+        "project_id": "rlt-project",
+        "slug": "rlt-project",
+        "name": "RLT Project",
+        "project_name": "RLT Project",
+        "status": "active",
+        "storage_location": "local",
+        "backup_interval": "1hour",
+        "enable_public_api": true,
+        "created_at": "2026-09-27T18:46:01.686255+00:00",
+        "updated_at": "2026-09-27T18:46:01.686255+00:00",
+        "api_key": {
+          "key": "pyro_live_W1hqf4wNJ06PAU2dDXNHpwZQf0k8ImKlrVM5fnWL9SQ",
+          "id": "76cda87f-c3a1-427b-9743-c5ef81c320e3",
+          "name": "default",
+          "scopes": [
+            "read",
+            "write"
+          ],
+          "created_at": "2026-09-27T18:46:01.735305Z"
+        }
+      }
+    },
+    {
+      "seq": 50,
+      "id": "prj.get.uuid",
+      "name": "GET /api/projects/{uuid}",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33",
+      "status": 200,
+      "ms": 10,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "27b9a497-9ec4-4539-be91-7c1cd3bc4c33",
+        "project_id": "rlt-project",
+        "slug": "rlt-project",
+        "name": "RLT Project",
+        "project_name": "RLT Project",
+        "status": "active",
+        "storage_location": "local",
+        "backup_interval": "1hour",
+        "enable_public_api": true,
+        "created_at": "2026-09-27T18:46:01.686255+00:00",
+        "updated_at": "2026-09-27T18:46:01.686255+00:00"
+      }
+    },
+    {
+      "seq": 51,
+      "id": "prj.get.slug",
+      "name": "GET /api/projects/{slug}",
+      "method": "GET",
+      "path": "/api/projects/rlt-project",
+      "status": 200,
+      "ms": 4,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": "slug and UUID must both resolve",
+      "detail": null,
+      "data": {
+        "id": "27b9a497-9ec4-4539-be91-7c1cd3bc4c33",
+        "project_id": "rlt-project",
+        "slug": "rlt-project",
+        "name": "RLT Project",
+        "project_name": "RLT Project",
+        "status": "active",
+        "storage_location": "local",
+        "backup_interval": "1hour",
+        "enable_public_api": true,
+        "created_at": "2026-09-27T18:46:01.686255+00:00",
+        "updated_at": "2026-09-27T18:46:01.686255+00:00"
+      }
+    },
+    {
+      "seq": 52,
+      "id": "prj.patch",
+      "name": "PATCH /api/projects/{id} (rename)",
+      "method": "PATCH",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33",
+      "status": 200,
+      "ms": 14,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "27b9a497-9ec4-4539-be91-7c1cd3bc4c33",
+        "project_id": "rlt-project",
+        "slug": "rlt-project",
+        "name": "RLT Project Renamed",
+        "project_name": "RLT Project Renamed",
+        "status": "active",
+        "storage_location": "local",
+        "backup_interval": "1hour",
+        "enable_public_api": true,
+        "created_at": "2026-09-27T18:46:01.686255+00:00",
+        "updated_at": "2026-09-27T18:46:01.765073+00:00"
+      }
+    },
+    {
+      "seq": 53,
+      "id": "prj.select",
+      "name": "POST /api/projects/{id}/select",
+      "method": "POST",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/select",
+      "status": 200,
+      "ms": 12,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "message": "Active project updated",
+        "project_id": "27b9a497-9ec4-4539-be91-7c1cd3bc4c33"
+      }
+    },
+    {
+      "seq": 54,
+      "id": "scp.stats",
+      "name": "GET …/stats",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/stats",
+      "status": 200,
+      "ms": 25,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "table_count": 1,
+        "file_count": 0,
+        "key_count": 1,
+        "db_size_bytes": 110592,
+        "last_backup": null,
+        "project": {
+          "project_id": "rlt-project",
+          "project_name": "RLT Project Renamed",
+          "backup_interval": "1hour",
+          "storage_location": "local",
+          "id": "27b9a497-9ec4-4539-be91-7c1cd3bc4c33"
+        }
+      }
+    },
+    {
+      "seq": 55,
+      "id": "scp.tbl.create",
+      "name": "POST …/tables (create rlt_items)",
+      "method": "POST",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables",
+      "status": 200,
+      "ms": 15,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "table": "rlt_items",
+        "columns": [
+          {
+            "name": "id",
+            "type": "TEXT"
+          },
+          {
+            "name": "name",
+            "type": "TEXT"
+          },
+          {
+            "name": "qty",
+            "type": "TEXT"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 56,
+      "id": "scp.tbl.list",
+      "name": "GET …/tables",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables",
+      "status": 200,
+      "ms": 9,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "name": "rate_limit_hits",
+          "rows": 0
+        },
+        {
+          "name": "rlt_items",
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "seq": 57,
+      "id": "scp.tbl.insert",
+      "name": "POST …/tables/rlt_items (insert)",
+      "method": "POST",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables/rlt_items",
+      "status": 200,
+      "ms": 16,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "9e1bac1e-33eb-45af-a57c-bdad3be9d8bd",
+        "name": "scoped row",
+        "qty": "3"
+      }
+    },
+    {
+      "seq": 58,
+      "id": "scp.tbl.rows",
+      "name": "GET …/tables/rlt_items?limit=10",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables/rlt_items?limit=10",
+      "status": 200,
+      "ms": 7,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "id": "9e1bac1e-33eb-45af-a57c-bdad3be9d8bd",
+          "name": "scoped row",
+          "qty": "3"
+        }
+      ]
+    },
+    {
+      "seq": 59,
+      "id": "scp.tbl.filter",
+      "name": "GET …/tables/rlt_items (filter)",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables/rlt_items?limit=10&filter_column=name&filter_value=scoped%20row",
+      "status": 200,
+      "ms": 8,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "id": "9e1bac1e-33eb-45af-a57c-bdad3be9d8bd",
+          "name": "scoped row",
+          "qty": "3"
+        }
+      ]
+    },
+    {
+      "seq": 60,
+      "id": "scp.tbl.schema",
+      "name": "GET …/tables/rlt_items/schema",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables/rlt_items/schema",
+      "status": 200,
+      "ms": 16,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "name": "id",
+          "type": "TEXT",
+          "pk": false
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "pk": false
+        },
+        {
+          "name": "qty",
+          "type": "TEXT",
+          "pk": false
+        }
+      ]
+    },
+    {
+      "seq": 61,
+      "id": "scp.tbl.get",
+      "name": "GET …/tables/rlt_items/{id}",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables/rlt_items/9e1bac1e-33eb-45af-a57c-bdad3be9d8bd",
+      "status": 200,
+      "ms": 15,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "9e1bac1e-33eb-45af-a57c-bdad3be9d8bd",
+        "name": "scoped row",
+        "qty": "3"
+      }
+    },
+    {
+      "seq": 62,
+      "id": "scp.tbl.patch",
+      "name": "PATCH …/tables/rlt_items/{id}",
+      "method": "PATCH",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables/rlt_items/9e1bac1e-33eb-45af-a57c-bdad3be9d8bd",
+      "status": 200,
+      "ms": 16,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "9e1bac1e-33eb-45af-a57c-bdad3be9d8bd",
+        "name": "scoped row 2",
+        "qty": "3"
+      }
+    },
+    {
+      "seq": 63,
+      "id": "scp.tbl.get.patched",
+      "name": "GET row after patch",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables/rlt_items/9e1bac1e-33eb-45af-a57c-bdad3be9d8bd",
+      "status": 200,
+      "ms": 14,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "9e1bac1e-33eb-45af-a57c-bdad3be9d8bd",
+        "name": "scoped row 2",
+        "qty": "3"
+      }
+    },
+    {
+      "seq": 64,
+      "id": "scp.tbl.delete",
+      "name": "DELETE …/tables/rlt_items/{id}",
+      "method": "DELETE",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables/rlt_items/9e1bac1e-33eb-45af-a57c-bdad3be9d8bd",
+      "status": 200,
+      "ms": 16,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "message": "Row deleted"
+      }
+    },
+    {
+      "seq": 65,
+      "id": "scp.tbl.get.deleted",
+      "name": "GET deleted row → 404",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables/rlt_items/9e1bac1e-33eb-45af-a57c-bdad3be9d8bd",
+      "status": 404,
+      "ms": 14,
+      "expect": [
+        404
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "not_found",
+        "message": "Row not found"
+      }
+    },
+    {
+      "seq": 66,
+      "id": "scp.sql.read",
+      "name": "POST …/sql/execute (SELECT)",
+      "method": "POST",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/sql/execute",
+      "status": 200,
+      "ms": 16,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "results": [
+          {
+            "statement": "SELECT 1 AS scoped_ok",
+            "kind": "select",
+            "columns": [
+              "scoped_ok"
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ],
+            "row_count": 1,
+            "changes": -1
+          }
+        ],
+        "backup": {
+          "taken": false
+        }
+      }
+    },
+    {
+      "seq": 67,
+      "id": "scp.sql.write",
+      "name": "POST …/sql/execute (write, auto-backup)",
+      "method": "POST",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/sql/execute",
+      "status": 200,
+      "ms": 46,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": "backup of the PROJECT file, not meta",
+      "detail": null,
+      "data": {
+        "results": [
+          {
+            "statement": "CREATE TABLE IF NOT EXISTS rlt_ssql (id TEXT)",
+            "kind": "write",
+            "columns": [],
+            "rows": [],
+            "row_count": 0,
+            "changes": -1
+          },
+          {
+            "statement": "INSERT INTO rlt_ssql (id) VALUES ('a')",
+            "kind": "write",
+            "columns": [],
+            "rows": [],
+            "row_count": 0,
+            "changes": 1
+          }
+        ],
+        "backup": {
+          "taken": true,
+          "path": "C:\\Users\\ashut\\Downloads\\Pyronites\\Test(RLT)\\DB\\data\\projects\\backups\\27b9a497-9ec4-4539-be91-7c1cd3bc4c33_2026-09-27T18-46-01-984788.db"
+        }
+      }
+    },
+    {
+      "seq": 68,
+      "id": "scp.sql.drop",
+      "name": "POST …/sql/execute (DROP rlt_ssql)",
+      "method": "POST",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/sql/execute",
+      "status": 200,
+      "ms": 43,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "results": [
+          {
+            "statement": "DROP TABLE rlt_ssql",
+            "kind": "write",
+            "columns": [],
+            "rows": [],
+            "row_count": 0,
+            "changes": -1
+          }
+        ],
+        "backup": {
+          "taken": true,
+          "path": "C:\\Users\\ashut\\Downloads\\Pyronites\\Test(RLT)\\DB\\data\\projects\\backups\\27b9a497-9ec4-4539-be91-7c1cd3bc4c33_2026-09-27T18-46-02-029663.db"
+        }
+      }
+    },
+    {
+      "seq": 69,
+      "id": "scp.sql.bad",
+      "name": "POST …/sql/execute (syntax error → 400)",
+      "method": "POST",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/sql/execute",
+      "status": 400,
+      "ms": 29,
+      "expect": [
+        400
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "sql_error",
+        "message": "Operational error in transaction: near \"SELEC\": syntax error"
+      }
+    },
+    {
+      "seq": 70,
+      "id": "scp.sto.upload",
+      "name": "POST …/storage/upload",
+      "method": "POST",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/storage/upload",
+      "status": 200,
+      "ms": 12,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "e1c26f7e-072b-431a-ae3f-4be5dcc87f5e",
+        "original_filename": "rlt-upload.txt",
+        "content_type": "text/plain",
+        "size_bytes": 39,
+        "uploaded_at": "2026-09-27T18:46:02.092539Z",
+        "project_id": "rlt-project"
+      }
+    },
+    {
+      "seq": 71,
+      "id": "scp.sto.list",
+      "name": "GET …/storage",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/storage",
+      "status": 200,
+      "ms": 11,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "id": "e1c26f7e-072b-431a-ae3f-4be5dcc87f5e",
+          "original_filename": "rlt-upload.txt",
+          "content_type": "text/plain",
+          "size_bytes": 39,
+          "uploaded_at": "2026-09-27T18:46:02.092539Z",
+          "project_id": "rlt-project"
+        }
+      ]
+    },
+    {
+      "seq": 72,
+      "id": "scp.sto.meta",
+      "name": "GET …/storage/{id}",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/storage/e1c26f7e-072b-431a-ae3f-4be5dcc87f5e",
+      "status": 200,
+      "ms": 15,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "e1c26f7e-072b-431a-ae3f-4be5dcc87f5e",
+        "original_filename": "rlt-upload.txt",
+        "content_type": "text/plain",
+        "size_bytes": 39,
+        "uploaded_at": "2026-09-27T18:46:02.092539Z",
+        "project_id": "rlt-project"
+      }
+    },
+    {
+      "seq": 73,
+      "id": "scp.sto.download",
+      "name": "GET …/storage/{id}/download",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/storage/e1c26f7e-072b-431a-ae3f-4be5dcc87f5e/download",
+      "status": 200,
+      "ms": 16,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": "PyroCore RLT reference upload muk65yql\n"
+    },
+    {
+      "seq": 74,
+      "id": "scp.sto.delete",
+      "name": "DELETE …/storage/{id}",
+      "method": "DELETE",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/storage/e1c26f7e-072b-431a-ae3f-4be5dcc87f5e",
+      "status": 200,
+      "ms": 15,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "message": "File deleted successfully"
+      }
+    },
+    {
+      "seq": 75,
+      "id": "scp.sto.meta.deleted",
+      "name": "GET …/storage/{id} after delete → 404",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/storage/e1c26f7e-072b-431a-ae3f-4be5dcc87f5e",
+      "status": 404,
+      "ms": 16,
+      "expect": [
+        404
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "not_found",
+        "message": "File not found"
+      }
+    },
+    {
+      "seq": 76,
+      "id": "scp.key.create",
+      "name": "POST …/api/keys (scoped key)",
+      "method": "POST",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/api/keys",
+      "status": 200,
+      "ms": 16,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "key": "pyro_live_qsUi2Amjg1GB0i2Rx_XLbLfEDH9KOlyhElazgZLcCxA",
+        "id": "11c552c2-8980-4102-806f-fda29ba48364",
+        "name": "rlt-scoped-key",
+        "scopes": [
+          "read",
+          "write"
+        ],
+        "created_at": "2026-09-27T18:46:02.186313Z",
+        "project_id": "27b9a497-9ec4-4539-be91-7c1cd3bc4c33"
+      }
+    },
+    {
+      "seq": 77,
+      "id": "scp.key.list",
+      "name": "GET …/api/keys",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/api/keys",
+      "status": 200,
+      "ms": 14,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "id": "11c552c2-8980-4102-806f-fda29ba48364",
+          "name": "rlt-scoped-key",
+          "masked": "pyro_live_••••••••••14cb",
+          "scopes": [
+            "read",
+            "write"
+          ],
+          "created_at": "2026-09-27T18:46:02.186313Z",
+          "last_used_at": null,
+          "project_id": "27b9a497-9ec4-4539-be91-7c1cd3bc4c33"
+        },
+        {
+          "id": "76cda87f-c3a1-427b-9743-c5ef81c320e3",
+          "name": "default",
+          "masked": "pyro_live_••••••••••a87d",
+          "scopes": [
+            "read",
+            "write"
+          ],
+          "created_at": "2026-09-27T18:46:01.735305Z",
+          "last_used_at": null,
+          "project_id": "rlt-project"
+        }
+      ]
+    },
+    {
+      "seq": 78,
+      "id": "scp.key.bearer",
+      "name": "GET …/tables (Bearer scoped key)",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables",
+      "status": 200,
+      "ms": 15,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "name": "rate_limit_hits",
+          "rows": 0
+        },
+        {
+          "name": "rlt_items",
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "seq": 79,
+      "id": "scp.key.on.unscoped",
+      "name": "GET /tables (scoped key on unscoped plane) — PROBE",
+      "method": "GET",
+      "path": "/tables",
+      "status": 403,
+      "ms": 12,
+      "expect": [
+        403
+      ],
+      "pass": true,
+      "probe": true,
+      "note": "scoped-plane keys must not reach the tenancy-blind legacy plane (H1: 403 = fixed)",
+      "detail": null,
+      "data": {
+        "code": "forbidden",
+        "message": "This API key belongs to a project-scoped endpoint; use /api/projects/{project_id}/..."
+      }
+    },
+    {
+      "seq": 80,
+      "id": "scp.wrong.project",
+      "name": "GET …/tables (default-project key on OTHER project → 403)",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables",
+      "status": 403,
+      "ms": 5,
+      "expect": [
+        403
+      ],
+      "pass": true,
+      "probe": false,
+      "note": "API key project binding (BUG-3 reference)",
+      "detail": null,
+      "data": {
+        "code": "forbidden",
+        "message": "API key is not valid for this project"
+      }
+    },
+    {
+      "seq": 81,
+      "id": "scp.key.revoke",
+      "name": "DELETE …/api/keys/{scopedKey} (session)",
+      "method": "DELETE",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/api/keys/11c552c2-8980-4102-806f-fda29ba48364",
+      "status": 200,
+      "ms": 14,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "message": "API key revoked"
+      }
+    },
+    {
+      "seq": 82,
+      "id": "scp.key.revoked.bearer",
+      "name": "GET …/tables (revoked scoped key → 401)",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables",
+      "status": 401,
+      "ms": 14,
+      "expect": [
+        401
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "unauthorized",
+        "message": "Missing or invalid authentication"
+      }
+    },
+    {
+      "seq": 83,
+      "id": "keys.admin.revoke",
+      "name": "DELETE /api/keys/{adminKey} (session)",
+      "method": "DELETE",
+      "path": "/api/keys/adb30efc-e712-4c3d-9f05-fc89c65cf30b",
+      "status": 200,
+      "ms": 13,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "message": "API key revoked"
+      }
+    },
+    {
+      "seq": 84,
+      "id": "keys.admin.revoked.bearer",
+      "name": "GET /tables (revoked admin key → 401)",
+      "method": "GET",
+      "path": "/tables",
+      "status": 401,
+      "ms": 14,
+      "expect": [
+        401
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "unauthorized",
+        "message": "Missing or invalid authentication"
+      }
+    },
+    {
+      "seq": 85,
+      "id": "scp.tbl.drop",
+      "name": "DELETE …/tables/rlt_items (drop)",
+      "method": "DELETE",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables/rlt_items",
+      "status": 200,
+      "ms": 10,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "message": "Table 'rlt_items' dropped"
+      }
+    },
+    {
+      "seq": 86,
+      "id": "scp.tbl.dropped",
+      "name": "GET …/tables (rlt_items gone)",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables",
+      "status": 200,
+      "ms": 8,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "name": "rate_limit_hits",
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "seq": 87,
+      "id": "prj.archive",
+      "name": "POST /api/projects/{id}/archive",
+      "method": "POST",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/archive",
+      "status": 200,
+      "ms": 5,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "27b9a497-9ec4-4539-be91-7c1cd3bc4c33",
+        "project_id": "rlt-project",
+        "slug": "rlt-project",
+        "name": "RLT Project Renamed",
+        "project_name": "RLT Project Renamed",
+        "status": "archived",
+        "storage_location": "local",
+        "backup_interval": "1hour",
+        "enable_public_api": true,
+        "created_at": "2026-09-27T18:46:01.686255+00:00",
+        "updated_at": "2026-09-27T18:46:02.316519+00:00"
+      }
+    },
+    {
+      "seq": 88,
+      "id": "prj.archived.blocked",
+      "name": "GET …/tables (archived → 409)",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables",
+      "status": 409,
+      "ms": 5,
+      "expect": [
+        409
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "archived",
+        "message": "Project is archived"
+      }
+    },
+    {
+      "seq": 89,
+      "id": "prj.restore",
+      "name": "POST /api/projects/{id}/restore",
+      "method": "POST",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/restore",
+      "status": 200,
+      "ms": 14,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "27b9a497-9ec4-4539-be91-7c1cd3bc4c33",
+        "project_id": "rlt-project",
+        "slug": "rlt-project",
+        "name": "RLT Project Renamed",
+        "project_name": "RLT Project Renamed",
+        "status": "active",
+        "storage_location": "local",
+        "backup_interval": "1hour",
+        "enable_public_api": true,
+        "created_at": "2026-09-27T18:46:01.686255+00:00",
+        "updated_at": "2026-09-27T18:46:02.337610+00:00"
+      }
+    },
+    {
+      "seq": 90,
+      "id": "prj.restored.ok",
+      "name": "GET …/tables after restore",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables",
+      "status": 200,
+      "ms": 18,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "name": "rate_limit_hits",
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "seq": 91,
+      "id": "prj.delete",
+      "name": "DELETE /api/projects/{id} (confirm name)",
+      "method": "DELETE",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33",
+      "status": 200,
+      "ms": 18,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "message": "Project deleted"
+      }
+    },
+    {
+      "seq": 92,
+      "id": "prj.get.deleted",
+      "name": "GET /api/projects/{id} after delete → 404",
+      "method": "GET",
+      "path": "/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33",
+      "status": 404,
+      "ms": 3,
+      "expect": [
+        404
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "not_found",
+        "message": "Project not found"
+      }
+    },
+    {
+      "seq": 93,
+      "id": "sys.stats",
+      "name": "GET /api/stats",
+      "method": "GET",
+      "path": "/api/stats",
+      "status": 200,
+      "ms": 6,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "table_count": 3,
+        "file_count": 2,
+        "key_count": 5,
+        "db_size_bytes": 155648,
+        "last_backup": "2026-09-27T18:46:01.544215Z",
+        "project": {
+          "project_id": "default-36",
+          "project_name": "Default",
+          "backup_interval": "1hour",
+          "created_at": "2026-09-27T18:46:01.304503+00:00"
+        }
+      }
+    },
+    {
+      "seq": 94,
+      "id": "sys.logs",
+      "name": "GET /api/logs",
+      "method": "GET",
+      "path": "/api/logs",
+      "status": 200,
+      "ms": 20,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": "in-memory ring — empty after every restart",
+      "detail": null,
+      "data": [
+        {
+          "id": "26",
+          "timestamp": "2026-09-27T18:46:02.374314Z",
+          "level": "warning",
+          "action": "Project hard-deleted: RLT Project Renamed",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "25",
+          "timestamp": "2026-09-27T18:46:02.374314Z",
+          "level": "warning",
+          "action": "Could not remove project DB file C:\\Users\\ashut\\Downloads\\Pyronites\\Test(RLT)\\DB\\data\\projects\\27b9a497-9ec4-4539-be91-7c1cd3bc4c33.db: [WinError 32] The process cannot access the file because it is being used by another process: 'C:\\\\Users\\\\ashut\\\\Downloads\\\\Pyronites\\\\Test(RLT)\\\\DB\\\\data\\\\projects\\\\27b9a497-9ec4-4539-be91-7c1cd3bc4c33.db'",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "24",
+          "timestamp": "2026-09-27T18:46:02.337610Z",
+          "level": "info",
+          "action": "Project restored: RLT Project Renamed",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "23",
+          "timestamp": "2026-09-27T18:46:02.317516Z",
+          "level": "warning",
+          "action": "Project archived: RLT Project Renamed",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "22",
+          "timestamp": "2026-09-27T18:46:02.298934Z",
+          "level": "warning",
+          "action": "Table dropped: rlt_items",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "21",
+          "timestamp": "2026-09-27T18:46:02.291845Z",
+          "level": "warning",
+          "action": "Invalid API key presented (ip=127.0.0.1, path=/tables)",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "20",
+          "timestamp": "2026-09-27T18:46:02.277630Z",
+          "level": "warning",
+          "action": "API key revoked: adb30efc-e712-4c3d-9f05-fc89c65cf30b",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "19",
+          "timestamp": "2026-09-27T18:46:02.261562Z",
+          "level": "warning",
+          "action": "Invalid API key presented (ip=127.0.0.1, path=/api/projects/27b9a497-9ec4-4539-be91-7c1cd3bc4c33/tables)",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "18",
+          "timestamp": "2026-09-27T18:46:02.248459Z",
+          "level": "warning",
+          "action": "API key revoked: 11c552c2-8980-4102-806f-fda29ba48364",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "17",
+          "timestamp": "2026-09-27T18:46:02.186313Z",
+          "level": "success",
+          "action": "API key created: rlt-scoped-key (rlt-project)",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "16",
+          "timestamp": "2026-09-27T18:46:01.817237Z",
+          "level": "success",
+          "action": "Table created: rlt_items",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "15",
+          "timestamp": "2026-09-27T18:46:01.765073Z",
+          "level": "info",
+          "action": "Project updated: RLT Project Renamed",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "14",
+          "timestamp": "2026-09-27T18:46:01.736308Z",
+          "level": "success",
+          "action": "Project created: RLT Project",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "13",
+          "timestamp": "2026-09-27T18:46:01.425478Z",
+          "level": "info",
+          "action": "User logged in: rlt_muk65yql@rltharness.dev",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "12",
+          "timestamp": "2026-09-27T18:46:01.305513Z",
+          "level": "success",
+          "action": "User signed up: rlt2_muk65yql@rltharness.dev",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "11",
+          "timestamp": "2026-09-27T18:46:01.002732Z",
+          "level": "success",
+          "action": "Table created: rlt_notes",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "10",
+          "timestamp": "2026-09-27T18:46:00.997679Z",
+          "level": "warning",
+          "action": "Invalid API key presented (ip=127.0.0.1, path=/tables)",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "9",
+          "timestamp": "2026-09-27T18:46:00.981092Z",
+          "level": "warning",
+          "action": "API key revoked: 9ba8672c-f595-41e1-ad1f-e5cf00f991cf",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "8",
+          "timestamp": "2026-09-27T18:46:00.949341Z",
+          "level": "success",
+          "action": "API key created: rlt-read-key",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "7",
+          "timestamp": "2026-09-27T18:46:00.935609Z",
+          "level": "success",
+          "action": "API key created: rlt-admin-key",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "6",
+          "timestamp": "2026-09-27T18:46:00.894375Z",
+          "level": "info",
+          "action": "Password reset requested",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "5",
+          "timestamp": "2026-09-27T18:46:00.894375Z",
+          "level": "error",
+          "action": "Brevo HTTPError status=401 body=b'{\"message\":\"We have detected you are using an unrecognised IP address 122.185.181.210. If you performed this action make sure to add the new IP address in this link: https://app.brevo.com/security/authorised_ips\",\"code\":\"unauthorized\"}\\n'",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "4",
+          "timestamp": "2026-09-27T18:46:00.022644Z",
+          "level": "info",
+          "action": "User logged in: rlt_muk65yql@rltharness.dev",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "3",
+          "timestamp": "2026-09-27T18:45:59.895335Z",
+          "level": "info",
+          "action": "User logged out",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "2",
+          "timestamp": "2026-09-27T18:45:59.873025Z",
+          "level": "success",
+          "action": "User signed up: rlt_muk65yql@rltharness.dev",
+          "statusCode": null,
+          "project_id": null
+        },
+        {
+          "id": "1",
+          "timestamp": "2026-09-27T18:45:49.920009Z",
+          "level": "info",
+          "action": "Server started",
+          "statusCode": null,
+          "project_id": null
+        }
+      ]
+    },
+    {
+      "seq": 95,
+      "id": "sys.backups",
+      "name": "GET /api/backups",
+      "method": "GET",
+      "path": "/api/backups",
+      "status": 200,
+      "ms": 16,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "path": "C:\\Users\\ashut\\Downloads\\Pyronites\\Test(RLT)\\DB\\backups\\pyrocore_2026-09-27T18-46-01-544215.db",
+          "name": "pyrocore_2026-09-27T18-46-01-544215.db",
+          "created_at": "2026-09-27T18:46:01.544215Z",
+          "size_bytes": 155648
+        },
+        {
+          "path": "C:\\Users\\ashut\\Downloads\\Pyronites\\Test(RLT)\\DB\\backups\\pyrocore_2026-09-27T18-46-01-496565.db",
+          "name": "pyrocore_2026-09-27T18-46-01-496565.db",
+          "created_at": "2026-09-27T18:46:01.496565Z",
+          "size_bytes": 155648
+        },
+        {
+          "path": "C:\\Users\\ashut\\Downloads\\Pyronites\\Test(RLT)\\DB\\backups\\pyrocore_2026-09-27T18-46-01-448855.db",
+          "name": "pyrocore_2026-09-27T18-46-01-448855.db",
+          "created_at": "2026-09-27T18:46:01.448855Z",
+          "size_bytes": 155648
+        },
+        {
+          "path": "C:\\Users\\ashut\\Downloads\\Pyronites\\Test(RLT)\\DB\\backups\\pyrocore_2026-09-27T18-45-49-920009.db",
+          "name": "pyrocore_2026-09-27T18-45-49-920009.db",
+          "created_at": "2026-09-27T18:45:49.920009Z",
+          "size_bytes": 155648
+        }
+      ]
+    },
+    {
+      "seq": 96,
+      "id": "sys.backup",
+      "name": "POST /api/backup",
+      "method": "POST",
+      "path": "/api/backup",
+      "status": 200,
+      "ms": 44,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "path": "C:\\Users\\ashut\\Downloads\\Pyronites\\Test(RLT)\\DB\\backups\\pyrocore_2026-09-27T18-46-02-433110.db",
+        "created_at": "2026-09-27T18:46:02.463913Z"
+      }
+    },
+    {
+      "seq": 97,
+      "id": "sys.restore",
+      "name": "POST /api/backup/restore (own backup)",
+      "method": "POST",
+      "path": "/api/backup/restore",
+      "status": 200,
+      "ms": 29,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": "path is used verbatim — arbitrary-path acceptance = H4",
+      "detail": null,
+      "data": {
+        "message": "restored",
+        "path": "C:\\Users\\ashut\\Downloads\\Pyronites\\Test(RLT)\\DB\\backups\\pyrocore_2026-09-27T18-46-02-433110.db"
+      }
+    },
+    {
+      "seq": 98,
+      "id": "sys.users",
+      "name": "GET /api/users",
+      "method": "GET",
+      "path": "/api/users",
+      "status": 200,
+      "ms": 18,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "id": "550f8f38-4bb3-418c-be64-3ac3cab08134",
+          "email": "rlt2_muk65yql@rltharness.dev",
+          "created_at": "2026-09-27T18:46:01.205034+00:00",
+          "is_active": true
+        },
+        {
+          "id": "11685f63-467e-41e3-a1fc-459076fe7049",
+          "email": "rlt_muk65yql@rltharness.dev",
+          "created_at": "2026-09-27T18:45:59.764992+00:00",
+          "is_active": true
+        },
+        {
+          "id": "d05426b5-b85f-4512-9020-0747112e4479",
+          "email": "x18@test.com",
+          "created_at": "2026-09-16T08:24:52.704794+00:00",
+          "is_active": true
+        },
+        {
+          "id": "d32c0860-8821-44ee-88c5-a431edbdbf5a",
+          "email": "x17@test.com",
+          "created_at": "2026-09-16T08:24:52.359049+00:00",
+          "is_active": true
+        },
+        {
+          "id": "28b64c5e-c993-43d2-9c57-c83789e1d834",
+          "email": "x16@test.com",
+          "created_at": "2026-09-16T08:24:52.195290+00:00",
+          "is_active": true
+        },
+        {
+          "id": "32374504-2bef-4780-a996-335f84b614a6",
+          "email": "x15@test.com",
+          "created_at": "2026-09-16T08:24:51.949419+00:00",
+          "is_active": true
+        },
+        {
+          "id": "95e330cb-f87b-4be6-99d5-605869030d3c",
+          "email": "x14@test.com",
+          "created_at": "2026-09-16T08:24:51.819921+00:00",
+          "is_active": true
+        },
+        {
+          "id": "21afd944-57ea-4f5b-a5b2-b241d0da2cda",
+          "email": "x13@test.com",
+          "created_at": "2026-09-16T08:24:51.702810+00:00",
+          "is_active": true
+        },
+        {
+          "id": "137ccf97-7f57-44a7-8b95-21e6619bf710",
+          "email": "x12@test.com",
+          "created_at": "2026-09-16T08:24:51.591645+00:00",
+          "is_active": true
+        },
+        {
+          "id": "95ee01d3-9821-491d-9001-6b0ce2c7d502",
+          "email": "x11@test.com",
+          "created_at": "2026-09-16T08:24:51.471112+00:00",
+          "is_active": true
+        },
+        {
+          "id": "35aefea5-0ee4-413e-accf-c00433400abd",
+          "email": "x10@test.com",
+          "created_at": "2026-09-16T08:24:51.354079+00:00",
+          "is_active": true
+        },
+        {
+          "id": "89799e4e-0021-4ec6-a1e5-9d2df070e2e4",
+          "email": "x9@test.com",
+          "created_at": "2026-09-16T08:24:51.228032+00:00",
+          "is_active": true
+        },
+        {
+          "id": "d34fc59f-5930-4a43-b004-2f26c5073fd7",
+          "email": "x8@test.com",
+          "created_at": "2026-09-16T08:24:51.122797+00:00",
+          "is_active": true
+        },
+        {
+          "id": "4a2dfc17-3805-473c-92ce-f77b1e6296ef",
+          "email": "x7@test.com",
+          "created_at": "2026-09-16T08:24:50.957626+00:00",
+          "is_active": true
+        },
+        {
+          "id": "1421281c-2478-4f98-aa7d-3597eaec4993",
+          "email": "x6@test.com",
+          "created_at": "2026-09-16T08:24:50.830438+00:00",
+          "is_active": true
+        },
+        {
+          "id": "34128d17-b99f-4580-aaea-b4788b3494cf",
+          "email": "x5@test.com",
+          "created_at": "2026-09-16T08:24:50.719355+00:00",
+          "is_active": true
+        },
+        {
+          "id": "41c4d208-4a43-45a9-95ab-99cd234393dd",
+          "email": "x4@test.com",
+          "created_at": "2026-09-16T08:24:50.603621+00:00",
+          "is_active": true
+        },
+        {
+          "id": "8790e009-c2a5-4cc2-85f1-c1da0f430a43",
+          "email": "x3@test.com",
+          "created_at": "2026-09-16T08:24:50.466419+00:00",
+          "is_active": true
+        },
+        {
+          "id": "e796f78a-03b3-4ef8-9261-d309f4fe1ac4",
+          "email": "x2@test.com",
+          "created_at": "2026-09-16T08:24:50.300959+00:00",
+          "is_active": true
+        },
+        {
+          "id": "2677a799-7b27-45c8-8023-64ea82d9ba60",
+          "email": "x1@test.com",
+          "created_at": "2026-09-16T08:24:50.140408+00:00",
+          "is_active": true
+        },
+        {
+          "id": "a06240ab-5ffb-449f-b8bd-607327995b30",
+          "email": "x0@test.com",
+          "created_at": "2026-09-16T08:24:49.973328+00:00",
+          "is_active": true
+        },
+        {
+          "id": "aa6c99e7-4615-451f-993c-9ff74d9356a1",
+          "email": "hdr@test.com",
+          "created_at": "2026-09-16T08:24:49.621014+00:00",
+          "is_active": true
+        },
+        {
+          "id": "0a0b49ef-bd35-4435-913d-61ca03c59c57",
+          "email": "sql3@x.com",
+          "created_at": "2026-09-16T08:17:50.936686+00:00",
+          "is_active": true
+        },
+        {
+          "id": "51e7fb84-6a3c-4292-97bc-1a3b89d64c1a",
+          "email": "sql2@x.com",
+          "created_at": "2026-09-16T08:17:38.805407+00:00",
+          "is_active": true
+        },
+        {
+          "id": "ec0885a1-4615-46ff-a972-20b6a091f08c",
+          "email": "sql@x.com",
+          "created_at": "2026-09-16T08:17:01.814607+00:00",
+          "is_active": true
+        },
+        {
+          "id": "b8e12a59-8f1d-430c-afea-d23d3087614d",
+          "email": "rl2@x.com",
+          "created_at": "2026-09-16T08:16:35.620352+00:00",
+          "is_active": true
+        },
+        {
+          "id": "eb315967-c4d1-4349-9382-16da0fa1172d",
+          "email": "rl1@x.com",
+          "created_at": "2026-09-16T08:16:35.487937+00:00",
+          "is_active": true
+        },
+        {
+          "id": "099bde4d-2a65-4327-a688-0f94539f7d8e",
+          "email": "rl0@x.com",
+          "created_at": "2026-09-16T08:16:35.370458+00:00",
+          "is_active": true
+        },
+        {
+          "id": "4be3a6ef-3600-4e94-aa30-1d7a1d596a0d",
+          "email": "t2@x.com",
+          "created_at": "2026-09-16T08:16:35.028327+00:00",
+          "is_active": true
+        },
+        {
+          "id": "e72e96cc-9adc-44cf-970b-4bb3292c0854",
+          "email": "x@x.com",
+          "created_at": "2026-09-16T08:16:10.107101+00:00",
+          "is_active": true
+        },
+        {
+          "id": "b5f4152e-148e-4ecf-b9f0-1f205ba40ee0",
+          "email": "test1@example.com",
+          "created_at": "2026-09-16T08:15:47.196987+00:00",
+          "is_active": true
+        },
+        {
+          "id": "ac2117b8-db8a-48d8-87e2-007081245442",
+          "email": "v2_9eeeb8f5@example.com",
+          "created_at": "2026-08-25T13:33:08.930215+00:00",
+          "is_active": true
+        },
+        {
+          "id": "0775f25b-32c7-4e6b-89c7-0b9dace7ae09",
+          "email": "v2_ded9acbf@example.com",
+          "created_at": "2026-08-25T13:15:39.138307+00:00",
+          "is_active": true
+        },
+        {
+          "id": "a312fb5f-bae2-4813-bdce-4a6c92953fd0",
+          "email": "v2_8016e201@example.com",
+          "created_at": "2026-08-25T13:14:17.572627+00:00",
+          "is_active": true
+        },
+        {
+          "id": "1cc7957c-a828-40b9-a2bd-6428c4698023",
+          "email": "verify@example.com",
+          "created_at": "2026-08-25T13:12:22.901363+00:00",
+          "is_active": true
+        }
+      ]
+    },
+    {
+      "seq": 99,
+      "id": "sys.user.disable",
+      "name": "PATCH /api/users/{user2} (disable)",
+      "method": "PATCH",
+      "path": "/api/users/550f8f38-4bb3-418c-be64-3ac3cab08134",
+      "status": 200,
+      "ms": 14,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "550f8f38-4bb3-418c-be64-3ac3cab08134",
+        "is_active": false
+      }
+    },
+    {
+      "seq": 100,
+      "id": "sys.user.enable",
+      "name": "PATCH /api/users/{user2} (enable)",
+      "method": "PATCH",
+      "path": "/api/users/550f8f38-4bb3-418c-be64-3ac3cab08134",
+      "status": 200,
+      "ms": 15,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "id": "550f8f38-4bb3-418c-be64-3ac3cab08134",
+        "is_active": true
+      }
+    },
+    {
+      "seq": 101,
+      "id": "sys.user.delete",
+      "name": "DELETE /api/users/{user2}",
+      "method": "DELETE",
+      "path": "/api/users/550f8f38-4bb3-418c-be64-3ac3cab08134",
+      "status": 200,
+      "ms": 4,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "message": "User deleted"
+      }
+    },
+    {
+      "seq": 102,
+      "id": "sys.user.gone",
+      "name": "GET /api/users (user2 gone)",
+      "method": "GET",
+      "path": "/api/users",
+      "status": 200,
+      "ms": 13,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "id": "11685f63-467e-41e3-a1fc-459076fe7049",
+          "email": "rlt_muk65yql@rltharness.dev",
+          "created_at": "2026-09-27T18:45:59.764992+00:00",
+          "is_active": true
+        },
+        {
+          "id": "d05426b5-b85f-4512-9020-0747112e4479",
+          "email": "x18@test.com",
+          "created_at": "2026-09-16T08:24:52.704794+00:00",
+          "is_active": true
+        },
+        {
+          "id": "d32c0860-8821-44ee-88c5-a431edbdbf5a",
+          "email": "x17@test.com",
+          "created_at": "2026-09-16T08:24:52.359049+00:00",
+          "is_active": true
+        },
+        {
+          "id": "28b64c5e-c993-43d2-9c57-c83789e1d834",
+          "email": "x16@test.com",
+          "created_at": "2026-09-16T08:24:52.195290+00:00",
+          "is_active": true
+        },
+        {
+          "id": "32374504-2bef-4780-a996-335f84b614a6",
+          "email": "x15@test.com",
+          "created_at": "2026-09-16T08:24:51.949419+00:00",
+          "is_active": true
+        },
+        {
+          "id": "95e330cb-f87b-4be6-99d5-605869030d3c",
+          "email": "x14@test.com",
+          "created_at": "2026-09-16T08:24:51.819921+00:00",
+          "is_active": true
+        },
+        {
+          "id": "21afd944-57ea-4f5b-a5b2-b241d0da2cda",
+          "email": "x13@test.com",
+          "created_at": "2026-09-16T08:24:51.702810+00:00",
+          "is_active": true
+        },
+        {
+          "id": "137ccf97-7f57-44a7-8b95-21e6619bf710",
+          "email": "x12@test.com",
+          "created_at": "2026-09-16T08:24:51.591645+00:00",
+          "is_active": true
+        },
+        {
+          "id": "95ee01d3-9821-491d-9001-6b0ce2c7d502",
+          "email": "x11@test.com",
+          "created_at": "2026-09-16T08:24:51.471112+00:00",
+          "is_active": true
+        },
+        {
+          "id": "35aefea5-0ee4-413e-accf-c00433400abd",
+          "email": "x10@test.com",
+          "created_at": "2026-09-16T08:24:51.354079+00:00",
+          "is_active": true
+        },
+        {
+          "id": "89799e4e-0021-4ec6-a1e5-9d2df070e2e4",
+          "email": "x9@test.com",
+          "created_at": "2026-09-16T08:24:51.228032+00:00",
+          "is_active": true
+        },
+        {
+          "id": "d34fc59f-5930-4a43-b004-2f26c5073fd7",
+          "email": "x8@test.com",
+          "created_at": "2026-09-16T08:24:51.122797+00:00",
+          "is_active": true
+        },
+        {
+          "id": "4a2dfc17-3805-473c-92ce-f77b1e6296ef",
+          "email": "x7@test.com",
+          "created_at": "2026-09-16T08:24:50.957626+00:00",
+          "is_active": true
+        },
+        {
+          "id": "1421281c-2478-4f98-aa7d-3597eaec4993",
+          "email": "x6@test.com",
+          "created_at": "2026-09-16T08:24:50.830438+00:00",
+          "is_active": true
+        },
+        {
+          "id": "34128d17-b99f-4580-aaea-b4788b3494cf",
+          "email": "x5@test.com",
+          "created_at": "2026-09-16T08:24:50.719355+00:00",
+          "is_active": true
+        },
+        {
+          "id": "41c4d208-4a43-45a9-95ab-99cd234393dd",
+          "email": "x4@test.com",
+          "created_at": "2026-09-16T08:24:50.603621+00:00",
+          "is_active": true
+        },
+        {
+          "id": "8790e009-c2a5-4cc2-85f1-c1da0f430a43",
+          "email": "x3@test.com",
+          "created_at": "2026-09-16T08:24:50.466419+00:00",
+          "is_active": true
+        },
+        {
+          "id": "e796f78a-03b3-4ef8-9261-d309f4fe1ac4",
+          "email": "x2@test.com",
+          "created_at": "2026-09-16T08:24:50.300959+00:00",
+          "is_active": true
+        },
+        {
+          "id": "2677a799-7b27-45c8-8023-64ea82d9ba60",
+          "email": "x1@test.com",
+          "created_at": "2026-09-16T08:24:50.140408+00:00",
+          "is_active": true
+        },
+        {
+          "id": "a06240ab-5ffb-449f-b8bd-607327995b30",
+          "email": "x0@test.com",
+          "created_at": "2026-09-16T08:24:49.973328+00:00",
+          "is_active": true
+        },
+        {
+          "id": "aa6c99e7-4615-451f-993c-9ff74d9356a1",
+          "email": "hdr@test.com",
+          "created_at": "2026-09-16T08:24:49.621014+00:00",
+          "is_active": true
+        },
+        {
+          "id": "0a0b49ef-bd35-4435-913d-61ca03c59c57",
+          "email": "sql3@x.com",
+          "created_at": "2026-09-16T08:17:50.936686+00:00",
+          "is_active": true
+        },
+        {
+          "id": "51e7fb84-6a3c-4292-97bc-1a3b89d64c1a",
+          "email": "sql2@x.com",
+          "created_at": "2026-09-16T08:17:38.805407+00:00",
+          "is_active": true
+        },
+        {
+          "id": "ec0885a1-4615-46ff-a972-20b6a091f08c",
+          "email": "sql@x.com",
+          "created_at": "2026-09-16T08:17:01.814607+00:00",
+          "is_active": true
+        },
+        {
+          "id": "b8e12a59-8f1d-430c-afea-d23d3087614d",
+          "email": "rl2@x.com",
+          "created_at": "2026-09-16T08:16:35.620352+00:00",
+          "is_active": true
+        },
+        {
+          "id": "eb315967-c4d1-4349-9382-16da0fa1172d",
+          "email": "rl1@x.com",
+          "created_at": "2026-09-16T08:16:35.487937+00:00",
+          "is_active": true
+        },
+        {
+          "id": "099bde4d-2a65-4327-a688-0f94539f7d8e",
+          "email": "rl0@x.com",
+          "created_at": "2026-09-16T08:16:35.370458+00:00",
+          "is_active": true
+        },
+        {
+          "id": "4be3a6ef-3600-4e94-aa30-1d7a1d596a0d",
+          "email": "t2@x.com",
+          "created_at": "2026-09-16T08:16:35.028327+00:00",
+          "is_active": true
+        },
+        {
+          "id": "e72e96cc-9adc-44cf-970b-4bb3292c0854",
+          "email": "x@x.com",
+          "created_at": "2026-09-16T08:16:10.107101+00:00",
+          "is_active": true
+        },
+        {
+          "id": "b5f4152e-148e-4ecf-b9f0-1f205ba40ee0",
+          "email": "test1@example.com",
+          "created_at": "2026-09-16T08:15:47.196987+00:00",
+          "is_active": true
+        },
+        {
+          "id": "ac2117b8-db8a-48d8-87e2-007081245442",
+          "email": "v2_9eeeb8f5@example.com",
+          "created_at": "2026-08-25T13:33:08.930215+00:00",
+          "is_active": true
+        },
+        {
+          "id": "0775f25b-32c7-4e6b-89c7-0b9dace7ae09",
+          "email": "v2_ded9acbf@example.com",
+          "created_at": "2026-08-25T13:15:39.138307+00:00",
+          "is_active": true
+        },
+        {
+          "id": "a312fb5f-bae2-4813-bdce-4a6c92953fd0",
+          "email": "v2_8016e201@example.com",
+          "created_at": "2026-08-25T13:14:17.572627+00:00",
+          "is_active": true
+        },
+        {
+          "id": "1cc7957c-a828-40b9-a2bd-6428c4698023",
+          "email": "verify@example.com",
+          "created_at": "2026-08-25T13:12:22.901363+00:00",
+          "is_active": true
+        }
+      ]
+    },
+    {
+      "seq": 103,
+      "id": "sys.sessions",
+      "name": "GET /api/sessions",
+      "method": "GET",
+      "path": "/api/sessions",
+      "status": 200,
+      "ms": 15,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": [
+        {
+          "id": "03dd92ab-f6b7-431f-8b34-79257b3e98b6",
+          "user_email": "rlt_muk65yql@rltharness.dev",
+          "created_at": "2026-09-27T18:46:01.425478+00:00",
+          "expires_at": "2026-10-04T18:46:01.425478+00:00"
+        },
+        {
+          "id": "259b5582-df34-4677-83af-2097e7842037",
+          "user_email": "rlt_muk65yql@rltharness.dev",
+          "created_at": "2026-09-27T18:46:00.022644+00:00",
+          "expires_at": "2026-10-04T18:46:00.022644+00:00"
+        },
+        {
+          "id": "e5b75a0d-5d24-4f49-ac5c-b8a9e9385a6c",
+          "user_email": "x18@test.com",
+          "created_at": "2026-09-16T08:24:52.799028+00:00",
+          "expires_at": "2026-09-23T08:24:52.799028+00:00"
+        },
+        {
+          "id": "558eb3b0-36f5-4204-9947-c0db9659a6f8",
+          "user_email": "x17@test.com",
+          "created_at": "2026-09-16T08:24:52.482318+00:00",
+          "expires_at": "2026-09-23T08:24:52.482318+00:00"
+        },
+        {
+          "id": "e933f628-d520-45ce-b552-40e12c9b84e5",
+          "user_email": "x16@test.com",
+          "created_at": "2026-09-16T08:24:52.314472+00:00",
+          "expires_at": "2026-09-23T08:24:52.314472+00:00"
+        },
+        {
+          "id": "1dd7451c-88b2-406c-9dde-da7c4da5c3a7",
+          "user_email": "x15@test.com",
+          "created_at": "2026-09-16T08:24:52.057562+00:00",
+          "expires_at": "2026-09-23T08:24:52.057562+00:00"
+        },
+        {
+          "id": "765e1a4d-1176-4afb-a26f-34bc3e3c1c0a",
+          "user_email": "x14@test.com",
+          "created_at": "2026-09-16T08:24:51.926425+00:00",
+          "expires_at": "2026-09-23T08:24:51.926425+00:00"
+        },
+        {
+          "id": "fcc49725-14ce-4245-ab7e-336858753714",
+          "user_email": "x13@test.com",
+          "created_at": "2026-09-16T08:24:51.806533+00:00",
+          "expires_at": "2026-09-23T08:24:51.806533+00:00"
+        },
+        {
+          "id": "2c30faa4-22ba-4e3a-9375-405e66e01d8c",
+          "user_email": "x12@test.com",
+          "created_at": "2026-09-16T08:24:51.678908+00:00",
+          "expires_at": "2026-09-23T08:24:51.678908+00:00"
+        },
+        {
+          "id": "8a77e120-3b25-4030-9639-2bbdb7079546",
+          "user_email": "x11@test.com",
+          "created_at": "2026-09-16T08:24:51.568809+00:00",
+          "expires_at": "2026-09-23T08:24:51.568809+00:00"
+        },
+        {
+          "id": "59a22e74-6e05-4e9e-aad2-af765363b9bf",
+          "user_email": "x10@test.com",
+          "created_at": "2026-09-16T08:24:51.435099+00:00",
+          "expires_at": "2026-09-23T08:24:51.435099+00:00"
+        },
+        {
+          "id": "9169eeb5-4b70-4351-bc12-02d3f4454e68",
+          "user_email": "x9@test.com",
+          "created_at": "2026-09-16T08:24:51.324057+00:00",
+          "expires_at": "2026-09-23T08:24:51.324057+00:00"
+        },
+        {
+          "id": "b4c94ca7-6690-4489-9fa3-31e79b52ef0f",
+          "user_email": "x8@test.com",
+          "created_at": "2026-09-16T08:24:51.219359+00:00",
+          "expires_at": "2026-09-23T08:24:51.219359+00:00"
+        },
+        {
+          "id": "a9650fe8-e015-42b2-a19e-c363dcfbe0a3",
+          "user_email": "x7@test.com",
+          "created_at": "2026-09-16T08:24:51.083524+00:00",
+          "expires_at": "2026-09-23T08:24:51.083524+00:00"
+        },
+        {
+          "id": "db5e33b2-ee07-4e1d-83c3-a8f7fd64f87a",
+          "user_email": "x6@test.com",
+          "created_at": "2026-09-16T08:24:50.930806+00:00",
+          "expires_at": "2026-09-23T08:24:50.930806+00:00"
+        },
+        {
+          "id": "f3cfd0c0-088c-4c25-8024-03c3a6177a14",
+          "user_email": "x5@test.com",
+          "created_at": "2026-09-16T08:24:50.814765+00:00",
+          "expires_at": "2026-09-23T08:24:50.814765+00:00"
+        },
+        {
+          "id": "c3d71512-a8b1-43a9-948f-6d79ab2f1c06",
+          "user_email": "x4@test.com",
+          "created_at": "2026-09-16T08:24:50.703246+00:00",
+          "expires_at": "2026-09-23T08:24:50.703246+00:00"
+        },
+        {
+          "id": "682cf142-d788-45a9-992d-b997f9610981",
+          "user_email": "x3@test.com",
+          "created_at": "2026-09-16T08:24:50.570760+00:00",
+          "expires_at": "2026-09-23T08:24:50.570760+00:00"
+        },
+        {
+          "id": "aa715b49-c412-4b28-9e1e-0039e8b41f3c",
+          "user_email": "x2@test.com",
+          "created_at": "2026-09-16T08:24:50.420325+00:00",
+          "expires_at": "2026-09-23T08:24:50.420325+00:00"
+        },
+        {
+          "id": "436b6bcf-4944-46d1-8cfa-ade17ff6f2c2",
+          "user_email": "x1@test.com",
+          "created_at": "2026-09-16T08:24:50.258954+00:00",
+          "expires_at": "2026-09-23T08:24:50.258954+00:00"
+        },
+        {
+          "id": "2062c715-5af7-4d7a-815c-8510cf2b63b4",
+          "user_email": "x0@test.com",
+          "created_at": "2026-09-16T08:24:50.093166+00:00",
+          "expires_at": "2026-09-23T08:24:50.093166+00:00"
+        },
+        {
+          "id": "f785d8a8-a418-467c-abf9-a01e87a485fd",
+          "user_email": "hdr@test.com",
+          "created_at": "2026-09-16T08:24:49.745492+00:00",
+          "expires_at": "2026-09-23T08:24:49.745492+00:00"
+        },
+        {
+          "id": "33961ab2-ac94-4fe6-81fc-93f9d7c32820",
+          "user_email": "sql3@x.com",
+          "created_at": "2026-09-16T08:17:51.073901+00:00",
+          "expires_at": "2026-09-23T08:17:51.073901+00:00"
+        },
+        {
+          "id": "b5d0a24e-ff15-4a81-96d5-f32dde61e5b4",
+          "user_email": "sql2@x.com",
+          "created_at": "2026-09-16T08:17:38.973711+00:00",
+          "expires_at": "2026-09-23T08:17:38.973711+00:00"
+        },
+        {
+          "id": "9b0825b8-7dd7-484e-8aaf-5053cdb65384",
+          "user_email": "sql@x.com",
+          "created_at": "2026-09-16T08:17:01.916043+00:00",
+          "expires_at": "2026-09-23T08:17:01.916043+00:00"
+        },
+        {
+          "id": "630fc1bb-c52b-4cd7-ae43-0aca85b4f41d",
+          "user_email": "rl1@x.com",
+          "created_at": "2026-09-16T08:16:35.599065+00:00",
+          "expires_at": "2026-09-23T08:16:35.599065+00:00"
+        },
+        {
+          "id": "a39fba10-7867-4622-84a4-31bba901f699",
+          "user_email": "rl0@x.com",
+          "created_at": "2026-09-16T08:16:35.472265+00:00",
+          "expires_at": "2026-09-23T08:16:35.472265+00:00"
+        },
+        {
+          "id": "45f0820a-7803-47c8-86e2-2447f54429a5",
+          "user_email": "t2@x.com",
+          "created_at": "2026-09-16T08:16:35.297665+00:00",
+          "expires_at": "2026-09-23T08:16:35.297665+00:00"
+        },
+        {
+          "id": "40fcd985-2cb3-408a-b7f3-4c4a5d3b7e4c",
+          "user_email": "t2@x.com",
+          "created_at": "2026-09-16T08:16:35.147862+00:00",
+          "expires_at": "2026-09-23T08:16:35.147862+00:00"
+        },
+        {
+          "id": "c4681b28-67e1-47ee-bc88-6cb3930a6c40",
+          "user_email": "x@x.com",
+          "created_at": "2026-09-16T08:16:10.202221+00:00",
+          "expires_at": "2026-09-23T08:16:10.202221+00:00"
+        },
+        {
+          "id": "b5c006f5-db6d-4100-8933-919fbb16d6aa",
+          "user_email": "test1@example.com",
+          "created_at": "2026-09-16T08:15:47.498823+00:00",
+          "expires_at": "2026-09-23T08:15:47.498823+00:00"
+        },
+        {
+          "id": "f29e8251-4fd7-4472-bee4-9d6651683f36",
+          "user_email": "test1@example.com",
+          "created_at": "2026-09-16T08:15:47.341548+00:00",
+          "expires_at": "2026-09-23T08:15:47.341548+00:00"
+        },
+        {
+          "id": "21748002-74f3-493c-8f63-7964431176b9",
+          "user_email": "v2_9eeeb8f5@example.com",
+          "created_at": "2026-08-25T13:33:09.192401+00:00",
+          "expires_at": "2026-09-01T13:33:09.192401+00:00"
+        },
+        {
+          "id": "4eac527c-21e7-4c0b-943f-bd4b6bcf0f98",
+          "user_email": "v2_ded9acbf@example.com",
+          "created_at": "2026-08-25T13:26:14.776002+00:00",
+          "expires_at": "2026-09-01T13:26:14.776002+00:00"
+        },
+        {
+          "id": "4627ea1a-83b7-48cb-b5cc-c8e8d60e8caa",
+          "user_email": "v2_ded9acbf@example.com",
+          "created_at": "2026-08-25T13:22:53.548334+00:00",
+          "expires_at": "2026-09-01T13:22:53.548334+00:00"
+        },
+        {
+          "id": "b9bedee5-1724-4624-bd45-b5a4fd204de1",
+          "user_email": "v2_ded9acbf@example.com",
+          "created_at": "2026-08-25T13:15:39.304886+00:00",
+          "expires_at": "2026-09-01T13:15:39.304886+00:00"
+        },
+        {
+          "id": "8c221277-2d9a-4ee8-8342-2b1803e89f01",
+          "user_email": "v2_8016e201@example.com",
+          "created_at": "2026-08-25T13:14:17.760179+00:00",
+          "expires_at": "2026-09-01T13:14:17.760179+00:00"
+        },
+        {
+          "id": "eae3ddb1-847a-4126-905a-2357a048b0f3",
+          "user_email": "verify@example.com",
+          "created_at": "2026-08-25T13:12:23.464391+00:00",
+          "expires_at": "2026-09-01T13:12:23.464391+00:00"
+        },
+        {
+          "id": "e3e06953-175a-4102-9e58-2264ebb164c9",
+          "user_email": "verify@example.com",
+          "created_at": "2026-08-25T13:12:23.059292+00:00",
+          "expires_at": "2026-09-01T13:12:23.059292+00:00"
+        }
+      ]
+    },
+    {
+      "seq": 104,
+      "id": "sys.session.revoke",
+      "name": "DELETE /api/sessions/{my session}",
+      "method": "DELETE",
+      "path": "/api/sessions/03dd92ab-f6b7-431f-8b34-79257b3e98b6",
+      "status": 200,
+      "ms": 4,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "message": "Session revoked"
+      }
+    },
+    {
+      "seq": 105,
+      "id": "sys.me.revoked",
+      "name": "GET /auth/me after session revoke → 401",
+      "method": "GET",
+      "path": "/auth/me",
+      "status": 401,
+      "ms": 9,
+      "expect": [
+        401
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "unauthorized",
+        "message": "Not authenticated"
+      }
+    },
+    {
+      "seq": 106,
+      "id": "sys.relogin",
+      "name": "POST /auth/login (re-login)",
+      "method": "POST",
+      "path": "/auth/login",
+      "status": 200,
+      "ms": 117,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "email": "rlt_muk65yql@rltharness.dev"
+      }
+    },
+    {
+      "seq": 107,
+      "id": "probe.cors",
+      "name": "GET /health with Origin: https://evil.vercel.app — PROBE",
+      "method": "GET",
+      "path": "/health",
+      "status": 200,
+      "ms": 8,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": true,
+      "note": null,
+      "detail": "ACAO: null  ACAC: true   ← origin not reflected",
+      "data": {
+        "status": "ok",
+        "database": true
+      }
+    },
+    {
+      "seq": 108,
+      "id": "probe.xff",
+      "name": "25× POST /auth/login with spoofed X-Forwarded-For — PROBE",
+      "method": "POST",
+      "path": "/auth/login ×25 (spoofed XFF)",
+      "status": 200,
+      "ms": 342,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": true,
+      "note": null,
+      "detail": "25 attempts, unique spoofed XFF each → 401×17, 429×8   ← 429s present: limit applied to real client IP (H2 fixed)"
+    },
+    {
+      "seq": 109,
+      "id": "acct.delete",
+      "name": "DELETE /auth/account",
+      "method": "DELETE",
+      "path": "/auth/account",
+      "status": 200,
+      "ms": 119,
+      "expect": [
+        200
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "message": "Account deleted successfully"
+      }
+    },
+    {
+      "seq": 110,
+      "id": "acct.me",
+      "name": "GET /auth/me after delete → 401",
+      "method": "GET",
+      "path": "/auth/me",
+      "status": 401,
+      "ms": 6,
+      "expect": [
+        401
+      ],
+      "pass": true,
+      "probe": false,
+      "note": null,
+      "detail": null,
+      "data": {
+        "code": "unauthorized",
+        "message": "Not authenticated"
+      }
+    }
+  ]
+}

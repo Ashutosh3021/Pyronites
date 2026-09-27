@@ -774,6 +774,13 @@ async def execute_sql(
                     message=f"Auto-backup before destructive SQL failed: {e}",
                 ).model_dump(),
             )
+        # M1: project backups share data/projects/backups — keep it bounded.
+        try:
+            from backend.core.backup import prune_backups
+
+            prune_backups(backup_dir)
+        except Exception as e:
+            logger.warning("Project backup prune failed: %s", e, exc_info=True)
 
     results: List[Dict[str, Any]] = []
     try:
@@ -886,9 +893,16 @@ async def create_key(
 ):
     require_scopes(_ctx_auth(ctx), {"admin"})
     meta = _ctx_meta(ctx)
-    slug = _slug(_ctx_project(ctx))
+    project = _ctx_project(ctx)
+    slug = _slug(project)
     try:
-        raw_key, api_key = create_api_key(meta, slug, body.name, body.scopes)
+        # Canonical: bind new keys to the project UUID. Read paths accept
+        # id/project_id/slug, so legacy slug-bound keys keep working.
+        # plane="scoped" marks the key as forbidden on the tenancy-blind
+        # unscoped legacy plane (/tables, /storage, /sql).
+        raw_key, api_key = create_api_key(
+            meta, project["id"], body.name, body.scopes, plane="scoped"
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=400,
@@ -912,9 +926,10 @@ async def revoke_key(
 ):
     require_scopes(_ctx_auth(ctx), {"admin"})
     meta = _ctx_meta(ctx)
-    slug = _slug(_ctx_project(ctx))
+    project = _ctx_project(ctx)
+    slug = _slug(project)
     # Only revoke if key belongs to this project (matches both slug and UUID)
-    project_ids = [_slug(project), project["id"]]
+    project_ids = [slug, project["id"]]
     matching = [k for k in list_api_keys(meta, project_ids=project_ids) if k.id == key_id]
     if not matching:
         raise HTTPException(
@@ -962,8 +977,8 @@ async def project_stats(ctx: Dict[str, Any] = Depends(get_project_context)):
 
     key_count = _count(
         meta,
-        "SELECT COUNT(*) FROM api_keys WHERE is_revoked = 0 AND project_id = ?",
-        (slug,),
+        "SELECT COUNT(*) FROM api_keys WHERE is_revoked = 0 AND project_id IN (?, ?)",
+        (slug, project["id"]),
     )
 
     from backend.core import projects as projmod

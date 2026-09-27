@@ -21,17 +21,15 @@ import logging
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from backend.core.db import Database
+from backend.core.db import Database, acquire_database, release_database
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["health"])
 
 
 def _get_db() -> Database:
-    """Open a short-lived DB connection just for the health check."""
-    db = Database(os.environ.get("DATABASE_PATH", "pyrocore.db"))
-    db.connect()
-    return db
+    """Open a pooled DB connection just for the health check."""
+    return acquire_database(os.environ.get("DATABASE_PATH", "pyrocore.db"))
 
 
 @router.get(
@@ -66,7 +64,7 @@ async def health() -> JSONResponse:
         logger.error("Health check failed: database unreachable", exc_info=True)
     finally:
         if db is not None:
-            db.close()
+            release_database(db)
 
     payload = {"status": "ok" if db_ok else "degraded", "database": db_ok}
     status_code = 200 if db_ok else 503

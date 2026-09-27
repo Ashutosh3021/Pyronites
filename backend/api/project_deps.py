@@ -27,7 +27,7 @@ from typing import Any, Dict, Generator, Optional
 
 from fastapi import Depends, HTTPException, Request
 
-from backend.core.db import Database
+from backend.core.db import Database, acquire_database, release_database
 from backend.api.schemas import ErrorResponse
 from backend.api.auth_deps import resolve_auth, require_scopes
 from backend.core import projects as projmod
@@ -91,8 +91,7 @@ def open_data_db_for_project(project: Dict[str, Any]) -> Database:
                 path,
             )
 
-    db = Database(path)
-    db.connect()
+    db = acquire_database(path)
     with _MIGRATED_LOCK:
         already = path in _MIGRATED_PATHS
     if not already:
@@ -100,7 +99,7 @@ def open_data_db_for_project(project: Dict[str, Any]) -> Database:
             run_pending_migrations(db, migrations_dir())
         except Exception:
             logger.error("project db migrations failed for %s", path, exc_info=True)
-            db.close()
+            release_database(db)
             raise
         with _MIGRATED_LOCK:
             _MIGRATED_PATHS.add(path)
@@ -140,12 +139,11 @@ def enforce_api_key_project(auth: Optional[Dict[str, Any]], project: Dict[str, A
 
 
 def get_meta_db() -> Generator[Database, None, None]:
-    db = Database(meta_db_path())
-    db.connect()
+    db = acquire_database(meta_db_path())
     try:
         yield db
     finally:
-        db.close()
+        release_database(db)
 
 
 def get_project_context(
@@ -170,12 +168,11 @@ def get_project_context(
             "auth": auth,
         }
     finally:
-        data_db.close()
+        release_database(data_db)
 
 
 def get_db(request: Request) -> Generator[Database, None, None]:
-    meta = Database(meta_db_path())
-    meta.connect()
+    meta = acquire_database(meta_db_path())
     data: Optional[Database] = None
     project_ref = extract_project_ref(request)
 
@@ -194,8 +191,8 @@ def get_db(request: Request) -> Generator[Database, None, None]:
             yield meta
     finally:
         if data is not None and data is not meta:
-            data.close()
-        meta.close()
+            release_database(data)
+        release_database(meta)
 
 
 def auth_db(request: Request, fallback: Database) -> Database:
@@ -206,6 +203,36 @@ def current_project_slug(request: Request, fallback_db: Database) -> str:
     project = getattr(request.state, "project", None)
     if project:
         return project["project_id"]
+    # Hardening: a session caller must fall back to THEIR project, never to
+    # some other user's oldest active project (cross-tenant data exposure on
+    # the legacy unscoped plane).
+    token = request.cookies.get("session_token")
+    if token:
+        try:
+            from backend.auth.sessions import validate_session
+
+            user = validate_session(fallback_db, token)
+        except Exception:
+            user = None
+        if user:
+            last = projmod.get_last_project(fallback_db, user.id)
+            if last:
+                return last
+            try:
+                cur = fallback_db.execute(
+                    """
+                    SELECT project_id FROM projects
+                    WHERE owner_id = ? AND (status IS NULL OR status = 'active')
+                    ORDER BY created_at ASC LIMIT 1
+                    """,
+                    (user.id,),
+                )
+                row = cur.fetchone()
+                if row and row[0]:
+                    return row[0]
+            except Exception:
+                pass
+            return "default"
     try:
         cur = fallback_db.execute(
             """

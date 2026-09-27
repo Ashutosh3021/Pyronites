@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>PyroCore RLT — endpoint reference harness</title>
+</head>
+<body>
+  <h1>PyroCore RLT — endpoint reference harness</h1>
+  <p>
+    Plain HTTP test of every backend route in <code>methords.md</code>.
+    Run against the harness server (this origin). Cookies are used for session
+    auth; an optional API key in the config box is sent as
+    <code>Authorization: Bearer …</code> on every request.
+  </p>
+
+  <fieldset>
+    <legend>Config</legend>
+    <label>Base URL <input id="cfg-base" type="text" size="40" placeholder="(empty = this origin)"></label>
+    <label>API key <input id="cfg-key" type="text" size="40" placeholder="pyro_live_… (optional)"></label>
+    <button id="btn-run" type="button">RUN ALL</button>
+    <button id="btn-clear" type="button">Clear log</button>
+    <span id="summary">—</span>
+  </fieldset>
+
+  <p id="runner-note"></p>
+
+  <div id="groups"></div>
+
+  <h2>Log</h2>
+  <pre id="log"></pre>
+
+  <script src="/app.js"></script>
+</body>
+</html>

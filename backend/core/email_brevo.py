@@ -36,7 +36,11 @@ def _reset_base_url() -> str:
 
 def build_reset_link(raw_token: str) -> str:
     base = _reset_base_url() or "http://localhost:3000"
-    return f"{base}/reset-password?token={raw_token}"
+    # Accept both styles of PASSWORD_RESET_BASE_URL: a bare frontend origin
+    # (localhost:3000) or one that already includes /reset-password.
+    if not base.endswith("/reset-password"):
+        base = f"{base}/reset-password"
+    return f"{base}?token={raw_token}"
 
 
 def send_password_reset_email(to_email: str, raw_token: str) -> bool:

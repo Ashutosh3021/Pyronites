@@ -17,7 +17,17 @@ import {
   LogOut,
 } from 'lucide-react'
 import { ProjectSwitcher } from '@/components/project-switcher'
-import { API_BASE, getStoredProjectName, PROJECT_CHANGE_EVENT, clearStoredProject } from '@/lib/api'
+import {
+  API_BASE,
+  getStoredProjectName,
+  getStoredProjectId,
+  setStoredProject,
+  fetchProjects,
+  fetchCurrentProjectId,
+  isDefaultProject,
+  PROJECT_CHANGE_EVENT,
+  clearStoredProject,
+} from '@/lib/api'
 
 const navItems = [
   { href: '/', icon: BarChart3, label: 'Overview' },
@@ -91,9 +101,24 @@ export function PyroCoreLayout({
         }
         throw new Error('Not authenticated')
       })
-      .then((data) => {
+      .then(async (data) => {
         if (!cancelled && data?.email) {
           setUserEmail(data.email)
+        }
+        // H1: resolve the active project BEFORE children mount. Pages call
+        // apiUrl() synchronously on mount — without this hydration they'd hit
+        // the legacy unscoped plane (wrong/Default DB) on a cold load.
+        if (!cancelled && !getStoredProjectId()) {
+          try {
+            const serverId: string | null = data?.last_project_id ?? (await fetchCurrentProjectId())
+            const list = await fetchProjects()
+            const serverMatch =
+              serverId && list.find((p) => p.id === serverId || p.project_id === serverId)
+            const chosen = serverMatch ?? list.find(isDefaultProject) ?? list[0]
+            if (chosen) setStoredProject({ id: chosen.id, name: chosen.name })
+          } catch {
+            // Non-fatal: pages fall back to the server's default resolution.
+          }
         }
         setAuthChecked(true)
       })

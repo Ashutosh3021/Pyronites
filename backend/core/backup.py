@@ -368,9 +368,10 @@ async def scheduled_backup_loop(
         db_path: Path to the source database file
         backup_dir: Directory where backups will be stored
         interval_seconds: Number of seconds between backups
-        on_backup: Optional blocking callable invoked with ``db_path`` after each
-            successful backup (e.g. to push the DB to object storage). Runs in a
-            worker thread so it never blocks the event loop.
+        on_backup: Optional blocking callable invoked with the path of the
+            freshly-created backup file after each successful backup (e.g. to
+            push a consistent snapshot to object storage). Runs in a worker
+            thread so it never blocks the event loop.
     """
     logger.info("Starting scheduled backup loop")
 
@@ -380,12 +381,14 @@ async def scheduled_backup_loop(
             # backup_now() does blocking file + SQLite I/O.  Run it in a worker
             # thread so it never blocks the asyncio event loop that also serves
             # HTTP requests — otherwise a large backup would stall the API.
-            await asyncio.to_thread(backup_now, db_path, backup_dir)
+            backup_file = await asyncio.to_thread(backup_now, db_path, backup_dir)
             # Prune old backups after creating a new one
             await asyncio.to_thread(prune_backups, backup_dir)
             # Persist to object storage (S3/R2) if a hook was supplied.
+            # H3: hand the hook the CONSISTENT BACKUP FILE, never the live DB
+            # (which can be mid-write / mid-checkpoint).
             if on_backup is not None:
-                await asyncio.to_thread(on_backup, db_path)
+                await asyncio.to_thread(on_backup, backup_file)
         except Exception as e:
             # Catch any exception to ensure the loop keeps running
             logger.error("Scheduled backup failed: %s", e, exc_info=True)

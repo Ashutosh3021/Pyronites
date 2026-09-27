@@ -15,11 +15,11 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from backend.core.db import Database
+from backend.core.db import Database, acquire_database, release_database
 from backend.api.schemas import ErrorResponse
 from backend.api.auth_deps import resolve_auth, require_scopes
 from backend.api.tables import get_allowed_tables
-from backend.core.backup import backup_now, list_backups, restore_from_backup, restore_into_live
+from backend.core.backup import backup_now, list_backups, restore_from_backup, restore_into_live, prune_backups
 from backend.core.logring import get_logs, record_event
 from backend.auth.users import set_user_active, delete_user
 from backend.auth.sessions import revoke_session
@@ -29,12 +29,11 @@ router = APIRouter(prefix="/api", tags=["system"])
 
 
 def get_db() -> Database:
-    db = Database(os.environ.get("DATABASE_PATH", "pyrocore.db"))
-    db.connect()
+    db = acquire_database(os.environ.get("DATABASE_PATH", "pyrocore.db"))
     try:
         yield db
     finally:
-        db.close()
+        release_database(db)
 
 
 def _backup_dir() -> str:
@@ -118,13 +117,31 @@ async def trigger_backup(request: Request, db: Database = Depends(get_db)):
     import asyncio
 
     try:
+        # H3: push the *consistent backup file* (and the rest of the data
+        # dir) instead of the live DB, which may be mid-write.
         from backend.core.s3_sync import load_s3_config
 
         s3 = load_s3_config()
         if s3 is not None:
-            await asyncio.to_thread(s3.upload, db_path)
+            storage_root = os.environ.get("STORAGE_ROOT", "storage_files")
+            from backend.core.projects import projects_dir
+
+            await asyncio.to_thread(
+                lambda: s3.upload_all(
+                    db_path,
+                    snapshot_file=str(backup_file),
+                    projects_dir=str(projects_dir()),
+                    storage_root=storage_root,
+                )
+            )
     except Exception as e:
         logger.warning("Manual backup S3 upload failed: %s", e, exc_info=True)
+
+    # M1: never let the backups dir grow without bound.
+    try:
+        await asyncio.to_thread(prune_backups, _backup_dir())
+    except Exception as e:
+        logger.warning("Backup prune failed: %s", e, exc_info=True)
     return {"path": str(backup_file), "created_at": _now_iso()}
 
 
@@ -144,6 +161,40 @@ class RestoreBody(BaseModel):
     path: str
 
 
+def _resolve_backup_path(raw: str) -> str:
+    """
+    Resolve a caller-supplied backup path and confine it to the backups
+    directory (H4).  Raises HTTP 400 for traversal, absolute paths outside
+    the backup dir, or missing/non-.db files.
+    """
+    bdir = Path(_backup_dir()).resolve()
+    try:
+        candidate = Path(raw).expanduser().resolve()
+    except (OSError, RuntimeError) as e:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                code="invalid_path", message=f"Invalid backup path: {e}"
+            ).model_dump(),
+        )
+    if not candidate.is_relative_to(bdir) or candidate.suffix != ".db":
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                code="invalid_path",
+                message="Backup path must be a .db file inside the backups directory",
+            ).model_dump(),
+        )
+    if not candidate.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(
+                code="not_found", message="Backup file not found"
+            ).model_dump(),
+        )
+    return str(candidate)
+
+
 @router.post("/backup/restore")
 async def restore_backup(body: RestoreBody, request: Request, db: Database = Depends(get_db)):
     """Restore the live database from a backup file (admin only, coordinated).
@@ -152,14 +203,18 @@ async def restore_backup(body: RestoreBody, request: Request, db: Database = Dep
     swap while the server is running). It checkpoints the live WAL and performs
     an atomic replace of the database file.  Callers should still avoid issuing
     writes during the brief swap window.
+
+    H4: the supplied path is confined to the server's backups directory —
+    arbitrary filesystem paths are rejected.
     """
     require_scopes(resolve_auth(request, db), {"admin"})
+    source = _resolve_backup_path(body.path)
     db_path = os.environ.get("DATABASE_PATH", "pyrocore.db")
     try:
         # In-place restore: copies the backup into the live (open) database
         # file instead of renaming it, so it works even while the server holds
         # the file open (required on Windows — see RCA-3).
-        await asyncio.to_thread(restore_into_live, body.path, db_path)
+        await asyncio.to_thread(restore_into_live, source, db_path)
     except Exception as e:
         logger.error("Restore failed: %s", e, exc_info=True)
         raise HTTPException(
@@ -168,8 +223,8 @@ async def restore_backup(body: RestoreBody, request: Request, db: Database = Dep
                 code="restore_failed", message=f"Restore failed: {e}"
             ).model_dump(),
         )
-    record_event("warning", f"Database restored from {body.path}")
-    return {"message": "restored", "path": body.path}
+    record_event("warning", f"Database restored from {source}")
+    return {"message": "restored", "path": source}
 
 
 @router.get("/backups")

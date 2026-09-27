@@ -1,4 +1,5 @@
 
+import atexit
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -261,10 +262,83 @@ class Database:
         probing this after every operation.
 
         Returns:
-            Lowercase journal mode string, e.g. ``"wal"``, ``"delete"``.
+            Lowercase journal mode, e.g. ``"wal"`` or ``"delete"``.
         """
         self._ensure_connected()
         with self._lock:
             cursor = self._connection.execute("PRAGMA journal_mode")
             return cursor.fetchone()[0]
+
+
+# ── Shared connection pool (M2) ─────────────────────────────────────────────
+# Previously every FastAPI dependency constructed a fresh ``Database`` (i.e. a
+# fresh sqlite3 connection) per request, then closed it — ~100s of connections
+# per minute, each re-running PRAGMA setup, on an RDS-less SQLite file.
+# ``acquire_database`` hands out pooled connections keyed by path; callers
+# ``release_database`` when the request ends (the connection stays open for
+# reuse).  Connections are bounded per path; overflow connections are closed
+# on release instead of being retained.
+
+_pool_lock = threading.Lock()
+_pool: dict[str, list["Database"]] = {}
+_POOL_MAX_PER_PATH = 8
+
+
+def _pool_disabled() -> bool:
+    """``PYROCORE_NO_POOL=1`` forces connect-per-acquire (tests: Windows can't
+    delete tmp dirs while pooled connections hold the file open)."""
+    return os.environ.get("PYROCORE_NO_POOL", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def acquire_database(db_path: str) -> "Database":
+    """
+    Get a pooled, already-connected ``Database`` for ``db_path``.
+
+    Safe to call from multiple threads: each caller receives an exclusive
+    connection (checkout semantics), so a connection is never shared by two
+    requests at once.  If the path has no idle connection and the pool for it
+    is full, a new untracked connection is created and closed on release.
+    """
+    if _pool_disabled():
+        db = Database(db_path)
+        db.connect()
+        db._no_pool = True  # type: ignore[attr-defined]
+        return db
+    with _pool_lock:
+        idle = _pool.get(db_path)
+        if idle:
+            return idle.pop()
+    db = Database(db_path)
+    db.connect()
+    return db
+
+
+def release_database(db: "Database") -> None:
+    """Return a connection obtained via ``acquire_database`` to the pool."""
+    if getattr(db, "_no_pool", False):
+        db.close()
+        return
+    with _pool_lock:
+        db_path = db.db_path
+        idle = _pool.get(db_path)
+        if idle is None:
+            idle = []
+            _pool[db_path] = idle
+        if len(idle) < _POOL_MAX_PER_PATH:
+            idle.append(db)
+            return
+    # Pool full — drop this connection.
+    db.close()
+
+
+def close_shared_databases() -> None:
+    """Close every pooled connection (app shutdown / test teardown)."""
+    with _pool_lock:
+        for idle in _pool.values():
+            for db in idle:
+                db.close()
+        _pool.clear()
+
+
+atexit.register(close_shared_databases)
 

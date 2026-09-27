@@ -22,7 +22,7 @@ from pydantic import BaseModel, field_validator
 
 from backend.core.db import Database, DatabaseError, DatabaseIntegrityError
 from backend.api.schemas import ErrorResponse, MAX_ID_LEN
-from backend.api.auth_deps import resolve_auth, require_scopes
+from backend.api.auth_deps import resolve_auth, require_scopes, enforce_legacy_plane_key
 from backend.api.project_deps import get_db, auth_db
 from backend.core.logring import record_event
 
@@ -31,7 +31,10 @@ router = APIRouter(prefix="/tables", tags=["tables"])
 
 
 def _auth(request: Request, db: Database):
-    return resolve_auth(request, auth_db(request, db))
+    meta = auth_db(request, db)
+    info = resolve_auth(request, meta)
+    enforce_legacy_plane_key(info, meta)
+    return info
 
 
 def validate_table(table: str, allowed: Set[str]) -> str:

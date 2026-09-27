@@ -18,7 +18,7 @@ from backend.core.storage import (
     FileTooLargeError,
 )
 from backend.api.schemas import ErrorResponse, to_utc_iso
-from backend.api.auth_deps import resolve_auth, require_scopes
+from backend.api.auth_deps import resolve_auth, require_scopes, enforce_legacy_plane_key
 from backend.api.project_deps import get_db, auth_db
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,10 @@ router = APIRouter(prefix="/storage", tags=["storage"])
 
 
 def _auth(request: Request, db: Database):
-    return resolve_auth(request, auth_db(request, db))
+    meta = auth_db(request, db)
+    info = resolve_auth(request, meta)
+    enforce_legacy_plane_key(info, meta)
+    return info
 
 
 def _storage(db: Database) -> LocalFileStorage:
