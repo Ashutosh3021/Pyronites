@@ -130,7 +130,7 @@ export default function AuthenticationPage() {
       <div className="max-w-6xl space-y-6">
         <div>
           <h1 className="text-xl lg:text-2xl font-semibold text-foreground">Authentication</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage your app&apos;s end-users and sessions</p>
+          <p className="text-muted-foreground text-sm mt-1">Dashboard accounts &amp; active sessions — global across all projects, not project data</p>
         </div>
 
         {loadErr && <AlertBanner variant="error" message={loadErr} onDismiss={() => setLoadErr(null)} />}
