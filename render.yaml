@@ -43,6 +43,12 @@ services:
         # the bucket is only as fresh as the last upload.  Raise for fewer
         # writes / local backups if you don't enable S3 sync.
         value: "300"
+      # One-time legacy adoption: copies tables created through the old
+      # unscoped plane (meta DB) into the project file that owns them, so the
+      # scoped dashboard sees them.  Runs once per slug (marker row), no-op if
+      # the project/table doesn't exist.  Not a secret — kept in sync here.
+      - key: LEGACY_ADOPTION_MAP
+        value: "prepiq:subjects,question_papers,questions,predictions,mock_tests,syllabus,unit_features,exam_context_cache,items,notes;keepawake:fs_users,fs_tokens,fs_services,fs_ping_records"
       # Cross-origin dashboard (Vercel) — set this in the dashboard to your real
       # Vercel origin.  Listed here as a placeholder so the service starts;
       # override it with the real value before going live.

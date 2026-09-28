@@ -1,7 +1,7 @@
 'use client'
 
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Upload, Download, Trash2, FileIcon } from 'lucide-react'
 import { apiUrl, getStoredProjectName, PROJECT_CHANGE_EVENT } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -52,33 +52,52 @@ export default function StoragePage() {
   const [uploadErr, setUploadErr] = useState<string | null>(null)
   const [downloading, setDownloading] = useState<string | null>(null)
   const [projectLabel, setProjectLabel] = useState<string | null>(null)
+  const loadReqRef = useRef(0)
 
   const loadFiles = useCallback(async () => {
+    const reqId = ++loadReqRef.current
     setLoading(true)
     setLoadErr(null)
     setProjectLabel(getStoredProjectName())
-    try {
-      const res = await fetch(apiUrl('/storage'), { credentials: 'include' })
-      if (!res.ok) throw new Error('list')
-      const raw = (await res.json()) as RawFile[]
-      setFiles(raw.map((f) => ({
-        id: f.id,
-        name: f.original_filename,
-        size: f.size_bytes,
-        uploaded: f.uploaded_at,
-        type: iconForType(f.content_type),
-      })))
-    } catch {
-      setLoadErr('Could not load files for this project.')
-      setFiles([])
-    } finally {
-      setLoading(false)
+    const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
+    let loaded = false
+    for (let attempt = 0; attempt < 3 && !loaded; attempt++) {
+      if (attempt > 0) await delay(attempt * 1500)
+      if (reqId !== loadReqRef.current) return // superseded (project switch)
+      try {
+        const res = await fetch(apiUrl('/storage'), { credentials: 'include' })
+        if (res.status >= 500) continue // transient (e.g. cold start) — retry
+        if (!res.ok) break // definite client error — stop, keep last-good list
+        const raw = (await res.json()) as RawFile[]
+        if (reqId !== loadReqRef.current) return
+        setFiles(raw.map((f) => ({
+          id: f.id,
+          name: f.original_filename,
+          size: f.size_bytes,
+          uploaded: f.uploaded_at,
+          type: iconForType(f.content_type),
+        })))
+        loaded = true
+      } catch {
+        // network-level failure — retried by the loop
+      }
     }
+    if (reqId !== loadReqRef.current) return
+    if (!loaded) {
+      // Keep the last-good list — a transient failure must not blank it.
+      setLoadErr('Could not load files for this project.')
+    }
+    setLoading(false)
   }, [])
 
   useEffect(() => {
     loadFiles()
-    const onChange = () => loadFiles()
+    const onChange = () => {
+      // Deliberate project switch: clear the old project's list up front so
+      // only *errors* keep last-good data.
+      setFiles([])
+      loadFiles()
+    }
     window.addEventListener(PROJECT_CHANGE_EVENT, onChange)
     return () => window.removeEventListener(PROJECT_CHANGE_EVENT, onChange)
   }, [loadFiles])

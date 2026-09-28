@@ -3,7 +3,7 @@
 from pyronites.client import create_client
 from pyronites.errors import ApiError, AuthError, NotFoundError
 
-__version__ = "1.1.0"
+__version__ = "1.2.1"
 
 __all__ = [
     "create_client",

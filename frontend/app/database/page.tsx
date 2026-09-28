@@ -1,7 +1,7 @@
 'use client'
 
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Plus, Edit, Trash2, Eye, EyeOff, ArrowLeft } from 'lucide-react'
 import {
   apiUrl,
@@ -39,29 +39,43 @@ export default function DatabaseExplorerPage() {
   const [editRow, setEditRow] = useState<Row | null>(null)
   const [deleteRow, setDeleteRow] = useState<Row | null>(null)
   const [projectLabel, setProjectLabel] = useState<string | null>(null)
+  const loadReqRef = useRef(0)
 
   const activeTable = selectedTable ?? tables[0]?.name ?? null
 
   const loadTables = useCallback(async () => {
+    const reqId = ++loadReqRef.current
     setLoading(true)
     setLoadErr(null)
     setProjectLabel(getStoredProjectName())
-    try {
-      const res = await fetch(apiUrl('/tables'), { credentials: 'include' })
-      if (!res.ok) throw new Error('list')
-      const data = (await res.json()) as TableInfo[]
-      setTables(data)
-      setSelectedTable((prev) => {
-        if (prev && data.some((t) => t.name === prev)) return prev
-        return data[0]?.name ?? null
-      })
-    } catch {
-      setLoadErr('Could not load tables for this project.')
-      setTables([])
-      setSelectedTable(null)
-    } finally {
-      setLoading(false)
+    const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
+    let loaded = false
+    for (let attempt = 0; attempt < 3 && !loaded; attempt++) {
+      if (attempt > 0) await delay(attempt * 1500)
+      if (reqId !== loadReqRef.current) return // superseded (project switch)
+      try {
+        const res = await fetch(apiUrl('/tables'), { credentials: 'include' })
+        if (res.status >= 500) continue // transient (e.g. cold start) — retry
+        if (!res.ok) break // definite client error — stop, keep last-good list
+        const data = (await res.json()) as TableInfo[]
+        if (reqId !== loadReqRef.current) return
+        setTables(data)
+        setSelectedTable((prev) => {
+          if (prev && data.some((t) => t.name === prev)) return prev
+          return data[0]?.name ?? null
+        })
+        loaded = true
+      } catch {
+        // network-level failure — retried by the loop
+      }
     }
+    if (reqId !== loadReqRef.current) return
+    if (!loaded) {
+      // Keep the last-good list: a transient failure must never blank the
+      // sidebar (the bug that made tables "disappear" with no console errors).
+      setLoadErr('Could not load tables for this project.')
+    }
+    setLoading(false)
   }, [])
 
   const loadTable = useCallback(async (name: string, pageOffset = 0) => {
@@ -89,9 +103,13 @@ export default function DatabaseExplorerPage() {
   useEffect(() => {
     loadTables()
     const onChange = () => {
+      // Deliberate project switch: clear the old project's list up front so
+      // only *errors* keep last-good data (a stale list must not leak across
+      // projects).
       setSelectedTable(null)
       setSchema([])
       setRows([])
+      setTables([])
       loadTables()
     }
     window.addEventListener(PROJECT_CHANGE_EVENT, onChange)

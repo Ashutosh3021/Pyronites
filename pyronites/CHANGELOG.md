@@ -4,6 +4,19 @@ All notable changes to the **pyronites** client package are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/). Versioning follows [SemVer](https://semver.org/).
 
+## [1.2.1] — 2026-09-28
+
+### Fixed
+- Rate limiting: 429 no longer auto-retried; `Retry-After` honoured for retry timing (cap 120s), default backoff base raised to 1.0s.
+- `__version__` synced with `pyproject.toml` (was stale at `1.1.0` in the `1.2.0` release).
+
+## [1.2.0] — 2026-09-14
+
+### Added
+- Automatic retry on `429`/`502`/`503`/`504` with exponential backoff and `Retry-After` support.
+- In-flight request coalescing (identical concurrent requests share one HTTP call).
+- 30s cached `auth.user()` (avoids a `GET /auth/me` round-trip per call).
+
 ## [1.1.0] — 2026-08-13
 
 ### Changed

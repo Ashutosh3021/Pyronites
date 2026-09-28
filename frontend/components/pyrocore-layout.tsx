@@ -70,6 +70,26 @@ function AuthGateShell({ slow }: { slow: boolean }) {
   )
 }
 
+// Auth probe that survives transient failures (Render free-tier cold start:
+// 5xx from the load balancer, dropped sockets while the container boots).
+// 4xx — notably 401 = genuinely logged out — returns immediately so expired
+// sessions still redirect to /login without delay.
+async function fetchAuthWithRetry(url: string, attempts = 3): Promise<Response> {
+  let last: Response | null = null
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, i * 1500))
+    try {
+      const res = await fetch(url, { credentials: 'include' })
+      if (res.status < 500) return res
+      last = res
+    } catch {
+      last = null // network error — keep retrying
+    }
+  }
+  if (last) return last
+  throw new Error('auth unreachable')
+}
+
 export function PyroCoreLayout({
   children,
 }: {
@@ -93,7 +113,7 @@ export function PyroCoreLayout({
       if (!cancelled) setSlowAuth(true)
     }, 2500)
 
-    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
+    fetchAuthWithRetry(`${API_BASE}/auth/me`)
       .then((res) => {
         if (cancelled) return
         if (res.ok) {

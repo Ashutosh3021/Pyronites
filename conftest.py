@@ -28,6 +28,14 @@ os.environ.setdefault("BREVO_API_KEY", "")
 os.environ.setdefault("PASSWORD_RESET_BASE_URL", "")
 # Loopback-only test servers must not inherit proxy trust config.
 os.environ.setdefault("TRUSTED_PROXY_IPS", "")
+# TestClient speaks plain http: a Secure / SameSite=None session cookie (set
+# by .env for the Vercel deployment) would be dropped by the client after
+# login, so every authenticated round-trip would 401.
+os.environ.setdefault("SESSION_COOKIE_SECURE", "false")
+os.environ.setdefault("SESSION_COOKIE_SAMESITE", "lax")
+# One-time legacy-table adoption: no-op in tests (each test that needs it
+# sets its own map via monkeypatch).
+os.environ.setdefault("LEGACY_ADOPTION_MAP", "")
 # Connect-per-acquire inside tests: pooled connections keep SQLite files open,
 # and Windows cannot rmtree tmp dirs that hold open file handles.
 os.environ.setdefault("PYROCORE_NO_POOL", "1")

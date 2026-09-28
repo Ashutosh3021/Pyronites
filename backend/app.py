@@ -21,6 +21,7 @@ from backend.api.project_scoped import router as project_scoped_router
 from backend.api.schemas import ErrorResponse
 from backend.core.db import Database
 from backend.core.migrations import get_migration_files, run_pending_migrations
+from backend.core.legacy_adoption import run_legacy_adoption
 from backend.core.backup import scheduled_backup_loop
 from backend.core.s3_sync import load_s3_config
 from backend.core.env import load_env
@@ -77,15 +78,24 @@ def create_app() -> FastAPI:
                     "S3 restore error (continuing with local/empty DB): %s", e, exc_info=True
                 )
 
-        logger.info("Running pending migrations...")
         database = Database(db_path)
         database.connect()
         try:
-            run_pending_migrations(database, migrations_dir)
-            logger.info("Migrations complete!")
-        except Exception as e:
-            logger.error("Failed to run migrations!", exc_info=True)
-            raise
+            logger.info("Running pending migrations...")
+            try:
+                run_pending_migrations(database, migrations_dir)
+                logger.info("Migrations complete!")
+            except Exception:
+                logger.error("Failed to run migrations!", exc_info=True)
+                raise
+            # One-time adoption: copy legacy (unscoped-plane) tables from the
+            # meta DB into their owning project file(s) so the scoped
+            # dashboard sees them.  Gated by LEGACY_ADOPTION_MAP + marker row
+            # in the migrations table; never raises (see legacy_adoption).
+            try:
+                run_legacy_adoption(database)
+            except Exception:
+                logger.error("Legacy adoption failed (continuing)!", exc_info=True)
         finally:
             database.close()
 
