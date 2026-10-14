@@ -138,6 +138,37 @@ class TestStart:
         assert "client id" in res.json()["detail"]["message"]
 
 
+class TestRedirectBaseHonoursProxyTls:
+    """uvicorn runs with proxy_headers=False, so scope["scheme"] is http even
+    behind Render's TLS terminator. The redirect_uri must still come out https,
+    otherwise Google rejects it with redirect_uri_mismatch in production only."""
+
+    def test_forwarded_proto_forces_https_in_the_callback(self, env, configured, monkeypatch):
+        monkeypatch.delenv("OAUTH_REDIRECT_BASE_URL", raising=False)
+        res = env.client.get(
+            "/auth/oauth/google/start",
+            headers={"X-Forwarded-Proto": "https"},
+            follow_redirects=False,
+        )
+        location = res.headers["location"]
+        assert "redirect_uri=https%3A%2F%2F" in location
+        assert "redirect_uri=http%3A" not in location
+
+    def test_explicit_redirect_base_wins_over_detection(self, env, configured):
+        # The env fixture sets OAUTH_REDIRECT_BASE_URL=https://api.test
+        res = env.client.get(
+            "/auth/oauth/google/start",
+            headers={"X-Forwarded-Proto": "http"},
+            follow_redirects=False,
+        )
+        assert "redirect_uri=https%3A%2F%2Fapi.test%2F" in res.headers["location"]
+
+    def test_loopback_stays_http(self, env, configured, monkeypatch):
+        monkeypatch.delenv("OAUTH_REDIRECT_BASE_URL", raising=False)
+        res = env.client.get("/auth/oauth/google/start", follow_redirects=False)
+        assert "redirect_uri=http%3A%2F%2Ftestserver%2F" in res.headers["location"]
+
+
 class TestCallbackFailures:
     def test_provider_error_redirects_to_login(self, client, configured):
         res = client.get("/auth/oauth/google/callback", params={"error": "access_denied"})

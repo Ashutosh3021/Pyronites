@@ -18,6 +18,7 @@ from fastapi.responses import RedirectResponse
 from backend.api._session import (
     OAUTH_RATE_WINDOW,
     get_oauth_rate_limit,
+    is_https,
     rate_limit_response,
     retry_after_seconds,
     set_session_cookie,
@@ -58,6 +59,23 @@ _ERROR_MESSAGES = {
 }
 
 
+def _request_origin(request: Request) -> str:
+    """Origin the browser actually used, correcting for proxy TLS termination.
+
+    uvicorn runs with ``proxy_headers=False`` here (see backend/app.py) so that
+    X-Forwarded-For cannot be spoofed past the rate limiter. The side effect is
+    that ``request.base_url`` reports ``http://`` even when Render terminates TLS
+    in front of us. Left uncorrected, the fallback redirect_uri becomes
+    ``http://<public-host>/...`` and Google rejects non-loopback http redirect
+    URIs outright — a failure that would only show up in production.
+    """
+    origin = str(request.base_url).rstrip("/")
+    if not is_https(request):
+        return origin
+    parts = urllib.parse.urlsplit(origin)
+    return urllib.parse.urlunsplit(("https", parts.netloc, parts.path, "", ""))
+
+
 def _frontend_base(request: Request) -> str:
     """Dashboard origin — where the browser should end up after the round trip."""
     raw = (os.environ.get("FRONTEND_ORIGIN") or "").strip()
@@ -65,7 +83,7 @@ def _frontend_base(request: Request) -> str:
         first = raw.split(",")[0].strip()
         if first:
             return first.rstrip("/")
-    return str(request.base_url).rstrip("/")
+    return _request_origin(request)
 
 
 def _redirect_base(request: Request) -> str:
@@ -73,7 +91,7 @@ def _redirect_base(request: Request) -> str:
     raw = (os.environ.get("OAUTH_REDIRECT_BASE_URL") or "").strip()
     if raw:
         return raw.rstrip("/")
-    return str(request.base_url).rstrip("/")
+    return _request_origin(request)
 
 
 def _callback_url(request: Request, provider: str) -> str:
