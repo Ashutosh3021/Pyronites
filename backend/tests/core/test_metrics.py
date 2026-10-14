@@ -187,3 +187,94 @@ class TestQuery:
         # 7 days at 1-hour buckets is ~169 points, not 10080.
         result = metrics.query(db, "p1", 7 * 24 * 3600)
         assert len(result["points"]) < 200
+
+
+class TestMetricsEndpoint:
+    """The route the dashboard actually calls."""
+
+    @pytest.fixture
+    def client(self, temp_dir):
+        import os
+        import shutil
+        from pathlib import Path
+
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from backend.api.auth import router as auth_router
+        from backend.api.project_scoped import router as scoped_router
+        from backend.api.projects import router as projects_router
+
+        migrations_dir = temp_dir / "migrations"
+        migrations_dir.mkdir()
+        real = Path(__file__).parent.parent.parent / "migrations"
+        for f in real.glob("*.sql"):
+            shutil.copy(f, migrations_dir / f.name)
+
+        db_path = str(temp_dir / "api.db")
+        seed = Database(db_path)
+        seed.connect()
+        run_pending_migrations(seed, str(migrations_dir))
+        seed.close()
+
+        os.environ["DATABASE_PATH"] = db_path
+        app = FastAPI()
+        app.include_router(auth_router)
+        app.include_router(projects_router)
+        app.include_router(scoped_router)
+        test_client = TestClient(app)
+        test_client.post(
+            "/auth/signup", json={"email": "metrics@example.com", "password": "secret123"}
+        )
+        return test_client
+
+    def _project_id(self, client):
+        res = client.get("/api/projects")
+        assert res.status_code == 200
+        projects = res.json()["projects"]
+        assert projects, "signup should have created a default project"
+        return projects[0]["id"]
+
+    def _seed(self, client, rows, project_id=None):
+        from backend.core import projects as projmod
+        from backend.core.db import acquire_database, release_database
+
+        pid = project_id or self._project_id(client)
+        db = acquire_database(projmod.meta_db_path())
+        try:
+            now = time.time()
+            db.execute_many(
+                "INSERT INTO metrics_buckets "
+                "(project_id, bucket_ts, method, route, status, duration_ms, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'x')",
+                [(pid, now - off, m, r, s, d) for off, m, r, s, d in rows],
+            )
+        finally:
+            release_database(db)
+        return pid
+
+    def test_returns_series_for_the_default_project(self, client):
+        pid = self._seed(client, [(30, "GET", "/tables", 200, 12.0)])
+        res = client.get(f"/api/projects/{pid}/metrics")
+
+        assert res.status_code == 200
+        body = res.json()
+        assert body["totals"]["requests"] == 1
+        assert len(body["points"]) > 1
+
+    def test_requires_authentication(self, client):
+        # Strip the session cookie the signup fixture left behind.
+        client.cookies.clear()
+        res = client.get("/api/projects/default/metrics")
+        assert res.status_code == 401
+
+    @pytest.mark.parametrize("bad_range", ["nonsense", "", "999999999"])
+    def test_unknown_range_clamps_instead_of_erroring(self, client, bad_range):
+        res = client.get(f"/api/projects/default/metrics?range={bad_range}")
+        assert res.status_code == 200
+        assert res.json()["range_seconds"] in (3600, 21600, 86400, 604800)
+
+    @pytest.mark.parametrize("rng,seconds", [("1h", 3600), ("24h", 86400), ("7d", 604800)])
+    def test_known_ranges_map_correctly(self, client, rng, seconds):
+        res = client.get(f"/api/projects/default/metrics?range={rng}")
+        assert res.json()["range_seconds"] == seconds
