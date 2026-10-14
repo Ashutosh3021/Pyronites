@@ -13,7 +13,7 @@ than at the point of use.
 """
 
 import re
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, field_validator
 
@@ -38,7 +38,12 @@ RESERVED_TABLES = {
 
 
 class CreateTableBody(BaseModel):
-    """Request body for creating a table. Validates everything it interpolates."""
+    """Request body for creating a table. Validates everything it interpolates.
+
+    A column is ``{"name", "type"}`` plus optional ``not_null``, ``unique`` and
+    ``default``. Unknown keys are ignored rather than rejected so a newer client
+    cannot break an older server.
+    """
 
     table: str
     columns: List[dict]
@@ -64,6 +69,8 @@ class CreateTableBody(BaseModel):
             raise ValueError("at least one column is required")
         if len(v) > 100:
             raise ValueError("too many columns")
+
+        seen = set()
         for col in v:
             name = (col.get("name") or "").strip()
             ctype = (col.get("type") or "").strip().upper()
@@ -74,6 +81,15 @@ class CreateTableBody(BaseModel):
                     f"unsupported column type: {ctype!r} — use one of "
                     + ", ".join(sorted(ALLOWED_COLUMN_TYPES))
                 )
+            # Duplicate column names produce DDL that SQLite rejects with an
+            # opaque error, so catch it here where we can name the column.
+            lowered = name.lower()
+            if lowered in seen:
+                raise ValueError(f"duplicate column name: {name!r}")
+            seen.add(lowered)
+
+            if len(str(col.get("default") or "")) > 500:
+                raise ValueError(f"default value for {name!r} is too long")
         return v
 
     @field_validator("primary_key")
@@ -82,3 +98,64 @@ class CreateTableBody(BaseModel):
         if v and not IDENT_RE.match(v):
             raise ValueError("invalid primary key column name")
         return v
+
+
+# ── DDL generation ──────────────────────────────────────────────────────────
+
+_NUMERIC_LITERAL_RE = re.compile(r"^-?\d+(\.\d+)?([eE][+-]?\d+)?$")
+
+
+def render_default_literal(raw: Any) -> Optional[str]:
+    """
+    Render a column default as a safe SQL literal.
+
+    Never interpolates the caller's text as SQL. Anything that is not a number,
+    a boolean or NULL becomes a single-quoted string with embedded quotes
+    doubled, so ``x); DROP TABLE users;--`` is stored as text and not executed.
+    """
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    if not value:
+        return None
+    if _NUMERIC_LITERAL_RE.match(value):
+        return value
+    upper = value.upper()
+    if upper == "NULL":
+        return "NULL"
+    if upper in ("TRUE", "FALSE"):
+        return upper
+    escaped = value.replace("'", "''")
+    return f"'{escaped}'"
+
+
+def build_create_table_ddl(
+    table: str,
+    columns: List[dict],
+    primary_key: Optional[str] = None,
+) -> str:
+    """
+    Build the CREATE TABLE statement.
+
+    Lives here rather than in a router so the dashboard's live SQL preview and
+    the statement that actually runs cannot drift apart: both call this.
+    Assumes the inputs already passed ``CreateTableBody`` validation.
+    """
+    defs: List[str] = []
+    for col in columns:
+        name = str(col.get("name") or "").strip()
+        ctype = str(col.get("type") or "TEXT").strip().upper()
+        parts = [name, ctype]
+        if col.get("not_null"):
+            parts.append("NOT NULL")
+        if col.get("unique"):
+            parts.append("UNIQUE")
+        default = render_default_literal(col.get("default"))
+        if default is not None:
+            parts.append(f"DEFAULT {default}")
+        defs.append(" ".join(parts))
+
+    if primary_key:
+        defs.append(f"PRIMARY KEY ({primary_key})")
+
+    return f"CREATE TABLE IF NOT EXISTS {table} ({', '.join(defs)})"

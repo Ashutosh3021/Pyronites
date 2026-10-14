@@ -25,7 +25,7 @@ from backend.api.schemas import ErrorResponse, MAX_ID_LEN
 from backend.api.auth_deps import resolve_auth, require_scopes, enforce_legacy_plane_key
 from backend.api.project_deps import get_db, auth_db
 from backend.core.logring import record_event
-from backend.core.schema_rules import CreateTableBody as _CreateTableBody
+from backend.core.schema_rules import CreateTableBody as _CreateTableBody, build_create_table_ddl
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tables", tags=["tables"])
@@ -256,18 +256,16 @@ async def get_table_row(table: str, id: str, request: Request, db: Database = De
 @router.post("")
 async def create_table(body: CreateTableBody, request: Request, db: Database = Depends(get_db)):
     require_scopes(_auth(request, db), {"admin"})
-    col_defs = ", ".join(f"{c['name']} {c['type'].upper()}" for c in body.columns)
-    pk_clause = ""
-    if body.primary_key:
-        if not any(c["name"] == body.primary_key for c in body.columns):
-            raise HTTPException(
-                status_code=400,
-                detail=ErrorResponse(
-                    code="bad_request", message="primary_key must name an existing column"
-                ).model_dump(),
-            )
-        pk_clause = f", PRIMARY KEY ({body.primary_key})"
-    ddl = f"CREATE TABLE IF NOT EXISTS {body.table} ({col_defs}{pk_clause})"
+    if body.primary_key and not any(
+        c["name"] == body.primary_key for c in body.columns
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                code="bad_request", message="primary_key must name an existing column"
+            ).model_dump(),
+        )
+    ddl = build_create_table_ddl(body.table, body.columns, body.primary_key)
     try:
         db.execute(ddl)
     except Exception as e:

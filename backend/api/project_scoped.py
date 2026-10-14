@@ -44,7 +44,7 @@ from backend.api.tables import (
     deserialize_row,
 )
 from backend.core.logring import record_event
-from backend.core.schema_rules import CreateTableBody as _SharedCreateTableBody
+from backend.core.schema_rules import CreateTableBody as _SharedCreateTableBody, build_create_table_ddl
 from backend.core.storage import (
     FileTooLargeError,
     InvalidFilenameError,
@@ -351,19 +351,17 @@ async def create_table(
 ):
     require_scopes(_ctx_auth(ctx), {"admin"})
     db = _ctx_db(ctx)
-    col_defs = ", ".join(f"{c['name']} {c['type'].upper()}" for c in body.columns)
-    pk_clause = ""
-    if body.primary_key:
-        if not any(c["name"] == body.primary_key for c in body.columns):
-            raise HTTPException(
-                status_code=400,
-                detail=ErrorResponse(
-                    code="bad_request",
-                    message="primary_key must name an existing column",
-                ).model_dump(),
-            )
-        pk_clause = f", PRIMARY KEY ({body.primary_key})"
-    ddl = f"CREATE TABLE IF NOT EXISTS {body.table} ({col_defs}{pk_clause})"
+    if body.primary_key and not any(
+        c["name"] == body.primary_key for c in body.columns
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                code="bad_request",
+                message="primary_key must name an existing column",
+            ).model_dump(),
+        )
+    ddl = build_create_table_ddl(body.table, body.columns, body.primary_key)
     try:
         db.execute(ddl)
     except Exception as e:
