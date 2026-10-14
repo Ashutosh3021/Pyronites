@@ -20,6 +20,7 @@ from backend.api.apikeys import router as apikeys_router
 from backend.api.system import router as system_router
 from backend.api.project_scoped import router as project_scoped_router
 from backend.api.schemas import ErrorResponse
+from backend.core.metrics_middleware import MetricsMiddleware
 from backend.core.db import Database
 from backend.core.migrations import get_migration_files, run_pending_migrations
 from backend.core.legacy_adoption import run_legacy_adoption
@@ -189,6 +190,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Outermost, so it also sees requests that CORS rejects.
+    app.add_middleware(MetricsMiddleware)
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error_handler(

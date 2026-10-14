@@ -45,6 +45,7 @@ from backend.api.tables import (
 )
 from backend.core.logring import record_event
 from backend.core.schema_rules import CreateTableBody as _SharedCreateTableBody, build_create_table_ddl
+from backend.core import metrics as metricsmod
 from backend.core.storage import (
     FileTooLargeError,
     InvalidFilenameError,
@@ -969,3 +970,32 @@ async def project_stats(ctx: Dict[str, Any] = Depends(get_project_context)):
             "id": project["id"],
         },
     }
+
+# ── metrics ──────────────────────────────────────────────────────────────────
+
+# Bounds on the ?range= parameter. Anything outside is clamped rather than
+# rejected so a stale dashboard link still renders something.
+_ALLOWED_RANGES = {
+    "1h": 3600,
+    "6h": 6 * 3600,
+    "24h": 24 * 3600,
+    "7d": 7 * 24 * 3600,
+}
+
+
+@router.get("/metrics")
+async def project_metrics(
+    range: str = Query("24h"),
+    ctx: Dict[str, Any] = Depends(get_project_context),
+):
+    """Request volume, latency percentiles and error rate over time.
+
+    Reads whatever has actually been recorded — no synthetic series. A window
+    with no traffic comes back as zero-count points, which is the honest answer.
+    """
+    require_scopes(_ctx_auth(ctx), {"read"})
+    meta = _ctx_meta(ctx)
+    project = _ctx_project(ctx)
+
+    seconds = _ALLOWED_RANGES.get((range or "24h").lower(), _ALLOWED_RANGES["24h"])
+    return metricsmod.query(meta, project["id"], seconds)

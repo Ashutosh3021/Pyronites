@@ -1,54 +1,59 @@
 "use client"
 
+/**
+ * Tabs primitives on Base UI.
+ *
+ * The previous version was a controlled/uncontrolled hybrid that rendered tab
+ * panels by hand with no ARIA: no `role="tablist"`/`tab`/`tabpanel`, no
+ * `aria-selected`, no `aria-controls`, and no arrow-key roving focus. A screen
+ * reader had no way to know what was selected or what a tab would reveal.
+ *
+ * Base UI wires all of that up. Exported names and props are unchanged.
+ */
+
 import * as React from "react"
+import { Tabs as BaseTabs } from "@base-ui/react/tabs"
 import { cn } from "@/lib/utils"
 
-interface TabsProps {
+function Tabs({
+  value,
+  defaultValue,
+  onValueChange,
+  children,
+}: {
   value?: string
   defaultValue?: string
   onValueChange?: (value: string) => void
   children: React.ReactNode
-}
-
-function Tabs({ value: controlledValue, defaultValue, onValueChange, children }: TabsProps) {
-  const [internalValue, setInternalValue] = React.useState(defaultValue || "")
-  const value = controlledValue !== undefined ? controlledValue : internalValue
-
-  const handleChange = (newValue: string) => {
-    setInternalValue(newValue)
-    onValueChange?.(newValue)
-  }
-
+}) {
   return (
-    <TabsContext.Provider value={{ value, onValueChange: handleChange }}>
-      <div>{children}</div>
-    </TabsContext.Provider>
+    <BaseTabs.Root
+      value={value}
+      defaultValue={defaultValue}
+      onValueChange={(next) => {
+        if (next != null) onValueChange?.(String(next))
+      }}
+    >
+      {children}
+    </BaseTabs.Root>
   )
 }
-
-const TabsContext = React.createContext<{
-  value: string
-  onValueChange: (value: string) => void
-}>({
-  value: "",
-  onValueChange: () => {},
-})
 
 function TabsList({
   className,
   children,
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+}: React.ComponentPropsWithoutRef<typeof BaseTabs.List>) {
   return (
-    <div
+    <BaseTabs.List
       className={cn(
-        "inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
+        "inline-flex h-9 items-center justify-center gap-1 bg-muted p-1 text-muted-foreground",
         className
       )}
       {...props}
     >
       {children}
-    </div>
+    </BaseTabs.List>
   )
 }
 
@@ -57,25 +62,21 @@ function TabsTrigger({
   className,
   children,
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { value: string }) {
-  const { value: selectedValue, onValueChange } = React.useContext(TabsContext)
-  const isSelected = selectedValue === value
-
+}: React.ComponentPropsWithoutRef<typeof BaseTabs.Tab>) {
   return (
-    <button
-      type="button"
+    <BaseTabs.Tab
+      value={value}
       className={cn(
-        "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all",
-        isSelected
-          ? "bg-background text-foreground shadow"
-          : "text-muted-foreground hover:text-foreground",
+        "inline-flex items-center justify-center whitespace-nowrap px-3 py-1 text-sm font-medium",
+        "transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "text-muted-foreground hover:text-foreground",
+        "data-[selected]:bg-background data-[selected]:text-foreground",
         className
       )}
-      onClick={() => onValueChange(value)}
       {...props}
     >
       {children}
-    </button>
+    </BaseTabs.Tab>
   )
 }
 
@@ -84,18 +85,11 @@ function TabsContent({
   className,
   children,
   ...props
-}: React.HTMLAttributes<HTMLDivElement> & { value: string }) {
-  const { value: selectedValue } = React.useContext(TabsContext)
-
-  if (selectedValue !== value) return null
-
+}: React.ComponentPropsWithoutRef<typeof BaseTabs.Panel>) {
   return (
-    <div
-      className={cn("mt-2", className)}
-      {...props}
-    >
+    <BaseTabs.Panel value={value} className={cn("mt-3 outline-none", className)} {...props}>
       {children}
-    </div>
+    </BaseTabs.Panel>
   )
 }
 
