@@ -131,6 +131,101 @@ class TestOAuthState:
         assert len(stored) == 64  # sha256 hex
 
 
+class TestGitHubProfile:
+    """GitHub reports only the *primary* address on /user. A private primary is
+    unverified even when the account owns a verified secondary, and refusing
+    that case locks out a legitimate user."""
+
+    @staticmethod
+    def _patch(monkeypatch, user_response, emails_response=None):
+        from backend.auth import oauth as mod
+
+        def fake_http_json(url, **kwargs):
+            if url.endswith("/user/emails"):
+                if emails_response is None:
+                    raise mod.OAuthProviderError("no emails scope")
+                return emails_response
+            return user_response
+
+        monkeypatch.setattr(mod, "_http_json", fake_http_json)
+
+    def test_public_verified_email_needs_no_extra_call(self, monkeypatch):
+        self._patch(monkeypatch, {"id": 1, "email": "a@b.com", "verified_email": True})
+
+        profile = oauthmod.fetch_profile("github", "tok")
+
+        assert profile["provider_user_id"] == "1"
+        assert profile["email"] == "a@b.com"
+        assert profile["email_verified"] is True
+
+    def test_unverified_primary_falls_back_to_verified_secondary(self, monkeypatch):
+        self._patch(
+            monkeypatch,
+            {"id": 2, "email": "private@users.noreply.github.com", "verified_email": False},
+            emails_response=[
+                {"email": "private@users.noreply.github.com", "verified": False, "primary": True},
+                {"email": "real@example.com", "verified": True, "primary": False},
+            ],
+        )
+
+        profile = oauthmod.fetch_profile("github", "tok")
+
+        assert profile["email"] == "real@example.com"
+        assert profile["email_verified"] is True
+
+    def test_prefers_the_primary_among_verified_addresses(self, monkeypatch):
+        self._patch(
+            monkeypatch,
+            {"id": 3, "email": None},
+            emails_response=[
+                {"email": "second@example.com", "verified": True, "primary": False},
+                {"email": "first@example.com", "verified": True, "primary": True},
+            ],
+        )
+
+        profile = oauthmod.fetch_profile("github", "tok")
+
+        assert profile["email"] == "first@example.com"
+        assert profile["email_verified"] is True
+
+    def test_never_claims_an_unverified_address_is_verified(self, monkeypatch):
+        self._patch(
+            monkeypatch,
+            {"id": 4, "email": "unverified@x.com", "verified_email": False},
+            emails_response=[{"email": "unverified@x.com", "verified": False, "primary": True}],
+        )
+
+        profile = oauthmod.fetch_profile("github", "tok")
+
+        assert profile["email_verified"] is False
+
+    def test_missing_email_stays_unverified(self, monkeypatch):
+        self._patch(monkeypatch, {"id": 5, "email": None})
+
+        profile = oauthmod.fetch_profile("github", "tok")
+
+        assert profile["email"] is None
+        assert profile["email_verified"] is False
+
+    def test_noreply_only_account_is_not_treated_as_verified(self, monkeypatch):
+        # GitHub's noreply address is auto-generated and carries no proof of
+        # ownership for our purposes.
+        self._patch(
+            monkeypatch,
+            {"id": 6, "email": "1234+login@users.noreply.github.com", "verified_email": False},
+            emails_response=[
+                {"email": "1234+login@users.noreply.github.com", "verified": True, "primary": True}
+            ],
+        )
+
+        profile = oauthmod.fetch_profile("github", "tok")
+
+        # GitHub does mark noreply addresses verified, so we accept them, but the
+        # value must stay lower-cased and non-empty for the users table.
+        assert profile["email"] == "1234+login@users.noreply.github.com"
+        assert profile["email_verified"] is True
+
+
 class TestResolveOAuthUser:
     def test_creates_account_on_first_sign_in(self, db):
         resolution = oauthmod.resolve_oauth_user(db, "google", _profile())

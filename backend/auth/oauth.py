@@ -353,14 +353,19 @@ def _github_profile(
         raise OAuthProviderError("GitHub userinfo did not include an id")
 
     email = data.get("email")
-    verified = False
-    if email:
-        # /user marks the primary address verified when the user has verified it.
-        verified = bool(data.get("verified_email"))
-    else:
-        # No public email. Fall back to /user/emails, which requires the
-        # user:email scope we already request.
-        email, verified = _github_primary_email(provider, access_token, headers)
+    verified = bool(data.get("verified_email")) if email else False
+
+    # /user only reports the *primary* address. That primary can be private and
+    # therefore unverified even when the account also owns a verified
+    # secondary — refusing outright there would lock out a legitimate user, so
+    # fall back to /user/emails whenever the primary will not do. We already
+    # request the user:email scope, so the call is authorized.
+    if not verified:
+        fallback_email, fallback_verified = _github_primary_email(
+            provider, access_token, headers
+        )
+        if fallback_verified:
+            email, verified = fallback_email, True
 
     return {
         "provider_user_id": str(github_id),
