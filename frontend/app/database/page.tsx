@@ -14,10 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { AlertBanner } from '@/components/alert-banner'
-
-const COLUMN_TYPES = [
-  'TEXT', 'INTEGER', 'REAL', 'BLOB', 'NUMERIC', 'BOOLEAN', 'DATETIME', 'DATE', 'JSON',
-]
+import { SchemaDesigner } from '@/components/schema-designer'
 
 interface TableInfo { name: string; rows: number }
 interface ColumnInfo { name: string; type: string; pk: boolean }
@@ -141,16 +138,26 @@ export default function DatabaseExplorerPage() {
     return <span className="text-foreground">{String(value)}</span>
   }
 
-  const handleCreateTable = async (name: string, cols: { name: string; type: string }[]) => {
+  const handleCreateTable = async (
+    name: string,
+    cols: Record<string, string | boolean>[],
+    primaryKey: string | null
+  ) => {
     const res = await fetch(apiUrl('/tables'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ table: name, columns: cols }),
+      body: JSON.stringify({ table: name, columns: cols, primary_key: primaryKey }),
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body?.message ?? body?.detail?.message ?? 'Failed to create table.')
+      const detail = body?.detail
+      const message =
+        (Array.isArray(detail) ? detail[0]?.msg : undefined) ??
+        body?.message ??
+        detail?.message ??
+        'Failed to create table.'
+      throw new Error(String(message).replace(/^Value error,\s*/, ''))
     }
   }
 
@@ -312,7 +319,12 @@ export default function DatabaseExplorerPage() {
         </div>
       </div>
 
-      <NewTableModal open={showNewTable} onClose={() => setShowNewTable(false)} onCreate={handleCreateTable} onDone={(name) => { setShowNewTable(false); loadTables().then(() => selectTable(name)) }} />
+      <SchemaDesigner
+        open={showNewTable}
+        onClose={() => setShowNewTable(false)}
+        onCreate={handleCreateTable}
+        onDone={(name) => { setShowNewTable(false); loadTables().then(() => selectTable(name)) }}
+      />
       
       {showInsert && activeTable && (
         <RowModal title="Insert Row" tableName={activeTable} schema={schema} initial={{}} open={showInsert} onClose={() => setShowInsert(false)} onSubmit={async (t, _id, row) => handleInsertRow(t, row)} onDone={() => { setShowInsert(false); loadTable(activeTable, offset) }} />
@@ -326,78 +338,6 @@ export default function DatabaseExplorerPage() {
         <DeleteModal tableName={activeTable} row={deleteRow} open={!!deleteRow} onClose={() => setDeleteRow(null)} onDelete={handleDeleteRow} onDone={() => { setDeleteRow(null); loadTable(activeTable, offset) }} />
       )}
     </PyroCoreLayout>
-  )
-}
-
-function NewTableModal({ open, onClose, onCreate, onDone }: { open: boolean; onClose: () => void; onCreate: (name: string, cols: { name: string; type: string }[]) => Promise<void>; onDone: (name: string) => void }) {
-  const [name, setName] = useState('')
-  const [cols, setCols] = useState<{ name: string; type: string }[]>([{ name: 'id', type: 'INTEGER' }, { name: 'created_at', type: 'DATETIME' }])
-  const [err, setErr] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  const submit = async () => {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) { setErr('Invalid table name.'); return }
-    setSaving(true); setErr(null)
-    try { await onCreate(name, cols); onDone(name) }
-    catch (e) { setErr(e instanceof Error ? e.message : 'Failed') }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>New Table</DialogTitle>
-          <DialogDescription>Create a new table in your database.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
-          {err && <AlertBanner variant="error" message={err} onDismiss={() => setErr(null)} />}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Table Name</label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="table_name"
-              className="font-mono"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Columns</label>
-            <div className="space-y-2">
-              {cols.map((col, i) => (
-                <div key={i} className="flex gap-2">
-                  <Input
-                    value={col.name}
-                    onChange={(e) => setCols((c) => c.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
-                    className="flex-1 font-mono"
-                    placeholder="column_name"
-                  />
-                  <Select value={col.type} onValueChange={(value) => setCols((c) => c.map((x, j) => j === i ? { ...x, type: value } : x))}>
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {COLUMN_TYPES.map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
-            </div>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setCols((c) => [...c, { name: '', type: 'TEXT' }])}>
-              + Add column
-            </Button>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={submit} disabled={saving}>
-            {saving ? 'Creating…' : 'Create'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }
 

@@ -95,7 +95,10 @@
   --chart-4: #eab308;
   --chart-5: #ef4444;
   --radius: 0px;
-  --radius-max: 1.5px;
+  /* Hard ceiling for the sharp/angular look. Nothing in the app may exceed 1px;
+     the radius scale above is 0px and circular elements use rounded-full
+     deliberately. */
+  --radius-max: 1px;
   --sidebar: #1a1a1a;
   --sidebar-foreground: #e5e5e5;
   --sidebar-primary: #ff6a00;
