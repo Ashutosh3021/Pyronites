@@ -18,13 +18,14 @@ import uuid
 from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 
 from backend.core.db import Database, DatabaseError, DatabaseIntegrityError
 from backend.api.schemas import ErrorResponse, MAX_ID_LEN
 from backend.api.auth_deps import resolve_auth, require_scopes, enforce_legacy_plane_key
 from backend.api.project_deps import get_db, auth_db
 from backend.core.logring import record_event
+from backend.core.schema_rules import CreateTableBody as _CreateTableBody
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tables", tags=["tables"])
@@ -169,50 +170,10 @@ def deserialize_row(row: Dict[str, Any], col_types: Dict[str, str]) -> Dict[str,
     return out
 
 
-_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_ALLOWED_COL_TYPES = {
-    "TEXT", "INTEGER", "REAL", "BLOB", "NUMERIC", "BOOLEAN", "DATETIME", "DATE", "JSON",
-}
-_RESERVED_TABLES = {"users", "sessions", "api_keys", "migrations", "projects", "sqlite_sequence", "storage_files", "password_reset_tokens"}
-
-
-class CreateTableBody(BaseModel):
-    table: str
-    columns: List[Dict[str, str]]
-    primary_key: Optional[str] = None
-
-    @field_validator("table")
-    @classmethod
-    def _table(cls, v: str) -> str:
-        v = (v or "").strip()
-        if not _IDENT_RE.match(v):
-            raise ValueError("invalid table name")
-        if v.lower() in _RESERVED_TABLES:
-            raise ValueError("that table name is reserved")
-        return v
-
-    @field_validator("columns")
-    @classmethod
-    def _columns(cls, v: List[Dict[str, str]]) -> List[Dict[str, str]]:
-        if not v:
-            raise ValueError("at least one column is required")
-        if len(v) > 100:
-            raise ValueError("too many columns")
-        for col in v:
-            name = (col.get("name") or "").strip()
-            ctype = (col.get("type") or "").strip().upper()
-            if not _IDENT_RE.match(name):
-                raise ValueError(f"invalid column name: {name!r}")
-            if ctype not in _ALLOWED_COL_TYPES:
-                raise ValueError(f"unsupported column type: {ctype!r}")
-        return v
-
-    @field_validator("primary_key")
-    @classmethod
-    def _pk(cls, v: Optional[str]) -> Optional[str]:
-        if v and not _IDENT_RE.match(v):
-            raise ValueError("invalid primary key column name")
-        return v
+# Table/column validation is defined once in backend/core/schema_rules.py and
+# shared with the project-scoped plane, so a framework table added by a
+# migration cannot be shadowable from only one of the two routes.
+CreateTableBody = _CreateTableBody
 
 
 @router.get("")

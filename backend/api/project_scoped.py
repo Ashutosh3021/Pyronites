@@ -44,6 +44,7 @@ from backend.api.tables import (
     deserialize_row,
 )
 from backend.core.logring import record_event
+from backend.core.schema_rules import CreateTableBody as _SharedCreateTableBody
 from backend.core.storage import (
     FileTooLargeError,
     InvalidFilenameError,
@@ -59,15 +60,6 @@ router = APIRouter(
 
 # ── shared helpers (mirrored from tables / sql / storage — reuse patterns) ──
 
-_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_ALLOWED_COL_TYPES = {
-    "TEXT", "INTEGER", "REAL", "BLOB", "NUMERIC", "BOOLEAN",
-    "DATETIME", "DATE", "JSON",
-}
-_RESERVED_TABLES = {
-    "users", "sessions", "api_keys", "migrations", "projects",
-    "sqlite_sequence", "storage_files", "password_reset_tokens",
-}
 _READONLY_KEYWORDS = {"SELECT", "WITH", "EXPLAIN", "VALUES", "PRAGMA"}
 MAX_STATEMENTS = 50
 _REDACT_COLS = {"password", "password_hash", "token", "session_token", "key_hash"}
@@ -252,43 +244,9 @@ def _is_readonly(statement: str) -> bool:
 
 # ── tables ───────────────────────────────────────────────────────────────────
 
-class CreateTableBody(BaseModel):
-    table: str
-    columns: List[Dict[str, str]]
-    primary_key: Optional[str] = None
-
-    @field_validator("table")
-    @classmethod
-    def _table(cls, v: str) -> str:
-        v = (v or "").strip()
-        if not _IDENT_RE.match(v):
-            raise ValueError("invalid table name")
-        if v.lower() in _RESERVED_TABLES:
-            raise ValueError("that table name is reserved")
-        return v
-
-    @field_validator("columns")
-    @classmethod
-    def _columns(cls, v: List[Dict[str, str]]) -> List[Dict[str, str]]:
-        if not v:
-            raise ValueError("at least one column is required")
-        if len(v) > 100:
-            raise ValueError("too many columns")
-        for col in v:
-            name = (col.get("name") or "").strip()
-            ctype = (col.get("type") or "").strip().upper()
-            if not _IDENT_RE.match(name):
-                raise ValueError(f"invalid column name: {name!r}")
-            if ctype not in _ALLOWED_COL_TYPES:
-                raise ValueError(f"unsupported column type: {ctype!r}")
-        return v
-
-    @field_validator("primary_key")
-    @classmethod
-    def _pk(cls, v: Optional[str]) -> Optional[str]:
-        if v and not _IDENT_RE.match(v):
-            raise ValueError("invalid primary key column name")
-        return v
+# Shared with the legacy unscoped plane so a framework table added by a
+# migration cannot be shadowable from only one of the two routes.
+CreateTableBody = _SharedCreateTableBody
 
 
 @router.get("/tables")

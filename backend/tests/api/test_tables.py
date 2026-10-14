@@ -307,6 +307,74 @@ class TestCreateTableEndpoint:
         assert r1.status_code == 200
         assert r2.status_code == 200
 
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "oauth_identities",
+            "oauth_states",
+            "users",
+            "sessions",
+            "api_keys",
+        ],
+    )
+    def test_reserved_table_names_rejected(self, client, admin_api_key, name):
+        """A user table must never shadow a framework table.
+
+        The Default project can share the meta database, so creating e.g.
+        `oauth_states` would break sign-in for everyone rather than just this
+        project.
+        """
+        response = client.post(
+            "/tables",
+            json={"table": name, "columns": [{"name": "id", "type": "INTEGER"}]},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
+        )
+        assert response.status_code == 422
+        assert "reserved" in response.text.lower()
+
+    @pytest.mark.parametrize(
+        "column",
+        [
+            {"name": "id); DROP TABLE users;--", "type": "INTEGER"},
+            {"name": "1bad", "type": "TEXT"},
+            {"name": "", "type": "TEXT"},
+        ],
+    )
+    def test_malicious_column_name_rejected(self, client, admin_api_key, column):
+        """Column names are interpolated into DDL, so the identifier is validated."""
+        response = client.post(
+            "/tables",
+            json={"table": "safe_name", "columns": [column]},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
+        )
+        assert response.status_code == 422
+
+    @pytest.mark.parametrize(
+        "ctype",
+        ["TEXT); DROP TABLE users;--", "VARCHAR(255)", "INTEGER PRIMARY KEY", "AUTOINCREMENT"],
+    )
+    def test_non_whitelisted_column_type_rejected(self, client, admin_api_key, ctype):
+        """Types are interpolated into DDL and must come from the whitelist."""
+        response = client.post(
+            "/tables",
+            json={"table": "safe_types", "columns": [{"name": "col", "type": ctype}]},
+            headers={"Authorization": f"Bearer {admin_api_key}"},
+        )
+        assert response.status_code == 422
+
+    def test_primary_key_must_name_an_existing_column(self, client, admin_api_key):
+        response = client.post(
+            "/tables",
+            json={
+                "table": "pk_mismatch",
+                "columns": [{"name": "id", "type": "INTEGER"}],
+                "primary_key": "nonexistent",
+            },
+            headers={"Authorization": f"Bearer {admin_api_key}"},
+        )
+        assert response.status_code == 400
+        assert "existing column" in response.json()["detail"]["message"]
+
 
 class TestDropTableEndpoint:
     def test_drop_table_success(self, client, admin_api_key):
