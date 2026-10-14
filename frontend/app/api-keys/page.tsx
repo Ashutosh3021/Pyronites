@@ -2,7 +2,7 @@
 
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
 import { useState, useEffect, useCallback } from 'react'
-import { Copy, Check, AlertCircle, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
+import { Copy, Check, AlertCircle, ChevronDown, ChevronUp, RefreshCw, Key } from 'lucide-react'
 import {
   apiUrl,
   getStoredProjectName,
@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { AlertBanner } from '@/components/alert-banner'
+import { EmptyState } from '@/components/empty-state'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -215,7 +216,12 @@ export default function APIKeysPage() {
         )}
         {!loading && fetchError && <AlertBanner variant="error" message={fetchError} onDismiss={() => setFetchError(null)} />}
         {!loading && !fetchError && keys.length === 0 && (
-          <p className="text-sm text-muted-foreground">No API keys yet. Create one to get started.</p>
+          <EmptyState
+            icon={Key}
+            title="No API keys yet"
+            description="A key is what lets the pyronites client talk to this project. Create one with the scopes your app needs — read and write is enough for day-to-day use."
+            action={{ label: 'Create API key', onClick: () => setShowCreateForm(true) }}
+          />
         )}
 
         {/* Keys list */}

@@ -3,7 +3,7 @@
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Copy, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { Copy, AlertTriangle, RefreshCw, CheckCircle2, HardDrive } from 'lucide-react'
 import {
   getStoredProjectId,
   getStoredProjectName,
@@ -20,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { AlertBanner } from '@/components/alert-banner'
+import { EmptyState } from '@/components/empty-state'
 
 interface ProjectDetail {
   id: string
@@ -409,7 +410,13 @@ export default function SettingsPage() {
                 <div>
                   <h3 className="text-sm font-semibold text-foreground mb-3">Recent Backups</h3>
                   {backups.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No backups yet. Run one with "Back Up Now".</p>
+                    <EmptyState
+                      compact
+                      icon={HardDrive}
+                      title="No backups yet"
+                      description="Backups also run automatically on a schedule. Run one now to make the first."
+                      action={{ label: 'Back up now', onClick: handleBackup, disabled: backingUp }}
+                    />
                   ) : (
                     <div className="space-y-2">
                       {backups.map((b) => (

@@ -2,7 +2,8 @@
 
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Plus, Edit, Trash2, Eye, EyeOff, ArrowLeft } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Plus, Edit, Trash2, Eye, EyeOff, ArrowLeft, Database } from 'lucide-react'
 import {
   apiUrl,
   getStoredProjectName,
@@ -15,12 +16,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { AlertBanner } from '@/components/alert-banner'
 import { SchemaDesigner } from '@/components/schema-designer'
+import { EmptyState } from '@/components/empty-state'
 
 interface TableInfo { name: string; rows: number }
 interface ColumnInfo { name: string; type: string; pk: boolean }
 interface Row { [key: string]: unknown }
 
 export default function DatabaseExplorerPage() {
+  const router = useRouter()
   const [tables, setTables] = useState<TableInfo[]>([])
   const [selectedTable, setSelectedTable] = useState<string | null>(null)
   const [schema, setSchema] = useState<ColumnInfo[]>([])
@@ -223,7 +226,14 @@ export default function DatabaseExplorerPage() {
           </div>
           <div className="space-y-1 flex-1 overflow-auto">
             {tables.length === 0 && !loading && (
-              <p className="text-xs text-muted-foreground px-1">No tables in this project yet.</p>
+              <EmptyState
+                compact
+                icon={Database}
+                title="No tables yet"
+                description="Create your first table to start storing rows."
+                action={{ label: 'New table', onClick: () => setShowNewTable(true) }}
+                secondaryAction={{ label: 'Use SQL editor', onClick: () => router.push('/sql-editor') }}
+              />
             )}
             {tables.map((table) => (
               <button key={table.name} onClick={() => selectTable(table.name)} className={['w-full px-3 py-3 text-sm text-left min-h-[44px] rounded-md transition-colors', activeTable === table.name ? 'bg-muted text-accent' : 'text-muted-foreground hover:bg-muted/50'].join(' ')}>

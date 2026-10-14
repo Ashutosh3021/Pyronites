@@ -2,12 +2,13 @@
 
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Upload, Download, Trash2, FileIcon } from 'lucide-react'
+import { Upload, Download, Trash2, FileIcon, FileText } from 'lucide-react'
 import { apiUrl, getStoredProjectName, PROJECT_CHANGE_EVENT } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { AlertBanner } from '@/components/alert-banner'
+import { EmptyState } from '@/components/empty-state'
 
 interface StorageFile {
   id: string
@@ -191,8 +192,13 @@ export default function StoragePage() {
           <div className="p-12 text-center text-muted-foreground">Loading…</div>
         ) : files.length === 0 ? (
           <Card>
-            <CardContent className="p-12 text-center text-muted-foreground">
-              No files in this project yet.
+            <CardContent className="p-0">
+              <EmptyState
+                icon={FileText}
+                title="No files in this project yet"
+                description="Upload a file to get a URL your app can fetch it from."
+                action={{ label: 'Upload file', onClick: () => setShowUpload(true) }}
+              />
             </CardContent>
           </Card>
         ) : (
