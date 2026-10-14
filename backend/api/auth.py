@@ -1,15 +1,26 @@
 """
 Authentication endpoints: signup / login / logout / password reset.
+
+Password auth is retained for the REST API and for existing accounts. The
+dashboard sign-in screen uses OAuth instead — see ``backend/api/oauth.py``.
 """
 
 import logging
-import math
 import os
-import time
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from backend.api._session import (
+    AUTH_RATE_WINDOW,
+    clear_session_cookie,
+    get_auth_rate_limit,
+    get_forgot_rate_limit,
+    rate_limit_response,
+    retry_after_seconds,
+    set_session_cookie,
+)
 from backend.auth.users import (
     UserAlreadyExistsError,
     create_user,
@@ -36,58 +47,8 @@ from backend.core.rate_limit import check_and_record, get_client_ip
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-SESSION_MAX_AGE = int(os.environ.get("SESSION_MAX_AGE_SECONDS", str(7 * 24 * 3600)))
-
-# Rate limit defaults (env-configurable, read at request time for testability)
-_AUTH_RATE_WINDOW = 60  # seconds
-_FORGOT_RATE_WINDOW = 3600  # seconds
-
-
-def _get_auth_rate_limit() -> int:
-    return int(os.environ.get("AUTH_RATE_LIMIT_PER_MIN", "20"))
-
-
-def _get_forgot_rate_limit() -> int:
-    return int(os.environ.get("FORGOT_RATE_LIMIT_PER_HOUR", "5"))
-
-
-def _rate_limit_response(retry_after: int, limit: int, remaining: int, reset_at: float) -> HTTPException:
-    """Build a 429 HTTPException with Retry-After and X-RateLimit-* headers."""
-    return HTTPException(
-        status_code=429,
-        detail=ErrorResponse(
-            code="rate_limited",
-            message=f"Rate limit exceeded. Try again in {retry_after}s.",
-        ).model_dump(),
-        headers={
-            "Retry-After": str(retry_after),
-            "X-RateLimit-Limit": str(limit),
-            "X-RateLimit-Remaining": str(remaining),
-            "X-RateLimit-Reset": str(int(reset_at)),
-        },
-    )
-
-
-def _is_https(request: Request | None) -> bool:
-    if request is None:
-        return False
-    if request.headers.get("x-forwarded-proto", "").lower() == "https":
-        return True
-    return request.url.scheme == "https"
-
-
-def _cookie_secure(request: Request | None = None) -> bool:
-    raw = os.environ.get("SESSION_COOKIE_SECURE")
-    if raw is not None:
-        return raw.strip().lower() in ("1", "true", "yes", "on")
-    return _is_https(request)
-
-
-def _cookie_samesite(request: Request | None = None) -> str:
-    raw = os.environ.get("SESSION_COOKIE_SAMESITE")
-    if raw is not None:
-        return raw.strip().lower()
-    return "none" if _is_https(request) else "lax"
+# Rate-limit windows. The forgot-password window is an hour.
+FORGOT_RATE_WINDOW = 3600
 
 
 def get_db() -> Database:
@@ -99,37 +60,11 @@ def get_db() -> Database:
 
 
 def _set_session_cookie(response: Response, raw_token: str, request: Request | None = None) -> None:
-    samesite = _cookie_samesite(request)
-    secure = _cookie_secure(request)
-    if samesite == "none":
-        secure = True
-    response.set_cookie(
-        key="session_token",
-        value=raw_token,
-        httponly=True,
-        secure=secure,
-        samesite=samesite,  # type: ignore[arg-type]
-        path="/",
-        max_age=SESSION_MAX_AGE,
-    )
+    set_session_cookie(response, raw_token, request)
 
 
 def _clear_session_cookie(response: Response, request: Request | None = None) -> None:
-    samesite = _cookie_samesite(request)
-    secure = _cookie_secure(request)
-    if samesite == "none":
-        secure = True
-    response.delete_cookie(
-        "session_token",
-        path="/",
-        secure=secure,
-        samesite=samesite,  # type: ignore[arg-type]
-    )
-    if samesite == "none" and secure:
-        response.headers.append(
-            "Set-Cookie",
-            "session_token=; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=0",
-        )
+    clear_session_cookie(response, request)
 
 
 class _EmailBody(BaseModel):
@@ -164,13 +99,14 @@ _GENERIC_FORGOT_MSG = (
 @router.post("/signup")
 async def signup(body: _EmailBody, response: Response, request: Request, db: Database = Depends(get_db)):
     client_ip = get_client_ip(request)
-    limit = _get_auth_rate_limit()
+    limit = get_auth_rate_limit()
     allowed, remaining, reset_at = check_and_record(
-        db, f"ip:{client_ip}", "auth:signup", limit, _AUTH_RATE_WINDOW,
+        db, f"ip:{client_ip}", "auth:signup", limit, AUTH_RATE_WINDOW,
     )
     if not allowed:
-        retry_after = max(1, int(reset_at - time.time()))
-        raise _rate_limit_response(retry_after, limit, remaining, reset_at)
+        raise rate_limit_response(
+            retry_after_seconds(reset_at), limit, remaining, reset_at
+        )
 
     try:
         user = create_user(db, body.email, body.password)
@@ -216,13 +152,14 @@ async def signup(body: _EmailBody, response: Response, request: Request, db: Dat
 @router.post("/login")
 async def login(body: _EmailBody, response: Response, request: Request, db: Database = Depends(get_db)):
     client_ip = get_client_ip(request)
-    limit = _get_auth_rate_limit()
+    limit = get_auth_rate_limit()
     allowed, remaining, reset_at = check_and_record(
-        db, f"ip:{client_ip}", "auth:login", limit, _AUTH_RATE_WINDOW,
+        db, f"ip:{client_ip}", "auth:login", limit, AUTH_RATE_WINDOW,
     )
     if not allowed:
-        retry_after = max(1, int(reset_at - time.time()))
-        raise _rate_limit_response(retry_after, limit, remaining, reset_at)
+        raise rate_limit_response(
+            retry_after_seconds(reset_at), limit, remaining, reset_at
+        )
 
     user = authenticate_user(db, body.email, body.password)
     if user is None:
@@ -290,15 +227,16 @@ async def forgot_password(
     db: Database = Depends(get_db),
 ):
     client_ip = get_client_ip(request)
-    limit = _get_forgot_rate_limit()
+    limit = get_forgot_rate_limit()
     # Rate limit by both IP and email
     for key in [f"ip:{client_ip}", f"email:{body.email.lower()}"]:
         allowed, remaining, reset_at = check_and_record(
-            db, key, "auth:forgot", limit, _FORGOT_RATE_WINDOW,
+            db, key, "auth:forgot", limit, FORGOT_RATE_WINDOW,
         )
         if not allowed:
-            retry_after = max(1, int(reset_at - time.time()))
-            raise _rate_limit_response(retry_after, limit, remaining, reset_at)
+            raise rate_limit_response(
+                retry_after_seconds(reset_at), limit, remaining, reset_at
+            )
 
     try:
         user = get_user_by_email(db, body.email)
@@ -376,7 +314,15 @@ async def reset_password(
 
 
 class DeleteAccountBody(BaseModel):
-    password: str
+    """Confirmation for a destructive, irreversible action.
+
+    ``password`` is required for accounts that have a real password. OAuth-only
+    accounts have no password anyone can produce, so they confirm with
+    ``confirm_email`` instead — the session cookie already proves who they are.
+    """
+
+    password: Optional[str] = None
+    confirm_email: Optional[str] = None
 
 
 @router.delete("/account")
@@ -386,7 +332,7 @@ async def delete_account(
     response: Response,
     db: Database = Depends(get_db),
 ):
-    """Self-service account deletion. Requires password confirmation."""
+    """Self-service account deletion. Requires re-authentication or email confirmation."""
     session_token = request.cookies.get("session_token")
     if not session_token:
         raise HTTPException(
@@ -401,11 +347,23 @@ async def delete_account(
             detail=ErrorResponse(code="unauthorized", message="Invalid session").model_dump(),
         )
 
-    authenticated = authenticate_user(db, user.email, body.password)
-    if not authenticated:
+    if body.password:
+        authenticated = authenticate_user(db, user.email, body.password)
+        if not authenticated:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse(code="bad_request", message="Incorrect password").model_dump(),
+            )
+    elif (body.confirm_email or "").strip().lower() != user.email.lower():
         raise HTTPException(
             status_code=400,
-            detail=ErrorResponse(code="bad_request", message="Incorrect password").model_dump(),
+            detail=ErrorResponse(
+                code="bad_request",
+                message=(
+                    "Confirmation does not match. Type your account email exactly "
+                    "to delete it permanently."
+                ),
+            ).model_dump(),
         )
 
     user_id = user.id

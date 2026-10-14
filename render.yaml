@@ -18,6 +18,9 @@
 #   SESSION_COOKIE_SECURE=true
 #   SESSION_COOKIE_SAMESITE=none
 #   S3_* (see §10)   -> to persist the DB across redeploys on the free tier.
+#   OAUTH_REDIRECT_BASE_URL -> your backend origin, so OAuth callbacks resolve.
+#   GOOGLE_* / GITHUB_*     -> optional; enables that provider's sign-in button.
+#   BREVO_* / PASSWORD_RESET_BASE_URL -> enables password-reset email.
 # PORT is injected by Render automatically — do NOT set it.
 
 services:
@@ -57,6 +60,35 @@ services:
       - key: SESSION_COOKIE_SECURE
         sync: false
       - key: SESSION_COOKIE_SAMESITE
+        sync: false
+      # --- OAuth sign-in (optional) ---
+      # Leave blank and the dashboard greys that provider's button out.  The
+      # redirect URIs registered with each provider must be
+      #   https://<this-backend>/auth/oauth/google/callback
+      #   https://<this-backend>/auth/oauth/github/callback
+      # OAUTH_REDIRECT_BASE_URL is mandatory in production: without it the
+      # callback falls back to the container's internal origin and the
+      # provider rejects the redirect_uri.
+      - key: OAUTH_REDIRECT_BASE_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      # --- Password reset email ---
+      # Without these, forgot-password returns 200 and sends nothing.  Set them
+      # or the feature is dead on arrival.
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: BREVO_SENDER_NAME
+        sync: false
+      - key: PASSWORD_RESET_BASE_URL
         sync: false
       # --- S3 / R2 persistence (free-tier) — set all of these in the dashboard ---
       - key: S3_SYNC_ENABLED

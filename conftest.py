@@ -26,6 +26,16 @@ os.environ.setdefault("FRONTEND_ORIGIN_REGEX", "")
 os.environ.setdefault("S3_SYNC_ENABLED", "false")
 os.environ.setdefault("BREVO_API_KEY", "")
 os.environ.setdefault("PASSWORD_RESET_BASE_URL", "")
+# No provider credentials: every OAuth provider must read as unconfigured
+# unless a test opts in, so no test can accidentally start a real redirect.
+for _oauth_var in (
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GITHUB_CLIENT_ID",
+    "GITHUB_CLIENT_SECRET",
+    "OAUTH_REDIRECT_BASE_URL",
+):
+    os.environ.setdefault(_oauth_var, "")
 # Loopback-only test servers must not inherit proxy trust config.
 os.environ.setdefault("TRUSTED_PROXY_IPS", "")
 # TestClient speaks plain http: a Secure / SameSite=None session cookie (set

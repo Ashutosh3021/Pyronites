@@ -14,6 +14,7 @@ from backend.api.tables import router as tables_router
 from backend.api.storage import router as storage_router
 from backend.api.sql_editor import router as sql_router
 from backend.api.auth import router as auth_router
+from backend.api.oauth import router as oauth_router
 from backend.api.projects import router as projects_router
 from backend.api.apikeys import router as apikeys_router
 from backend.api.system import router as system_router
@@ -236,6 +237,7 @@ def create_app() -> FastAPI:
     # These are deprecated; clients should use /api/projects/{project_id}/...
     app.include_router(health_router)
     app.include_router(auth_router)
+    app.include_router(oauth_router)
     app.include_router(tables_router)
     app.include_router(storage_router)
     app.include_router(sql_router)

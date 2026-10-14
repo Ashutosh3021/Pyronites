@@ -1,144 +1,88 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Eye, EyeOff } from 'lucide-react'
+
 import { AuthShell } from '@/components/auth-shell'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { OAuthButtons } from '@/components/oauth-buttons'
 import { AlertBanner } from '@/components/alert-banner'
 import { API_BASE } from '@/lib/api'
 
-function LoginForm() {
+/** Fallback copy for when the backend's /auth/oauth/errors map is unreachable. */
+const FALLBACK_ERRORS: Record<string, string> = {
+  access_denied: 'Sign-in was cancelled. Nothing was changed.',
+  invalid_state: 'That sign-in link expired or was already used. Please try again.',
+  invalid_code: 'The sign-in could not be completed. Please try again.',
+  provider_unavailable: 'The sign-in provider could not be reached. Please try again.',
+  unverified_email: "Your provider account's email is not verified. Verify it, then try again.",
+  no_email: 'Your provider account does not expose an email address. Add one and try again.',
+  disabled: 'This account has been disabled.',
+  unknown_error: 'Sign-in could not be completed. Please try again.',
+}
+
+function LoginScreen() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const oauthError = searchParams.get('oauth_error')
   const justReset = searchParams.get('reset') === '1'
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>(FALLBACK_ERRORS)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-
-    if (!email.trim() || !password) {
-      setError('Email and password are required.')
-      return
-    }
-
-    setLoading(true)
-    try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+  // The backend owns this copy so the wording cannot drift between the
+  // redirect URL and what the user reads.
+  useEffect(() => {
+    let cancelled = false
+    fetch(`${API_BASE}/auth/oauth/errors`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (!cancelled && body?.errors) setErrors({ ...FALLBACK_ERRORS, ...body.errors })
       })
-
-      if (res.ok) {
-        router.push('/')
-      } else {
-        setError('Incorrect email or password.')
-      }
-    } catch {
-      setError('Could not reach the server. Check your connection and try again.')
-    } finally {
-      setLoading(false)
+      .catch(() => {
+        /* keep the built-in copy */
+      })
+    return () => {
+      cancelled = true
     }
-  }
+  }, [])
+
+  const failure = oauthError ? errors[oauthError] ?? errors.unknown_error : null
+
+  useEffect(() => {
+    if (!failure) return
+    router.replace('/login')
+  }, [failure, router])
 
   return (
     <>
       <div>
         <h1 className="text-base font-semibold text-foreground">PyroCore</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">Sign in to your account</p>
+        <p className="text-xs text-muted-foreground mt-0.5">Sign in to your dashboard</p>
       </div>
 
       {justReset && (
         <AlertBanner variant="success" message="Password updated. You can log in now." />
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-        {error && <AlertBanner variant="error" message={error} onDismiss={() => setError(null)} />}
+      {failure && <AlertBanner variant="error" message={failure} />}
 
-        <div className="space-y-1.5">
-          <label htmlFor="email" className="block text-sm font-medium text-foreground">
-            Email
-          </label>
-          <Input
-            id="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-          />
-        </div>
+      <OAuthButtons />
 
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between gap-2">
-            <label htmlFor="password" className="block text-sm font-medium text-foreground">
-              Password
-            </label>
-            <Link
-              href="/forgot-password"
-              className="text-xs font-medium hover:underline"
-              style={{ color: 'var(--pyro-orange)' }}
-            >
-              Forgot password?
-            </Link>
-          </div>
-          <div className="relative">
-            <Input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="pr-10 font-mono"
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-0 top-0 h-full"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-            >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </Button>
-          </div>
-        </div>
+      <div className="border-t border-border pt-4">
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Signing in with Google or GitHub creates your account and a starter project on
+          first use. If you already signed up with an email and password, use the same email
+          address and your existing projects will be waiting.
+        </p>
+      </div>
 
-        <Button
-          type="submit"
-          disabled={loading}
-          className="w-full"
-        >
-          {loading ? (
-            <>
-              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" aria-hidden="true" />
-              Signing in…
-            </>
-          ) : 'Log in'}
-        </Button>
-      </form>
-
-      <p className="text-sm text-muted-foreground text-center">
-        Don&apos;t have an account?{' '}
-        <Link
-          href="/signup"
-          className="font-medium hover:underline"
-          style={{ color: 'var(--pyro-orange)' }}
-        >
-          Sign up
+      <p className="text-xs text-muted-foreground text-center">
+        <Link href="/terms" className="hover:underline" style={{ color: 'var(--pyro-orange)' }}>
+          Terms
+        </Link>
+        <span className="mx-2 text-border">·</span>
+        <Link href="/privacy" className="hover:underline" style={{ color: 'var(--pyro-orange)' }}>
+          Privacy
         </Link>
       </p>
     </>
@@ -150,7 +94,7 @@ export default function LoginPage() {
     <AuthShell width="sm">
       <div className="p-8 space-y-6">
         <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
-          <LoginForm />
+          <LoginScreen />
         </Suspense>
       </div>
     </AuthShell>
