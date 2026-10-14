@@ -128,14 +128,29 @@ export function PyroCoreLayout({
         // H1: resolve the active project BEFORE children mount. Pages call
         // apiUrl() synchronously on mount — without this hydration they'd hit
         // the legacy unscoped plane (wrong/Default DB) on a cold load.
-        if (!cancelled && !getStoredProjectId()) {
+        //
+        // The stored id is validated on EVERY authenticated load, not just when
+        // localStorage is empty. A stored id goes stale when the user signs into
+        // a different account, or when a redeploy restores the database from S3
+        // with fresh ids. Because apiUrl() rewrites every data route to
+        // /api/projects/{id}/..., one stale id 404s the entire dashboard and
+        // the user sees "Could not load overview. Is the backend running?".
+        if (!cancelled) {
           try {
-            const serverId: string | null = data?.last_project_id ?? (await fetchCurrentProjectId())
+            const storedId = getStoredProjectId()
             const list = await fetchProjects()
-            const serverMatch =
-              serverId && list.find((p) => p.id === serverId || p.project_id === serverId)
-            const chosen = serverMatch ?? list.find(isDefaultProject) ?? list[0]
-            if (chosen) setStoredProject({ id: chosen.id, name: chosen.name })
+            const stillValid =
+              storedId != null &&
+              list.some((p) => p.id === storedId || p.project_id === storedId)
+
+            if (!stillValid) {
+              const serverId: string | null = data?.last_project_id ?? (await fetchCurrentProjectId())
+              const serverMatch =
+                serverId && list.find((p) => p.id === serverId || p.project_id === serverId)
+              const chosen = serverMatch ?? list.find(isDefaultProject) ?? list[0]
+              if (chosen) setStoredProject({ id: chosen.id, name: chosen.name })
+              else clearStoredProject()
+            }
           } catch {
             // Non-fatal: pages fall back to the server's default resolution.
           }

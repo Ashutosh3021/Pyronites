@@ -254,20 +254,20 @@ def build_authorize_url(
     if creds is None:
         raise OAuthError(f"{provider['name']} sign-in is not configured on this server.")
 
-    query = urllib.parse.urlencode(
-        {
-            "client_id": creds[0],
-            "redirect_uri": redirect_uri,
-            "response_type": "code",
-            "scope": provider["scope"],
-            "state": state,
-            # Prompt for consent every time so the provider always hands back a
-            # fresh code. Without it, a returning user can land on the callback
-            # with no code at all.
-            "prompt": "consent" if provider_id == "google" else "",
-        }
-    )
-    return f"{provider['authorize_url']}?{query}"
+    params: Dict[str, str] = {
+        "client_id": creds[0],
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": provider["scope"],
+        "state": state,
+    }
+    # Google only re-issues a code when consent is re-granted, so ask for it.
+    # GitHub has no `prompt` parameter at all — sending the key with an empty
+    # value is malformed, so omit it entirely.
+    if provider_id == "google":
+        params["prompt"] = "consent"
+
+    return f"{provider['authorize_url']}?{urllib.parse.urlencode(params)}"
 
 
 def exchange_code_for_token(provider_id: str, code: str, redirect_uri: str) -> str:

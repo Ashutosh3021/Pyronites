@@ -38,7 +38,19 @@ export default function OverviewPage() {
         fetch(apiUrl('/api/stats'), { credentials: 'include' }),
         fetch(apiUrl('/api/logs'), { credentials: 'include' }),
       ])
-      if (!sRes.ok) throw new Error('stats')
+      if (!sRes.ok) {
+        // A 404 here almost never means "server down". apiUrl() rewrites this
+        // to /api/projects/{id}/stats, so 404 means the active project id is no
+        // longer on the server — a different account, or a redeploy that
+        // restored the database with fresh ids. Saying "is the backend
+        // running?" sends the user debugging the wrong thing.
+        setLoadErr(
+          sRes.status === 404
+            ? 'This project is no longer available on the server. Reload the page to select the current one.'
+            : `Could not load overview — the server returned HTTP ${sRes.status}.`
+        )
+        return
+      }
       const stats = (await sRes.json()) as Stats
       setStats(stats)
       if (lRes.ok) {
@@ -46,7 +58,7 @@ export default function OverviewPage() {
         setActivity(logs.slice(0, 5))
       }
     } catch {
-      setLoadErr('Could not load overview. Is the backend running?')
+      setLoadErr('Could not reach the backend. Check the API URL and your connection.')
     } finally {
       setLoading(false)
     }
