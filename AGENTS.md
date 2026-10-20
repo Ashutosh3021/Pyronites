@@ -60,3 +60,16 @@ cd frontend && npx tsc --noEmit && npm run build
 ```
 
 `conftest.py` blanks `BREVO_API_KEY` so tests never send real email. Keep it that way.
+
+## Releases
+
+The `pyronites` client publishes to PyPI from `.github/workflows/publish-pyronites.yml`:
+a push to `main` tests, builds and uploads the version in `pyronites/pyproject.toml`.
+
+- Bump both version declarations with one command — `python scripts/set_version.py --set X.Y.Z`
+  (writes `pyronites/pyproject.toml` and `pyronites/pyronites/__init__.py`).
+- `python scripts/set_version.py --check` fails if the two files drift apart.
+- The workflow skips the upload when that version is already on PyPI. PyPI never
+  accepts the same version twice, so every release needs a bump.
+- Publishing needs the `PYPI_API_TOKEN` repository secret (a PyPI token scoped to
+  the `pyronites` project). Full details in `pyronites/docs/PUBLISH.md`.

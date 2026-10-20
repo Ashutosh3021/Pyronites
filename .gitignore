@@ -2,6 +2,10 @@
 .pytest_cache/
 __pycache__/
 .vscode/
+# Build artifacts (never commit wheels/sdists; the release workflow builds them)
+dist/
+build/
+*.egg-info/
 # Local secrets / runtime env (keep .env.example tracked)
 .env
 .env.*.local

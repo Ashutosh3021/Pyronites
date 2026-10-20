@@ -1,0 +1,166 @@
+name: Publish pyronites to PyPI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "pyronites/**"
+      - "scripts/**"
+      - ".github/workflows/publish-pyronites.yml"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish, e.g. 1.3.0. Leave empty to publish the version already in pyronites/pyproject.toml."
+        required: false
+        type: string
+      commit_version:
+        description: "Commit the version bump back to the branch after publishing"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: publish-pyronites
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Test, build and publish
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      published: ${{ steps.pypi.outputs.published }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+
+      - name: Resolve version
+        id: version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "${REQUESTED_VERSION//[[:space:]]/}" ]; then
+            VERSION="$(python scripts/set_version.py --set "$REQUESTED_VERSION")"
+            SOURCE="the workflow \`version\` input"
+          else
+            VERSION="$(python scripts/set_version.py --check)"
+            SOURCE="\`pyronites/pyproject.toml\`"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          {
+            echo "### pyronites $VERSION"
+            echo ""
+            echo "Version came from $SOURCE."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install the client package
+        run: python -m pip install "./pyronites[dev]"
+
+      - name: Run the client tests
+        working-directory: pyronites
+        run: python -m pytest -q
+
+      - name: Check whether this version already exists on PyPI
+        id: pypi
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          CODE="$(curl -sS -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/pyronites/${VERSION}/json")"
+          case "$CODE" in
+            200) echo "published=true" >> "$GITHUB_OUTPUT" ;;
+            404) echo "published=false" >> "$GITHUB_OUTPUT" ;;
+            *)   echo "Unexpected response from the PyPI API: $CODE" >&2; exit 1 ;;
+          esac
+          echo "PyPI reports $CODE for pyronites ${VERSION}"
+
+      - name: Skip the upload because this version is already published
+        if: steps.pypi.outputs.published == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "### Nothing was uploaded"
+            echo ""
+            echo "pyronites ${VERSION} is already on PyPI, and PyPI refuses to upload the same version twice."
+            echo ""
+            echo "Bump the version, then push:"
+            echo ""
+            echo '```bash'
+            echo "python scripts/set_version.py --set <next-version>"
+            echo 'git commit -am "Release v<next-version>" && git push'
+            echo '```'
+            echo ""
+            echo "Or re-run this workflow from the Actions tab with an explicit \`version\` input."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build the distributions
+        if: steps.pypi.outputs.published == 'false'
+        working-directory: pyronites
+        run: |
+          rm -rf dist build
+          python -m build
+
+      - name: Check the distributions
+        if: steps.pypi.outputs.published == 'false'
+        working-directory: pyronites
+        run: python -m twine check dist/*
+
+      - name: Upload to PyPI
+        if: steps.pypi.outputs.published == 'false'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: pyronites/dist
+          skip-existing: true
+
+  commit:
+    name: Commit the version bump
+    needs: publish
+    if: needs.publish.outputs.published == 'true' && inputs.commit_version == true && github.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Write the published version back into the repository
+        env:
+          VERSION: ${{ needs.publish.outputs.version }}
+        run: python scripts/set_version.py --set "$VERSION"
+
+      - name: Commit and push
+        env:
+          VERSION: ${{ needs.publish.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyronites/pyproject.toml pyronites/pyronites/__init__.py
+          if git diff --cached --quiet; then
+            echo "The repository already records version ${VERSION}; nothing to commit."
+            exit 0
+          fi
+          git commit -m "Release v${VERSION}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

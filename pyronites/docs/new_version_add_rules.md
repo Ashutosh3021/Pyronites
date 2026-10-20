@@ -1,5 +1,10 @@
 # Publishing a new version of `pyronites` to PyPI
 
+> Releases are done by GitHub Actions now — see [`PUBLISH.md`](PUBLISH.md).
+> Bump the version with `python scripts/set_version.py --set X.Y.Z`, commit, push,
+> and the workflow tests, builds and uploads it. The manual steps below are the
+> fallback for when Actions is unavailable.
+
 Use this whenever you change the package and want a new version on PyPI (e.g. `0.1.1`, `0.2.0`).
 
 ---
@@ -51,6 +56,12 @@ version = "0.1.1"
 ```
 
 They must be identical.
+
+Or let the script do both at once:
+
+```bash
+python scripts/set_version.py --set 0.1.1
+```
 
 ---
 

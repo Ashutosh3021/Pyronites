@@ -1,39 +1,95 @@
 # Publishing pyronites to PyPI
 
-## Preconditions
+Releases go out through GitHub Actions: `.github/workflows/publish-pyronites.yml`
+runs the client tests, builds the distributions and uploads them to PyPI.
 
-- [x] P1–P3 feature-complete
-- [x] Unit tests passing
-- [x] `CHANGELOG.md` updated
-- [x] Version in `pyproject.toml` and `pyronites/__init__.py` match
-- [ ] PyPI account + API token
-- [ ] Package name `pyronites` available (or use a scoped name if taken)
+## One-time setup
 
-## Steps
+Create a PyPI API token scoped to the `pyronites` project:
+
+1. <https://pypi.org/manage/account/token/> → "API tokens" → "Create token"
+2. Scope it to the `pyronites` project only.
+3. Add it to the repository as an Actions secret named `PYPI_API_TOKEN`
+   (Settings → Secrets and variables → Actions → New repository secret).
+
+## How a release happens
+
+### 1. Bump the version
+
+The version lives in two files and the release workflow keeps them in sync:
+
+```bash
+python scripts/set_version.py --set 1.3.0
+```
+
+That writes `version = "1.3.0"` into `pyronites/pyproject.toml` and
+`__version__ = "1.3.0"` into `pyronites/pyronites/__init__.py`.
+
+Check the two files agree at any time:
+
+```bash
+python scripts/set_version.py --check
+```
+
+### 2. Update the changelog
+
+Add a section to `pyronites/CHANGELOG.md`.
+
+### 3. Commit and push
+
+```bash
+git commit -am "Release v1.3.0"
+git push
+```
+
+Pushing to `main` triggers the workflow, which tests, builds and uploads
+`1.3.0` to PyPI.
+
+## Version control during a release
+
+The workflow takes an optional `version` input:
+
+| Trigger | Version used | Behaviour |
+|---|---|---|
+| push to `main` | the version in `pyronites/pyproject.toml` | uploads it, unless that version is already on PyPI |
+| **Actions → Publish pyronites to PyPI**, `version` left empty | the version in `pyronites/pyproject.toml` | same as a push |
+| **Actions → Publish pyronites to PyPI**, `version=1.4.0` | `1.4.0` | writes `1.4.0` into both files, then uploads it |
+
+PyPI refuses to upload the same version twice. When the resolved version is
+already published, the workflow **skips the upload and passes** — it does not
+fail the run. The job summary says so and tells you to bump the version.
+
+`commit_version` (default `false`) makes the workflow commit the version it
+published back to the branch, so `pyronites/pyproject.toml` keeps matching what
+is on PyPI.
+
+## What the workflow does
+
+1. Resolves the version (`scripts/set_version.py`).
+2. Installs the client and runs `pytest`.
+3. Asks PyPI whether that version already exists — skip if it does.
+4. `python -m build` and `twine check dist/*`.
+5. Uploads with `pypa/gh-action-pypi-publish` using `PYPI_API_TOKEN`.
+
+## Manual release (fallback)
+
+If GitHub Actions is unavailable:
 
 ```bash
 cd pyronites
 pip install build twine
-
+rm -rf dist build
 python -m build
 twine check dist/*
 
-# TestPyPI first (recommended)
-twine upload --repository testpypi dist/*
-# then
+export TWINE_USERNAME="__token__"
+export TWINE_PASSWORD="pypi-YOUR_FULL_TOKEN"
 twine upload dist/*
 ```
 
 ## After publish
 
 ```bash
-pip install pyronites
+pip install --upgrade pyronites
 python -c "from pyronites import create_client, __version__; print(__version__)"
 ```
-
-## Version bumps
-
-1. Update `__version__` in `pyronites/__init__.py`
-2. Update `version` in `pyproject.toml`
-3. Add a section to `CHANGELOG.md`
-4. Tag: `git tag v0.1.0 && git push --tags`
