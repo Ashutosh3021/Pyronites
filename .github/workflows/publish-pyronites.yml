@@ -57,7 +57,7 @@ jobs:
             VERSION="$(python scripts/set_version.py --set "$REQUESTED_VERSION")"
             SOURCE="the workflow \`version\` input"
           else
-            VERSION="$(python scripts/set_version.py --check)"
+            VERSION="$(python scripts/set_version.py --sync)"
             SOURCE="\`pyronites/pyproject.toml\`"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"

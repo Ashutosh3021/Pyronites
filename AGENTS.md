@@ -66,9 +66,12 @@ cd frontend && npx tsc --noEmit && npm run build
 The `pyronites` client publishes to PyPI from `.github/workflows/publish-pyronites.yml`:
 a push to `main` tests, builds and uploads the version in `pyronites/pyproject.toml`.
 
-- Bump both version declarations with one command — `python scripts/set_version.py --set X.Y.Z`
-  (writes `pyronites/pyproject.toml` and `pyronites/pyronites/__init__.py`).
-- `python scripts/set_version.py --check` fails if the two files drift apart.
+- `pyronites/pyproject.toml` is the source of truth for the client version. The
+  workflow syncs `pyronites/pyronites/__init__.py` to match before building, so
+  bumping one file is enough.
+- `python scripts/set_version.py --set X.Y.Z` writes both files;
+  `--sync` copies pyproject's version into `__init__.py`; `--check` fails if
+  the two files drift apart.
 - The workflow skips the upload when that version is already on PyPI. PyPI never
   accepts the same version twice, so every release needs a bump.
 - Publishing needs the `PYPI_API_TOKEN` repository secret (a PyPI token scoped to

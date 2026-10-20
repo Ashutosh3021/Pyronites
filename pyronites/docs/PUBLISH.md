@@ -16,19 +16,28 @@ Create a PyPI API token scoped to the `pyronites` project:
 
 ### 1. Bump the version
 
-The version lives in two files and the release workflow keeps them in sync:
+`pyronites/pyproject.toml` is the source of truth. Edit it:
+
+```toml
+version = "1.3.0"
+```
+
+The version also lives in `pyronites/pyronites/__init__.py` as `__version__`.
+The release workflow keeps that file in sync with `pyproject.toml`, so a
+one-file bump is enough.
+
+To update both at once, locally:
 
 ```bash
 python scripts/set_version.py --set 1.3.0
 ```
 
-That writes `version = "1.3.0"` into `pyronites/pyproject.toml` and
-`__version__ = "1.3.0"` into `pyronites/pyronites/__init__.py`.
-
-Check the two files agree at any time:
+Useful modes:
 
 ```bash
-python scripts/set_version.py --check
+python scripts/set_version.py            # print the current version
+python scripts/set_version.py --sync     # copy pyproject.toml's version into __init__.py
+python scripts/set_version.py --check    # fail if the two files disagree
 ```
 
 ### 2. Update the changelog
@@ -51,7 +60,7 @@ The workflow takes an optional `version` input:
 
 | Trigger | Version used | Behaviour |
 |---|---|---|
-| push to `main` | the version in `pyronites/pyproject.toml` | uploads it, unless that version is already on PyPI |
+| push to `main` | the version in `pyronites/pyproject.toml` | syncs `__init__.py` to match, then uploads — unless that version is already on PyPI |
 | **Actions → Publish pyronites to PyPI**, `version` left empty | the version in `pyronites/pyproject.toml` | same as a push |
 | **Actions → Publish pyronites to PyPI**, `version=1.4.0` | `1.4.0` | writes `1.4.0` into both files, then uploads it |
 

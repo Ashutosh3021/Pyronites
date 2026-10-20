@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Read, set and verify the version of the `pyronites` client package.
+"""Read, set, sync and verify the version of the `pyronites` client package.
 
 The version is declared in two places that must never drift apart:
 
     pyronites/pyproject.toml          version = "1.2.1"
     pyronites/pyronites/__init__.py   __version__ = "1.2.1"
 
-The release workflow uses this script so a single command owns both files.
+`pyproject.toml` is the source of truth.  The release workflow uses this
+script so a single command owns both files.
 
 Usage:
     python scripts/set_version.py                 # print the current version
     python scripts/set_version.py --set 1.3.0     # write the version to both files
+    python scripts/set_version.py --sync          # copy pyproject.toml's version into __init__.py
     python scripts/set_version.py --check         # fail if the two files disagree
 """
 
@@ -120,6 +122,11 @@ def main(argv: list[str] | None = None) -> int:
         help="write VERSION to pyproject.toml and __init__.py",
     )
     parser.add_argument(
+        "--sync",
+        action="store_true",
+        help="copy the pyproject.toml version into __init__.py (pyproject.toml wins)",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="exit non-zero when the two files hold different versions",
@@ -137,6 +144,16 @@ def main(argv: list[str] | None = None) -> int:
 
     pyproject_version = _pyproject_version(PYPROJECT)
     init_version = _init_version(INIT)
+
+    if args.sync:
+        if init_version != pyproject_version:
+            _set_init_version(INIT, pyproject_version)
+            print(
+                f"synced pyronites/pyronites/__init__.py: {init_version} -> {pyproject_version}",
+                file=sys.stderr,
+            )
+        print(pyproject_version)
+        return 0
 
     if args.check:
         if pyproject_version != init_version:
