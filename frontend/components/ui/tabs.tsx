@@ -20,11 +20,13 @@ function Tabs({
   defaultValue,
   onValueChange,
   children,
+  className,
 }: {
   value?: string
   defaultValue?: string
   onValueChange?: (value: string) => void
   children: React.ReactNode
+  className?: string
 }) {
   return (
     <BaseTabs.Root
@@ -33,6 +35,7 @@ function Tabs({
       onValueChange={(next) => {
         if (next != null) onValueChange?.(String(next))
       }}
+      className={className}
     >
       {children}
     </BaseTabs.Root>
