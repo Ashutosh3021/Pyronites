@@ -107,7 +107,7 @@
   --muted-foreground: #a1968c;
   --ink: #f4efe9;
   --ink-muted: #a1968c;
-  --ink-faint: #857a70;
+  --ink-faint: #8b8076;
   --border: rgba(244, 239, 233, 0.1);
   --seam: rgba(244, 239, 233, 0.1);
   --seam-strong: rgba(244, 239, 233, 0.18);
@@ -154,6 +154,26 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+
+  /*
+    The vessel's seam never goes fully cold. Registered so it can be animated
+    as a number rather than as an opacity, which keeps the pulse cheap.
+  */
+  @property --seam-pulse {
+    syntax: '<number>';
+    inherits: true;
+    initial-value: 1;
+  }
+
+  @keyframes seam-pulse {
+    0%,
+    100% {
+      --seam-pulse: 0.66;
+    }
+    50% {
+      --seam-pulse: 1;
+    }
   }
 
   html {
@@ -410,7 +430,8 @@
       rgba(255, 217, 160, 0.7) 62%,
       transparent 100%
     );
-    opacity: calc(0.18 + var(--core-heat) * 0.82);
+    opacity: calc((0.18 + var(--core-heat) * 0.82) * var(--seam-pulse));
+    animation: seam-pulse 4.6s ease-in-out infinite;
     pointer-events: none;
   }
 
@@ -425,7 +446,7 @@
   .seam-open::before {
     content: '';
     position: absolute;
-    left: -1px;
+    left: 0;
     top: 50%;
     height: 0;
     width: 2px;
@@ -446,6 +467,35 @@
   }
 
   .seam-open[aria-current='page']::before {
+    height: 100%;
+  }
+
+  /* The secondary treatment: a seam opens on the leading edge. Used by every
+     outline button, so the role always answers the same way. */
+  .seam-btn {
+    position: relative;
+  }
+
+  .seam-btn::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    height: 0;
+    width: 2px;
+    background: var(--accent);
+    transform: translateY(-50%);
+    transition: height 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: none;
+  }
+
+  @media (hover: hover) {
+    .seam-btn:hover::after {
+      height: 58%;
+    }
+  }
+
+  .seam-btn:focus-visible::after {
     height: 100%;
   }
 
@@ -505,8 +555,31 @@
     will-change: transform, opacity;
   }
 
+  /* The breath lives here, on its own layer, so the compositor can animate
+     it without the main thread doing any work. */
+  .core__breath {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    animation: core-breathe 3.8s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+
+  @keyframes core-breathe {
+    0%,
+    100% {
+      transform: scale(0.95);
+      opacity: 0.86;
+    }
+    50% {
+      transform: scale(1.06);
+      opacity: 1;
+    }
+  }
+
   .core__heart {
-    width: 46%;
+    width: 30%;
     aspect-ratio: 1;
     border-radius: 50%;
     background: radial-gradient(
@@ -517,7 +590,7 @@
       var(--magma) 68%,
       transparent 78%
     );
-    filter: blur(2px);
+    filter: blur(3px);
     opacity: 0.55;
   }
 

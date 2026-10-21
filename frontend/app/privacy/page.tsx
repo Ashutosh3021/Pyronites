@@ -16,7 +16,7 @@ export default function PrivacyPage() {
         </p>
       </aside>
 
-      <section className="lg:col-span-7 px-6 sm:px-10 lg:px-14 py-10 lg:py-14">
+      <main id="main" className="lg:col-span-7 px-6 sm:px-10 lg:px-14 py-10 lg:py-14">
         <h1 className="display text-[clamp(2rem,1.3rem+2.4vw,3.25rem)]">Privacy policy</h1>
         <div className="mt-8 space-y-5 max-w-[62ch]">
           <p className="text-[14px] leading-relaxed text-ink-muted">
@@ -32,7 +32,7 @@ export default function PrivacyPage() {
         <Link href="/" className="link mt-10 inline-block text-[13px]">
           Back to PyroCore
         </Link>
-      </section>
+      </main>
     </div>
   )
 }

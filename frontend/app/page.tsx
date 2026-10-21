@@ -136,17 +136,17 @@ export default function OverviewPage() {
           </div>
           <div className="mt-8 border-t border-seam pt-5 flex items-end justify-between gap-6">
             <div>
-              <p className="label">Requests per minute</p>
-              <p className="data mt-2 text-[clamp(2.5rem,1.6rem+2.4vw,3.5rem)] leading-none text-ink">
-                <span data-core-rate>0</span>
+              <p className="label">Core state</p>
+              <p className="display mt-2 text-[clamp(1.9rem,1.3rem+2vw,2.9rem)] text-accent" data-core-state>
+                IDLE
               </p>
             </div>
             <div className="text-right">
-              <p className="label">Core</p>
-              <p className="data mt-2 text-[15px] text-accent" data-core-state>
-                IDLE
+              <p className="label">Requests per minute</p>
+              <p className="data mt-2 text-[26px] leading-none text-ink">
+                <span data-core-rate>0</span>
               </p>
-              <p className="data mt-1 text-[11px] text-ink-faint">5 min average</p>
+              <p className="data mt-1.5 text-[11px] text-ink-faint">5 min average</p>
             </div>
           </div>
         </div>
@@ -227,13 +227,16 @@ export default function OverviewPage() {
                 { label: 'Create API key', href: '/api-keys', icon: Key },
                 { label: 'View logs', href: '/logs', icon: ScrollText },
               ].map((action) => (
-                <Link key={action.label} href={action.href} className="block">
+                <Link key={action.label} href={action.href} className="block group">
                   <Button variant="outline" className="w-full justify-between h-11">
                     <span className="flex items-center gap-2">
                       <action.icon className="w-4 h-4 text-ink-muted" aria-hidden="true" />
                       {action.label}
                     </span>
-                    <ArrowRight className="w-3.5 h-3.5 text-ink-faint" aria-hidden="true" />
+                    <ArrowRight
+                      className="w-3.5 h-3.5 text-ink-faint transition-transform duration-300 group-hover:translate-x-1"
+                      aria-hidden="true"
+                    />
                   </Button>
                 </Link>
               ))}

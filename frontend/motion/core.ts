@@ -6,29 +6,31 @@ import { onPage, prefersReducedMotion, isTouch } from '@/engine';
  *
  * One variable carries the concept: `heat`, 0 to 1, derived from the backend's
  * real request rate. Everything that glows in PyroCore reads from it, so the
- * plasma, the cracks, the halo, the plate seams and the readout can never
+ * plasma, the cracks, the halo and the lit seam under the header can never
  * disagree about how hot the machine is.
  *
- * The idle input is a slow breath plus a lagged pointer influence: the core
- * answers the pointer before anyone scrolls, and keeps breathing when nobody
- * touches anything.
+ * The value is written to `--core-heat` only when the data changes, which is
+ * once every poll. Writing a custom property on the root invalidates the
+ * styles of everything that reads it, so doing it per frame would cost a
+ * phone its frame rate. The slow breath that keeps the vessel alive is a CSS
+ * keyframe on the plasma's own layer, where the compositor handles it without
+ * touching the main thread.
  */
 
 type Bindings = {
-  root: HTMLElement | null;
   plasma: HTMLElement | null;
   heart: HTMLElement | null;
   rates: HTMLElement[];
   states: HTMLElement[];
 };
 
-const bindings: Bindings = { root: null, plasma: null, heart: null, rates: [], states: [] };
+const bindings: Bindings = { plasma: null, heart: null, rates: [], states: [] };
 
-const state = { heat: 0, breath: 0, rate: 0 };
+const state = { heat: 0, rate: 0 };
 let heatTween: gsap.core.Tween | null = null;
-let pointer = { x: 0, y: 0 };
-let aim = { x: 0, y: 0 };
-let tickerAttached = false;
+const pointer = { x: 0, y: 0 };
+const aim = { x: 0, y: 0 };
+let pointerTicker: ((time: number) => void) | null = null;
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
@@ -46,27 +48,23 @@ export function reportCoreRate(requestsPerMinute: number) {
   heatTween?.kill();
   if (prefersReducedMotion()) {
     state.heat = heat;
-    paint();
+    paintHeat();
   } else {
     heatTween = gsap.to(state, {
       heat,
       duration: 0.9,
       ease: 'power2.out',
-      onUpdate: paint,
+      onUpdate: paintHeat,
     });
   }
 
-  if (bindings.rates.length) {
-    bindings.rates.forEach((el) => {
-      el.textContent = String(state.rate);
-    });
-  }
-  if (bindings.states.length) {
-    const word = coreState(state.rate);
-    bindings.states.forEach((el) => {
-      el.textContent = word;
-    });
-  }
+  const word = coreState(state.rate);
+  bindings.rates.forEach((el) => {
+    el.textContent = String(state.rate);
+  });
+  bindings.states.forEach((el) => {
+    el.textContent = word;
+  });
 }
 
 export function coreState(rate: number) {
@@ -76,49 +74,52 @@ export function coreState(rate: number) {
   return 'HOT';
 }
 
-function paint() {
-  const total = clamp01(state.heat * 0.86 + state.breath * 0.14);
-  const root = bindings.root ?? document.documentElement;
-  root.style.setProperty?.('--core-heat', total.toFixed(3));
+function paintHeat() {
+  const heat = clamp01(state.heat);
+  // Written on the root so every consumer agrees: the plasma, the cracks, the
+  // halo, and the lit seam under the header all read the same number.
+  document.documentElement.style.setProperty('--core-heat', heat.toFixed(3));
 
   if (bindings.plasma) {
     gsap.set(bindings.plasma, {
-      scale: 0.86 + total * 0.26 + pointer.x * 0.015,
-      opacity: 0.55 + total * 0.45,
-      x: pointer.x * 5,
-      y: pointer.y * 5,
+      scale: 0.9 + heat * 0.22,
+      opacity: 0.6 + heat * 0.4,
     });
   }
   if (bindings.heart) {
-    gsap.set(bindings.heart, { scale: 0.94 + total * 0.14 });
+    gsap.set(bindings.heart, { scale: 0.94 + heat * 0.14 });
   }
 }
 
-function tick(time: number) {
-  // A slow breath: ~4.2s per cycle. Small enough to be ambient, never a show.
-  const breath = (Math.sin(time * 1.5) + 1) / 2;
-  const next = Math.round(breath * 100) / 100;
-  if (next === state.breath) return;
-  state.breath = next;
-
-  // Lagged pointer influence.
-  const k = 0.08;
-  pointer.x += (aim.x - pointer.x) * k;
-  pointer.y += (aim.y - pointer.y) * k;
-
-  paint();
+/** The pointer nudges the plasma. It only runs while the pointer is moving. */
+function tickPointer() {
+  const k = 0.12;
+  const dx = aim.x - pointer.x;
+  const dy = aim.y - pointer.y;
+  if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
+    stopPointerTicker();
+    return;
+  }
+  pointer.x += dx * k;
+  pointer.y += dy * k;
+  if (bindings.plasma) {
+    gsap.set(bindings.plasma, {
+      x: pointer.x * 6,
+      y: pointer.y * 6,
+    });
+  }
 }
 
-function attachTicker() {
-  if (tickerAttached || prefersReducedMotion()) return;
-  tickerAttached = true;
-  gsap.ticker.add(tick);
+function startPointerTicker() {
+  if (pointerTicker || prefersReducedMotion()) return;
+  pointerTicker = tickPointer;
+  gsap.ticker.add(pointerTicker);
 }
 
-function detachTicker() {
-  if (!tickerAttached) return;
-  tickerAttached = false;
-  gsap.ticker.remove(tick);
+function stopPointerTicker() {
+  if (!pointerTicker) return;
+  gsap.ticker.remove(pointerTicker);
+  pointerTicker = null;
 }
 
 export function startCore() {
@@ -128,13 +129,13 @@ export function startCore() {
       (e) => {
         aim.x = e.clientX / innerWidth - 0.5;
         aim.y = e.clientY / innerHeight - 0.5;
+        startPointerTicker();
       },
       { passive: true },
     );
   }
 
   onPage(() => {
-    bindings.root = document.querySelector<HTMLElement>('[data-core]');
     bindings.plasma = document.querySelector<HTMLElement>('[data-core-plasma]');
     bindings.heart = document.querySelector<HTMLElement>('[data-core-heart]');
     bindings.rates = Array.from(document.querySelectorAll<HTMLElement>('[data-core-rate]'));
@@ -149,23 +150,13 @@ export function startCore() {
       el.textContent = word;
     });
 
-    paint();
+    paintHeat();
 
-    // Pause the breath when the core is off screen: an idle animation nobody
-    // can see is still work.
-    const root = bindings.root;
-    if (root && 'IntersectionObserver' in window) {
-      const io = new IntersectionObserver(
-        ([entry]) => (entry.isIntersecting ? attachTicker() : detachTicker()),
-        { threshold: 0 },
-      );
-      io.observe(root);
-      return () => {
-        io.disconnect();
-        detachTicker();
-      };
-    }
-    attachTicker();
-    return () => detachTicker();
+    return () => {
+      bindings.rates = [];
+      bindings.states = [];
+      bindings.plasma = null;
+      bindings.heart = null;
+    };
   });
 }

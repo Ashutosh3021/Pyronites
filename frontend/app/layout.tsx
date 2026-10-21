@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Archivo, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
-import { Motion } from '@/components/motion'
+import { MotionLoader } from '@/components/motion-loader'
 
 /**
  * Fonts are self-hosted by next/font rather than pulled from the Google Fonts
@@ -103,7 +103,7 @@ export default function RootLayout({
           <div className="curtain__panel" />
         </div>
         {children}
-        <Motion />
+        <MotionLoader />
       </body>
     </html>
   )

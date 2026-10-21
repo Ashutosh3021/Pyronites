@@ -45,22 +45,36 @@ const navItems = [
   { href: '/settings', icon: Settings, label: 'Settings' },
 ]
 
+/**
+ * The first paint for an anonymous visitor. It is a real block of content, not
+ * a spinner: one heading and enough to orient, inside the page's own main
+ * landmark.
+ */
 function AuthGateShell({ slow }: { slow: boolean }) {
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <CoreMark size={28} />
-          <span className="wordmark text-lg text-foreground">PyroCore</span>
-        </div>
-        <div className="plate p-6 space-y-4">
-          <div className="h-2 w-24 bg-muted animate-pulse" />
-          <div className="h-2 w-40 bg-muted/60 animate-pulse" />
-          <p className="text-sm text-muted-foreground pt-2">
-            {slow ? 'Waking the server. This can take a minute on the free tier.' : 'Checking session.'}
-          </p>
-        </div>
+    <div className="max-w-[52ch]">
+      <p className="label">Signing in</p>
+      <h1 className="display mt-4 text-[clamp(1.9rem,1.3rem+2vw,2.6rem)]">
+        Checking your session.
+      </h1>
+
+      <p className="mt-5 text-[14px] leading-relaxed text-ink-muted">
+        PyroCore is a self-hosted backend. Tables, SQL, users, API keys, file storage and logs all
+        live in one container you run yourself, and this panel is how you drive it.
+      </p>
+      <p className="mt-3 text-[14px] leading-relaxed text-ink-muted">
+        {slow
+          ? 'The server is slow to answer. On the free tier a cold container can take a minute to wake up.'
+          : 'One request to the server tells us whether you are still signed in.'}
+      </p>
+
+      <div className="mt-8 h-px w-full bg-seam overflow-hidden">
+        <div className="h-full w-1/3 bg-accent animate-pulse" />
       </div>
+
+      <Link href="/login" className="link mt-6 inline-block text-[13px]">
+        Skip to the sign-in screen
+      </Link>
     </div>
   )
 }
@@ -242,16 +256,14 @@ export function PyroCoreLayout({
     }
   }
 
-  if (!authChecked) {
-    return <AuthGateShell slow={slowAuth} />
-  }
-
   const railContents = (
     <>
       <div className="px-5 pt-6 pb-5 flex items-center gap-3 shrink-0">
         <Link href="/" className="flex items-center gap-3 group" aria-label="PyroCore home">
-          <CoreMark size={26} />
-          <span className="wordmark text-[15px] text-foreground transition-colors group-hover:text-accent">
+          <span className="transition-transform duration-500 ease-out group-hover:scale-110">
+            <CoreMark size={26} />
+          </span>
+          <span className="wordmark text-[15px] text-ink transition-colors group-hover:text-accent">
             PyroCore
           </span>
         </Link>
@@ -274,7 +286,7 @@ export function PyroCoreLayout({
                   className={[
                     'seam-open flex items-center gap-3 py-2.5 pl-4 pr-3 text-[13.5px] transition-colors',
                     isActive
-                      ? 'bg-plate text-ink font-medium'
+                      ? 'bg-plate text-ink font-medium hover:bg-plate-raised'
                       : 'text-ink-muted hover:text-ink hover:bg-plate/60',
                   ].join(' ')}
                 >
@@ -301,6 +313,57 @@ export function PyroCoreLayout({
       </div>
     </>
   )
+
+  if (!authChecked) {
+    // The shell renders either way: the rail, the header and the navigation are
+    // in the served HTML, so a crawler sees the structure of the product and
+    // the first paint is already the product's frame. Only the content region
+    // waits for the session check.
+    return (
+      <div className="min-h-screen bg-background">
+        <aside
+          className="hidden lg:flex fixed inset-y-0 left-0 w-[264px] flex-col bg-rail border-r border-seam z-40"
+          aria-label="Main navigation"
+        >
+          {railContents}
+        </aside>
+        <div className="lg:pl-[264px] flex flex-col min-h-screen">
+          <header className="lit-edge sticky top-0 z-30 h-14 bg-background/92 backdrop-blur-sm border-b border-seam px-4 lg:px-8 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="lg:hidden p-2 -ml-1 text-ink-muted hover:text-ink transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                aria-label="Open navigation"
+              >
+                <Menu className="w-5 h-5" strokeWidth={2} />
+              </button>
+              <span className="label truncate">Overview</span>
+            </div>
+            <div className="flex items-center gap-3 sm:gap-5 flex-shrink-0">
+              <div className="hidden sm:flex items-center gap-2.5">
+                <span
+                  className="w-[7px] h-[7px] rotate-45 flex-shrink-0"
+                  style={{ background: 'var(--accent)' }}
+                  aria-hidden="true"
+                />
+                <span className="label">Core</span>
+                <span className="data text-xs text-ink-muted">
+                  <span data-core-rate>0</span> req/min
+                </span>
+              </div>
+            </div>
+          </header>
+          <main id="main" tabIndex={-1} className="flex-1 px-4 sm:px-6 lg:px-10 py-8 lg:py-12">
+            <div className="mx-auto w-full max-w-[1400px]">
+              <AuthGateShell slow={slowAuth} />
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
+
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -375,7 +438,7 @@ export function PyroCoreLayout({
               <div className="relative">
                 <button
                   onClick={() => setUserMenuOpen((v) => !v)}
-                  className="flex items-center gap-2 px-3 py-2 border border-seam hover:border-seam-strong hover:bg-plate transition-colors min-h-[40px]"
+                  className="seam-open flex items-center gap-2 px-3 py-2 border border-seam hover:border-seam-strong hover:bg-plate transition-colors min-h-[40px]"
                   aria-haspopup="menu"
                   aria-expanded={userMenuOpen}
                 >

@@ -67,9 +67,9 @@ export function AuthShell({ children, variant = 'split', width = 'sm' }: AuthShe
       </aside>
 
       {/* Form panel */}
-      <section className="lg:col-span-5 flex items-center justify-center px-6 sm:px-10 py-12 lg:py-16">
+      <main id="main" className="lg:col-span-5 flex items-center justify-center px-6 sm:px-10 py-12 lg:py-16">
         <div className="w-full max-w-[380px]">{children}</div>
-      </section>
+      </main>
     </div>
   )
 }

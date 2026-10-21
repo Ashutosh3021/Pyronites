@@ -3,15 +3,15 @@
   "errors": [],
   "failed": [],
   "desktop": {
-    "loadMs": 120,
+    "loadMs": 291,
     "loaderMs": null,
-    "settledMs": 2384,
+    "settledMs": 2722,
     "vitals": {
-      "lcpMs": 220,
+      "lcpMs": 460,
       "lcpElement": "p.mt-5",
       "cls": 0
     },
-    "height": 1066,
+    "height": 1059,
     "overflowX": false,
     "offenders": [],
     "h1": [
@@ -35,15 +35,15 @@
   },
   "mobile": {
     "throttled": true,
-    "loadMs": 2572,
+    "loadMs": 3450,
     "loaderMs": null,
-    "settledMs": 4726,
+    "settledMs": 6379,
     "vitals": {
-      "lcpMs": 3192,
+      "lcpMs": 5080,
       "lcpElement": "p.mt-5",
       "cls": 0
     },
-    "height": 1755,
+    "height": 1760,
     "overflowX": false,
     "offenders": [],
     "h1": [
@@ -54,8 +54,8 @@
     "title": "PyroCore — your backend, under your control",
     "glOn": false,
     "scrollFps": {
-      "fps": 52,
-      "worstFrameMs": 50
+      "fps": 60,
+      "worstFrameMs": 33
     }
   },
   "files": [
@@ -132,9 +132,10 @@
         "label": "button \"Default\"",
         "interactive": true,
         "primary": true,
-        "react": "color",
+        "react": "moves",
         "changed": [
-          "borderColor"
+          "borderColor",
+          "transform"
         ]
       },
       {
@@ -142,10 +143,11 @@
         "label": "button \"qa@pyronites.dev Account\"",
         "interactive": true,
         "primary": true,
-        "react": "color",
+        "react": "moves",
         "changed": [
           "backgroundColor",
-          "borderColor"
+          "borderColor",
+          "transform"
         ]
       },
       {
@@ -153,10 +155,12 @@
         "label": "button \"New table\"",
         "interactive": true,
         "primary": true,
-        "react": "color",
+        "react": "moves",
         "changed": [
           "backgroundColor",
-          "borderColor"
+          "borderColor",
+          "transform",
+          "translate"
         ]
       },
       {
@@ -164,10 +168,11 @@
         "label": "a \"New table\"",
         "interactive": true,
         "primary": true,
-        "react": "color",
+        "react": "moves",
         "changed": [
           "backgroundColor",
-          "borderColor"
+          "borderColor",
+          "translate"
         ]
       },
       {
@@ -175,8 +180,9 @@
         "label": "a \"PyroCore\"",
         "interactive": true,
         "primary": true,
-        "react": "color",
+        "react": "moves",
         "changed": [
+          "scale",
           "color",
           "textDecorationColor"
         ]
@@ -186,8 +192,10 @@
         "label": "a \"Overview\"",
         "interactive": true,
         "primary": true,
-        "react": "none",
-        "changed": []
+        "react": "color",
+        "changed": [
+          "backgroundColor"
+        ]
       },
       {
         "shot": "h-07",
@@ -204,15 +212,9 @@
         ]
       }
     ],
-    "noHoverChange": [
-      "h-06 a \"Overview\""
-    ],
+    "noHoverChange": [],
     "colorOnly": [
-      "h-01 button \"Default\"",
-      "h-02 button \"qa@pyronites.dev Account\"",
-      "h-03 button \"New table\"",
-      "h-04 a \"New table\"",
-      "h-05 a \"PyroCore\""
+      "h-06 a \"Overview\""
     ],
     "covered": [],
     "cursorFollower": false
@@ -222,21 +224,8 @@
     "moving": false
   },
   "a11y": {
-    "violations": [
-      {
-        "id": "color-contrast",
-        "impact": "serious",
-        "help": "Elements must meet minimum color contrast ratio thresholds",
-        "count": 8,
-        "nodes": [
-          ".p-5.bg-plate:nth-child(1) > dt (#857a70 on #16120f, 4.44:1, needs 4.5:1)",
-          ".p-5.bg-plate:nth-child(1) > .mt-2.text-\\[11px\\] (#857a70 on #16120f, 4.44:1, needs 4.5:1)",
-          ".p-5.bg-plate:nth-child(2) > dt (#857a70 on #16120f, 4.44:1, needs 4.5:1)",
-          ".p-5.bg-plate:nth-child(2) > .mt-2.text-\\[11px\\] (#857a70 on #16120f, 4.44:1, needs 4.5:1)"
-        ]
-      }
-    ],
-    "serious": 1,
+    "violations": [],
+    "serious": 0,
     "contrastNeedsReview": 6
   }
 }

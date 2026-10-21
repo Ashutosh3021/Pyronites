@@ -16,7 +16,7 @@ const buttonVariants = cva(
         default:
           'ignite text-[13px] px-4 py-2',
         outline:
-          'border-seam bg-transparent text-ink hover:border-seam-strong hover:bg-plate-raised aria-expanded:bg-plate-raised',
+          'seam-btn border-seam bg-transparent text-ink hover:border-seam-strong hover:bg-plate-raised aria-expanded:bg-plate-raised',
         secondary:
           'border-transparent bg-plate-raised text-ink hover:border-seam hover:bg-muted',
         ghost:

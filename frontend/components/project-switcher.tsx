@@ -75,7 +75,7 @@ export function ProjectSwitcher() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[13px] border border-seam bg-plate-raised hover:border-seam-strong transition-colors min-h-[44px]"
+        className="seam-open w-full flex items-center gap-2.5 px-3 py-2.5 text-[13px] border border-seam bg-plate-raised hover:border-seam-strong transition-colors min-h-[44px]"
         aria-haspopup="listbox"
         aria-expanded={open}
       >

@@ -11,7 +11,7 @@ import { ArrowLeft } from 'lucide-react'
 export default function NotFound() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6 py-16">
-      <div className="w-full max-w-[920px] grid grid-cols-1 md:grid-cols-12 gap-10 md:gap-12 items-center">
+      <main id="main" className="w-full max-w-[920px] grid grid-cols-1 md:grid-cols-12 gap-10 md:gap-12 items-center">
         <div className="md:col-span-7">
           <p className="label">Error 404</p>
           <h1 className="display mt-5 text-[clamp(2.5rem,1.4rem+4vw,4.5rem)] max-w-[12ch]">
@@ -38,7 +38,7 @@ export default function NotFound() {
         <div className="md:col-span-5 flex justify-center md:justify-end">
           <Core size={240} className="opacity-70" />
         </div>
-      </div>
+      </main>
     </div>
   )
 }
