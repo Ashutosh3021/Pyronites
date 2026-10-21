@@ -13,7 +13,17 @@ import {
   EyeOff,
 } from 'lucide-react'
 import { AuthShell } from '@/components/auth-shell'
+import { CoreMark } from '@/components/brand'
 import { PasswordStrength, getPasswordStrength } from '@/components/password-strength'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { setStoredProject, selectProject } from '@/lib/api'
 
 // ─── Password generator ─────────────────────────────────────────────────────

@@ -1,9 +1,11 @@
 'use client'
 
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
+import { PageHeader } from '@/components/page-header'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Copy, AlertTriangle, RefreshCw, CheckCircle2, HardDrive } from 'lucide-react'
+import Link from 'next/link'
+import { Copy, HardDrive } from 'lucide-react'
 import {
   getStoredProjectId,
   getStoredProjectName,
@@ -17,8 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
+import { Card, CardContent } from '@/components/ui/card'
 import { AlertBanner } from '@/components/alert-banner'
 import { EmptyState } from '@/components/empty-state'
 
@@ -254,273 +255,278 @@ export default function SettingsPage() {
 
   return (
     <PyroCoreLayout>
-      <div className="max-w-4xl space-y-6">
-        <div>
-          <h1 className="text-xl lg:text-2xl font-semibold text-foreground">Settings</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Managing <span className="text-foreground font-medium">{displayName}</span>
-            {loading ? ' · loading…' : ''}
-          </p>
-        </div>
+      <PageHeader
+        meta="Project configuration"
+        title="Settings"
+        description={`Managing ${displayName}${loading ? ', still loading' : ''}. These settings apply to this project only.`}
+      />
 
-        {loadErr && <AlertBanner variant="error" message={loadErr} onDismiss={() => setLoadErr(null)} />}
+      {loadErr && <AlertBanner variant="error" message={loadErr} onDismiss={() => setLoadErr(null)} />}
 
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="w-full sm:w-auto justify-start">
-            <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="database">Database</TabsTrigger>
-            <TabsTrigger value="api">API</TabsTrigger>
-            <TabsTrigger value="danger">Danger Zone</TabsTrigger>
-          </TabsList>
+      <Tabs value={tab} onValueChange={setTab} className="mt-8">
+        <TabsList className="w-full sm:w-auto justify-start">
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="database">Database</TabsTrigger>
+          <TabsTrigger value="api">API</TabsTrigger>
+          <TabsTrigger value="danger">Danger zone</TabsTrigger>
+        </TabsList>
 
-          <TabsContent value="general">
-            <Card>
-              <CardContent className="p-6 space-y-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Project Name</label>
+        <TabsContent value="general">
+          <Card>
+            <CardContent className="p-5 lg:p-6 space-y-6">
+              <div className="space-y-2">
+                <label htmlFor="project-name" className="block text-[13px] font-medium text-ink">
+                  Project name
+                </label>
+                <Input
+                  id="project-name"
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-[13px] font-medium text-ink">Project id</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 px-3 py-2 bg-plate-raised border border-seam data text-[12px] text-ink-muted truncate min-h-[44px] flex items-center">
+                    {projectId}
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => copyToClipboard(String(projectId))}
+                    aria-label="Copy project id"
+                  >
+                    <Copy className="w-4 h-4" aria-hidden="true" />
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-[13px] font-medium text-ink">Created</p>
+                <p className="data text-[12px] text-ink-muted">{fmtDate(createdAt)}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button onClick={handleSave} disabled={saving || !projectName.trim()}>
+                  {saving ? 'Saving' : 'Save changes'}
+                </Button>
+                {saveMsg && (
+                  <AlertBanner
+                    variant={saveMsg === 'Saved.' ? 'success' : 'error'}
+                    message={saveMsg}
+                    onDismiss={() => setSaveMsg(null)}
+                  />
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="database">
+          <Card>
+            <CardContent className="p-5 lg:p-6 space-y-6">
+              <div className="space-y-2">
+                <p className="text-[13px] font-medium text-ink">Connection</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 px-3 py-2 bg-plate-raised border border-seam data text-[12px] text-ink-muted truncate min-h-[44px] flex items-center">
+                    {connectionString}
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => copyToClipboard(connectionString)}
+                    aria-label="Copy connection string"
+                  >
+                    <Copy className="w-4 h-4" aria-hidden="true" />
+                  </Button>
+                </div>
+                <p className="data text-[11px] text-ink-faint mt-1">
+                  Tables and files for this project only. Switch projects from the rail.
+                </p>
+              </div>
+
+              <dl className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-seam border border-seam">
+                {[
+                  { label: 'Tables', value: stats?.table_count ?? '—' },
+                  { label: 'Files', value: stats?.file_count ?? '—' },
+                  { label: 'API keys', value: stats?.key_count ?? '—' },
+                  {
+                    label: 'DB size',
+                    value: stats ? `${(stats.db_size_bytes / 1024).toFixed(1)} KB` : '—',
+                  },
+                ].map((c) => (
+                  <div key={c.label} className="bg-plate p-3">
+                    <dt className="label">{c.label}</dt>
+                    <dd className="data text-[17px] text-ink mt-2">{c.value}</dd>
+                  </div>
+                ))}
+              </dl>
+
+              <div className="flex items-center justify-between p-4 border border-seam bg-plate-raised/50">
+                <div>
+                  <h3 className="text-[13px] font-medium text-ink">Write-Ahead Logging</h3>
+                  <p className="text-[12px] text-ink-muted mt-1">
+                    Always on. It improves concurrency and durability for concurrent writers.
+                  </p>
+                </div>
+                <span
+                  className="data text-[11px] text-success flex-shrink-0 border border-success/40 bg-success/10 px-2 py-1"
+                  aria-label="Write-Ahead Logging is always enabled"
+                >
+                  Enabled
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="backup-interval" className="block text-[13px] font-medium text-ink">
+                  Backup interval
+                </label>
+                <Select value={backupInterval} onValueChange={setBackupInterval}>
+                  <SelectTrigger id="backup-interval">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="15min">Every 15 minutes</SelectItem>
+                    <SelectItem value="1hour">Every 1 hour</SelectItem>
+                    <SelectItem value="6hours">Every 6 hours</SelectItem>
+                    <SelectItem value="daily">Daily</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button variant="outline" onClick={handleBackup} disabled={backingUp}>
+                  {backingUp ? 'Backing up' : 'Back up now'}
+                </Button>
+                <Button onClick={handleSave} disabled={saving}>
+                  {saving ? 'Saving' : 'Save changes'}
+                </Button>
+              </div>
+
+              {backupMsg && (
+                <AlertBanner
+                  variant={backupMsg.includes('failed') || backupMsg.includes('Error') ? 'error' : 'success'}
+                  message={backupMsg}
+                  onDismiss={() => setBackupMsg(null)}
+                />
+              )}
+
+              <div>
+                <h3 className="text-[13px] font-semibold text-ink mb-3">Recent backups</h3>
+                {backups.length === 0 ? (
+                  <EmptyState
+                    compact
+                    icon={HardDrive}
+                    title="No backups yet"
+                    description="Backups also run automatically on a schedule. Run one now to make the first."
+                    action={{ label: 'Back up now', onClick: handleBackup, disabled: backingUp }}
+                  />
+                ) : (
+                  <ul className="space-y-2">
+                    {backups.map((b) => (
+                      <li
+                        key={b.name}
+                        className="flex items-center justify-between px-3 py-2 border border-seam data text-[12px] min-h-[44px]"
+                      >
+                        <span className="text-ink-muted truncate">{b.name}</span>
+                        <span className="text-ink-faint flex-shrink-0 ml-2">{fmtDate(b.created_at)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="api">
+          <Card>
+            <CardContent className="p-5 lg:p-6 space-y-6">
+              <div className="space-y-2">
+                <p className="text-[13px] font-medium text-ink">Base URL</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 px-3 py-2 bg-plate-raised border border-seam data text-[12px] text-ink-muted truncate min-h-[44px] flex items-center">
+                    {API_BASE}
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => copyToClipboard(API_BASE)}
+                    aria-label="Copy base URL"
+                  >
+                    <Copy className="w-4 h-4" aria-hidden="true" />
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-[13px] font-medium text-ink">Project-scoped data URL</p>
+                <code className="block px-3 py-2 bg-plate-raised border border-seam data text-[12px] text-ink-muted truncate min-h-[44px] flex items-center">
+                  {API_BASE}/api/projects/{projectId}/...
+                </code>
+              </div>
+              <div className="space-y-2">
+                <p className="text-[13px] font-medium text-ink">API keys</p>
+                <p className="text-[13px] text-ink-muted">
+                  {stats?.key_count ?? 0} keys for this project.{' '}
+                  <Link href="/api-keys" className="link">
+                    Manage them
+                  </Link>
+                  .
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="danger">
+          <Card style={{ boxShadow: 'inset 2px 0 0 0 var(--error)' }}>
+            <CardContent className="p-5 lg:p-6 space-y-6">
+              <AlertBanner
+                variant="error"
+                message={`Deletes ${displayName} and its data. You cannot delete your last active project.`}
+              />
+
+              {!deleteConfirm ? (
+                <Button variant="destructive" onClick={() => setDeleteConfirm(true)}>
+                  Delete project
+                </Button>
+              ) : (
+                <div className="space-y-4 p-4 border border-error/40">
+                  <p className="text-[13px] text-ink">
+                    To confirm, type the project name:{' '}
+                    <span className="data text-accent">{confirmName || 'none'}</span>
+                  </p>
                   <Input
                     type="text"
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
+                    value={deleteInput}
+                    onChange={(e) => setDeleteInput(e.target.value)}
+                    placeholder="Type the project name"
+                    aria-label="Type the project name to confirm deletion"
+                    className="focus-visible:border-error focus-visible:ring-error"
                   />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Project ID (slug)</label>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 px-3 py-2 bg-background border border-border text-sm font-mono text-muted-foreground truncate min-h-[44px] flex items-center">
-                      {projectId}
-                    </code>
+                  {deleteError && <AlertBanner variant="error" message={deleteError} onDismiss={() => setDeleteError(null)} />}
+                  <div className="flex flex-wrap gap-3">
                     <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => copyToClipboard(String(projectId))}
-                      aria-label="Copy project ID"
+                      variant="outline"
+                      onClick={() => { setDeleteConfirm(false); setDeleteInput(''); setDeleteError(null) }}
+                      className="flex-1"
                     >
-                      <Copy className="w-4 h-4" />
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      disabled={deleteInput !== confirmName || !confirmName || deleting}
+                      onClick={handleDelete}
+                      className="flex-1"
+                    >
+                      {deleting ? 'Deleting' : 'Delete project'}
                     </Button>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Created</label>
-                  <p className="px-3 py-2 text-sm text-muted-foreground">{fmtDate(createdAt)}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Button
-                    onClick={handleSave}
-                    disabled={saving || !projectName.trim()}
-                  >
-                    {saving ? 'Saving…' : 'Save Changes'}
-                  </Button>
-                  {saveMsg && (
-                    <AlertBanner
-                      variant={saveMsg === 'Saved.' ? 'success' : 'error'}
-                      message={saveMsg}
-                      onDismiss={() => setSaveMsg(null)}
-                    />
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="database">
-            <Card>
-              <CardContent className="p-6 space-y-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Connection</label>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 px-3 py-2 bg-background border border-border text-sm font-mono text-muted-foreground truncate min-h-[44px] flex items-center">
-                      {connectionString}
-                    </code>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => copyToClipboard(connectionString)}
-                      aria-label="Copy connection string"
-                    >
-                      <Copy className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Tables / files for this project only. Switch projects from the sidebar.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {[
-                    { label: 'Tables', value: stats?.table_count ?? '—' },
-                    { label: 'Files', value: stats?.file_count ?? '—' },
-                    { label: 'API keys', value: stats?.key_count ?? '—' },
-                    {
-                      label: 'DB size',
-                      value: stats
-                        ? `${(stats.db_size_bytes / 1024).toFixed(1)} KB`
-                        : '—',
-                    },
-                  ].map((c) => (
-                    <div key={c.label} className="p-3 border border-border rounded-lg">
-                      <p className="text-xs text-muted-foreground">{c.label}</p>
-                      <p className="text-lg font-semibold text-foreground mt-1">{c.value}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex items-center justify-between p-4 border border-border rounded-lg">
-                  <div>
-                    <h3 className="text-sm font-medium text-foreground">WAL Mode</h3>
-                    <p className="text-xs text-muted-foreground mt-1">Write-Ahead Logging improves concurrency and durability</p>
-                  </div>
-                  <div className="w-12 h-6 rounded-full relative flex-shrink-0 bg-success">
-                    <div className="w-5 h-5 rounded-full bg-foreground absolute top-0.5 translate-x-6" />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Backup Interval</label>
-                  <Select value={backupInterval} onValueChange={setBackupInterval}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="15min">Every 15 minutes</SelectItem>
-                      <SelectItem value="1hour">Every 1 hour</SelectItem>
-                      <SelectItem value="6hours">Every 6 hours</SelectItem>
-                      <SelectItem value="daily">Daily</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                  <Button variant="outline" onClick={handleBackup} disabled={backingUp}>
-                    {backingUp ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Backing up…</> : 'Back Up Now'}
-                  </Button>
-                  <Button onClick={handleSave} disabled={saving}>
-                    {saving ? 'Saving…' : 'Save Changes'}
-                  </Button>
-                </div>
-                
-                {backupMsg && (
-                  <AlertBanner 
-                    variant={backupMsg.includes('failed') || backupMsg.includes('Error') ? 'error' : 'success'} 
-                    message={backupMsg} 
-                    onDismiss={() => setBackupMsg(null)} 
-                  />
-                )}
-
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground mb-3">Recent Backups</h3>
-                  {backups.length === 0 ? (
-                    <EmptyState
-                      compact
-                      icon={HardDrive}
-                      title="No backups yet"
-                      description="Backups also run automatically on a schedule. Run one now to make the first."
-                      action={{ label: 'Back up now', onClick: handleBackup, disabled: backingUp }}
-                    />
-                  ) : (
-                    <div className="space-y-2">
-                      {backups.map((b) => (
-                        <div key={b.name} className="flex items-center justify-between px-3 py-2 border border-border rounded-lg text-sm min-h-[44px]">
-                          <span className="font-mono text-muted-foreground truncate">{b.name}</span>
-                          <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">{fmtDate(b.created_at)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="api">
-            <Card>
-              <CardContent className="p-6 space-y-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Base URL</label>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 px-3 py-2 bg-background border border-border text-sm font-mono text-muted-foreground truncate min-h-[44px] flex items-center">
-                      {API_BASE}
-                    </code>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => copyToClipboard(API_BASE)}
-                      aria-label="Copy base URL"
-                    >
-                      <Copy className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Project-scoped data URL</label>
-                  <code className="block px-3 py-2 bg-background border border-border text-sm font-mono text-muted-foreground truncate min-h-[44px] flex items-center">
-                    {API_BASE}/api/projects/{projectId}/…
-                  </code>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">API Keys</label>
-                  <p className="px-3 py-2 text-sm text-muted-foreground">
-                    {stats?.key_count ?? 0} key(s) for this project. Manage on the{' '}
-                    <a href="/api-keys" className="underline hover:text-foreground" style={{ color: 'var(--pyro-orange)' }}>API Keys</a> page.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="danger">
-            <Card className="border-error/30">
-              <CardContent className="p-6 space-y-6">
-                <AlertBanner
-                  variant="error"
-                  message={`Deletes ${displayName} and its data. You cannot delete your last active project.`}
-                />
-
-                {!deleteConfirm ? (
-                  <Button
-                    variant="destructive"
-                    onClick={() => setDeleteConfirm(true)}
-                  >
-                    Delete Project
-                  </Button>
-                ) : (
-                  <div className="space-y-4 p-4 border border-error/30 rounded-lg">
-                    <p className="text-sm text-foreground">
-                      To confirm, type the project name:{' '}
-                      <span className="font-mono text-accent">{confirmName || '—'}</span>
-                    </p>
-                    <Input
-                      type="text"
-                      value={deleteInput}
-                      onChange={(e) => setDeleteInput(e.target.value)}
-                      placeholder="Type project name..."
-                      className="focus:border-error"
-                    />
-                    {deleteError && <AlertBanner variant="error" message={deleteError} onDismiss={() => setDeleteError(null)} />}
-                    <div className="flex flex-wrap gap-3">
-                      <Button
-                        variant="outline"
-                        onClick={() => { setDeleteConfirm(false); setDeleteInput(''); setDeleteError(null) }}
-                        className="flex-1"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        disabled={deleteInput !== confirmName || !confirmName || deleting}
-                        onClick={handleDelete}
-                        className="flex-1"
-                      >
-                        {deleting ? 'Deleting…' : 'Delete Project'}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </PyroCoreLayout>
   )
 }

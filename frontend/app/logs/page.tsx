@@ -1,8 +1,10 @@
 'use client'
 
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
+import { PageHeader } from '@/components/page-header'
+import { EmptyState } from '@/components/empty-state'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Search } from 'lucide-react'
+import { Search, ScrollText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { AlertBanner } from '@/components/alert-banner'
 import { apiUrl } from '@/lib/api'
 import type { LogEntry } from '@/lib/types'
-import { levelDotClass, levelBadgeClass, statusCodeClass } from '@/lib/utils'
+import { statusCodeClass } from '@/lib/utils'
 
 export default function LogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([])
@@ -77,36 +79,42 @@ export default function LogsPage() {
 
   return (
     <PyroCoreLayout>
-      <div className="space-y-4 lg:space-y-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl lg:text-2xl font-semibold text-foreground">Logs</h1>
-            <p className="text-muted-foreground text-sm mt-1">View system events and activity</p>
-          </div>
+      <PageHeader
+        meta="Event stream"
+        title="Logs"
+        description="Every request, write and error the container has recorded, newest first. The stream refreshes on its own while it is live."
+        actions={
           <Button
-            variant={isLive ? "default" : "outline"}
+            variant={isLive ? 'default' : 'outline'}
             onClick={() => setIsLive(!isLive)}
+            aria-pressed={isLive}
           >
-            <div
-              className={`w-2 h-2 rounded-full flex-shrink-0 mr-2 ${isLive ? 'pulse-orange' : ''}`}
-              style={{ backgroundColor: isLive ? 'var(--pyro-orange)' : 'var(--muted-foreground)' }}
+            <span
+              className="w-2 h-2 rotate-45 flex-shrink-0 mr-2"
+              style={{
+                backgroundColor: isLive ? 'var(--accent)' : 'var(--ink-faint)',
+              }}
+              aria-hidden="true"
             />
             {isLive ? 'Live' : 'Paused'}
           </Button>
-        </div>
+        }
+      />
 
-        {loadErr && <AlertBanner variant="error" message={loadErr} onDismiss={() => setLoadErr(null)} />}
+      {loadErr && <AlertBanner variant="error" message={loadErr} onDismiss={() => setLoadErr(null)} />}
 
+      <div className="mt-6 space-y-4 lg:space-y-6">
         <Card>
           <CardContent className="p-3 lg:p-4 flex flex-col sm:flex-row gap-3">
-            <div className="flex gap-1.5 overflow-x-auto flex-shrink-0 pb-0.5 sm:pb-0">
+            <div className="flex gap-1.5 overflow-x-auto flex-shrink-0 pb-0.5 sm:pb-0" role="group" aria-label="Filter by level">
               {['all', 'info', 'warning', 'error', 'success'].map((level) => (
                 <Button
                   key={level}
-                  variant={filterLevel === level ? "default" : "outline"}
+                  variant={filterLevel === level ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setFilterLevel(level)}
                   className="capitalize"
+                  aria-pressed={filterLevel === level}
                 >
                   {level}
                 </Button>
@@ -114,24 +122,31 @@ export default function LogsPage() {
             </div>
 
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" aria-hidden="true" />
               <Input
                 type="text"
-                placeholder="Search logs..."
+                placeholder="Search logs"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
+                aria-label="Search logs by action"
               />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="overflow-hidden">
           <div className="overflow-hidden">
             {filteredLogs.length === 0 ? (
-              <div className="p-12 text-center text-muted-foreground">
-                {loadErr ? 'No logs available.' : 'No logs found'}
-              </div>
+              <EmptyState
+                icon={ScrollText}
+                title={loadErr ? 'No logs available' : 'No logs match this filter'}
+                description={
+                  loadErr
+                    ? 'The backend did not answer the request for the event log.'
+                    : 'Clear the level filter or the search box to see the rest of the stream.'
+                }
+              />
             ) : (
               <>
                 <Table>
@@ -140,29 +155,41 @@ export default function LogsPage() {
                       <TableHead>Timestamp</TableHead>
                       <TableHead>Level</TableHead>
                       <TableHead>Action</TableHead>
-                      <TableHead className="text-right">Details</TableHead>
+                      <TableHead className="text-right">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredLogs.map((log) => (
-                      <TableRow key={log.id}>
+                      <TableRow key={log.id} className="row-seam" data-level={log.level}>
                         <TableCell>
-                          <div className="flex items-center gap-3">
-                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${levelDotClass(log.level)}`} />
-                            <span className="text-xs font-mono text-muted-foreground">{log.timestamp?.replace('T', ' ').slice(0, 19)}</span>
-                          </div>
+                          <span className="data text-[12px] text-ink-muted">
+                            {log.timestamp?.replace('T', ' ').slice(0, 19)}
+                          </span>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={log.level === 'error' ? 'error' : log.level === 'warning' ? 'warning' : log.level === 'success' ? 'success' : 'info'}>
-                            {log.level.charAt(0).toUpperCase() + log.level.slice(1)}
+                          <Badge
+                            variant={
+                              log.level === 'error'
+                                ? 'error'
+                                : log.level === 'warning'
+                                  ? 'warning'
+                                  : log.level === 'success'
+                                    ? 'success'
+                                    : 'info'
+                            }
+                          >
+                            {log.level}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-sm text-foreground">{log.action}</TableCell>
-                        <TableCell className="text-right text-sm font-mono text-muted-foreground">
-                          {log.statusCode
-                            ? <span className={statusCodeClass(log.statusCode)}>{log.statusCode}</span>
-                            : '—'
-                          }
+                        <TableCell className="text-[13px] text-ink">{log.action}</TableCell>
+                        <TableCell className="text-right">
+                          <span className="data text-[12px] text-ink-muted">
+                            {log.statusCode ? (
+                              <span className={statusCodeClass(log.statusCode)}>{log.statusCode}</span>
+                            ) : (
+                              '—'
+                            )}
+                          </span>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -173,8 +200,11 @@ export default function LogsPage() {
           </div>
         </Card>
 
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <div>Showing {filteredLogs.length} logs</div>
+        <div className="flex items-center justify-between text-[12px] text-ink-faint">
+          <div>
+            Showing {filteredLogs.length} of {logs.length} events
+          </div>
+          <div className="data">{isLive ? 'Refreshing every 3s' : 'Stream paused'}</div>
         </div>
       </div>
     </PyroCoreLayout>

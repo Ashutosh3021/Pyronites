@@ -1,26 +1,24 @@
 'use client'
 
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
-import { Database, Brackets, Archive, ArrowRight } from 'lucide-react'
+import { Core } from '@/components/core'
+import { Database, Brackets, Archive, ArrowRight, Table2, Key, ScrollText } from 'lucide-react'
 import Link from 'next/link'
 import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { AlertBanner } from '@/components/alert-banner'
+import { EmptyState } from '@/components/empty-state'
 import { apiUrl } from '@/lib/api'
 import type { Stats, LogEntry } from '@/lib/types'
 import { formatBytes, relativeTime, levelColor } from '@/lib/utils'
 
-function SkeletonCard() {
+function PlateSkeleton() {
   return (
-    <Card>
-      <CardContent className="p-5 lg:p-6 space-y-4">
-        <div className="h-4 w-24 rounded bg-muted animate-pulse" />
-        <div className="h-7 w-16 rounded bg-muted animate-pulse" />
-        <div className="h-3 w-full rounded bg-muted/70 animate-pulse" />
-        <div className="h-3 w-2/3 rounded bg-muted/70 animate-pulse" />
-      </CardContent>
-    </Card>
+    <div className="plate p-5 space-y-4">
+      <div className="h-2.5 w-20 bg-muted animate-pulse" />
+      <div className="h-6 w-24 bg-muted animate-pulse" />
+      <div className="h-2.5 w-full bg-muted/60 animate-pulse" />
+    </div>
   )
 }
 
@@ -55,7 +53,7 @@ export default function OverviewPage() {
       setStats(stats)
       if (lRes.ok) {
         const logs = (await lRes.json()) as LogEntry[]
-        setActivity(logs.slice(0, 5))
+        setActivity(logs.slice(0, 8))
       }
     } catch {
       setLoadErr('Could not reach the backend. Check the API URL and your connection.')
@@ -72,170 +70,177 @@ export default function OverviewPage() {
   const fileCount = stats?.file_count ?? 0
   const keyCount = stats?.key_count ?? 0
   const dbSize = stats?.db_size_bytes ?? 0
+  const projectName = stats?.project?.project_name
+  const projectId = stats?.project?.project_id
 
   return (
     <PyroCoreLayout>
-      <div className="max-w-6xl space-y-6 lg:space-y-8">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-semibold text-foreground mb-2">
-            Project Overview
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            {stats?.project?.project_name
-              ? `Status of ${stats.project.project_name}`
-              : 'Status and quick access to your backend'}
-          </p>
-        </div>
+      {loadErr && <AlertBanner variant="error" message={loadErr} onDismiss={() => setLoadErr(null)} />}
 
-        {loadErr && <AlertBanner variant="error" message={loadErr} onDismiss={() => setLoadErr(null)} />}
-
-        {loading && !stats ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
-            <SkeletonCard />
-            <SkeletonCard />
-            <SkeletonCard />
+      {/* ── Hero: the core, the name, the numbers ────────────────────────── */}
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-x-10 gap-y-12 items-start">
+        <div className="lg:col-span-7 flex flex-col gap-10">
+          <div>
+            <p className="label">Overview</p>
+            <h1 className="display mt-4 text-[clamp(2.5rem,1.1rem+4.2vw,4.5rem)] break-words">
+              {projectName ?? 'Your backend'}
+            </h1>
+            <p className="mt-5 text-[15px] leading-relaxed text-ink-muted max-w-[52ch]">
+              Every figure on this page is read from the running container. Nothing here is a
+              placeholder, and nothing is cached from a previous session.
+            </p>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
-            <Card className="hover:border-accent/30 transition-colors">
-              <CardContent className="p-5 lg:p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <h3 className="text-sm font-medium text-foreground">Database</h3>
-                  <Database className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--pyro-orange)' }} />
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs text-muted-foreground">File size</p>
-                    <p className="text-lg font-semibold text-foreground">{formatBytes(dbSize)}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 text-xs">
-                    <div>
-                      <p className="text-muted-foreground">Tables</p>
-                      <p className="text-foreground font-medium">{tableCount}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Mode</p>
-                      <p className="text-foreground font-medium">WAL</p>
-                    </div>
-                  </div>
-                  <div className="pt-2 border-t border-border">
-                    <p className="text-xs text-muted-foreground">
-                      Last backup: {relativeTime(stats?.last_backup ?? null)}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
 
-            <Card className="hover:border-accent/30 transition-colors">
-              <CardContent className="p-5 lg:p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <h3 className="text-sm font-medium text-foreground">API</h3>
-                  <Brackets className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--pyro-orange)' }} />
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs text-muted-foreground">API keys</p>
-                    <p className="text-lg font-semibold text-foreground">{keyCount}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 text-xs">
-                    <div>
-                      <p className="text-muted-foreground">Project</p>
-                      <p className="text-foreground font-medium truncate">
-                        {stats?.project?.project_id ?? '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Backup interval</p>
-                      <p className="text-foreground font-medium">
-                        {stats?.project?.backup_interval ?? '—'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:border-accent/30 transition-colors sm:col-span-2 lg:col-span-1">
-              <CardContent className="p-5 lg:p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <h3 className="text-sm font-medium text-foreground">Storage</h3>
-                  <Archive className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--pyro-orange)' }} />
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Files</p>
-                    <p className="text-lg font-semibold text-foreground">{fileCount}</p>
-                  </div>
-                  <div className="text-xs">
-                    <p className="text-muted-foreground">Location</p>
-                    <p className="text-foreground font-medium capitalize">
-                      {stats?.project?.storage_location ?? 'Local'}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        <div>
-          <h2 className="text-base lg:text-lg font-semibold text-foreground mb-4">Recent activity</h2>
-          <Card>
-            <div className="divide-y divide-border">
-              {loading && activity.length === 0 ? (
-                <div className="px-4 py-6 space-y-3">
-                  <div className="h-4 w-full rounded bg-muted animate-pulse" />
-                  <div className="h-4 w-5/6 rounded bg-muted animate-pulse" />
-                  <div className="h-4 w-2/3 rounded bg-muted animate-pulse" />
-                </div>
-              ) : activity.length === 0 ? (
-                <div className="px-4 py-3 text-sm text-muted-foreground">No recent activity.</div>
-              ) : (
-                activity.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center hover:bg-muted/30 transition-colors overflow-hidden min-h-[52px]"
-                  >
-                    <div
-                      className="w-1 self-stretch flex-shrink-0"
-                      style={{ backgroundColor: levelColor(item.level) }}
-                    />
-                    <div className="flex items-center gap-3 lg:gap-4 px-4 lg:px-5 py-3 flex-1 min-w-0">
-                      <p className="text-xs text-muted-foreground font-mono w-24 lg:w-32 flex-shrink-0">
-                        {item.timestamp?.replace('T', ' ').slice(0, 19)}
-                      </p>
-                      <p className="text-sm text-foreground truncate">{item.action}</p>
-                    </div>
-                  </div>
-                ))
-              )}
+          {loading && !stats ? (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-seam border border-seam">
+              <PlateSkeleton />
+              <PlateSkeleton />
+              <PlateSkeleton />
             </div>
-          </Card>
+          ) : (
+            <dl className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-seam border border-seam">
+              <div className="bg-plate p-5">
+                <dt className="label flex items-center gap-2">
+                  <Database className="w-3.5 h-3.5" aria-hidden="true" />
+                  Database
+                </dt>
+                <dd className="data mt-3 text-[26px] leading-none text-ink">{formatBytes(dbSize)}</dd>
+                <dd className="data mt-2 text-[11px] text-ink-faint">{tableCount} tables</dd>
+              </div>
+              <div className="bg-plate p-5">
+                <dt className="label flex items-center gap-2">
+                  <Brackets className="w-3.5 h-3.5" aria-hidden="true" />
+                  API keys
+                </dt>
+                <dd className="data mt-3 text-[26px] leading-none text-ink">{keyCount}</dd>
+                <dd className="data mt-2 text-[11px] text-ink-faint">scoped to this project</dd>
+              </div>
+              <div className="bg-plate p-5">
+                <dt className="label flex items-center gap-2">
+                  <Archive className="w-3.5 h-3.5" aria-hidden="true" />
+                  Storage
+                </dt>
+                <dd className="data mt-3 text-[26px] leading-none text-ink">{fileCount}</dd>
+                <dd className="data mt-2 text-[11px] text-ink-faint capitalize">
+                  {stats?.project?.storage_location ?? 'local'}
+                </dd>
+              </div>
+            </dl>
+          )}
         </div>
 
-        <div>
-          <h2 className="text-base lg:text-lg font-semibold text-foreground mb-4">Quick actions</h2>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              { label: 'New Table', href: '/database' },
-              { label: 'Run Backup', href: '/settings' },
-              { label: 'Create API Key', href: '/api-keys' },
-              { label: 'View Logs', href: '/logs' },
-            ].map((action) => (
-              <Link
-                key={action.label}
-                href={action.href}
-              >
-                <Button className="w-full" variant="default">
-                  <span>{action.label}</span>
-                  <ArrowRight className="w-3 h-3 ml-2" />
-                </Button>
-              </Link>
-            ))}
+        {/* The Core: the backend's live request rate, drawn as heat. */}
+        <div className="lg:col-span-5">
+          <div className="flex justify-center lg:justify-end">
+            <Core size={300} className="lg:size-[320px]" />
+          </div>
+          <div className="mt-8 border-t border-seam pt-5 flex items-end justify-between gap-6">
+            <div>
+              <p className="label">Requests per minute</p>
+              <p className="data mt-2 text-[clamp(2.5rem,1.6rem+2.4vw,3.5rem)] leading-none text-ink">
+                <span data-core-rate>0</span>
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="label">Core</p>
+              <p className="data mt-2 text-[15px] text-accent" data-core-state>
+                IDLE
+              </p>
+              <p className="data mt-1 text-[11px] text-ink-faint">5 min average</p>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
+
+      {/* ── Activity and runtime ──────────────────────────────────────────── */}
+      <section className="mt-16 lg:mt-24 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
+        <div className="lg:col-span-7">
+          <div className="flex items-baseline justify-between gap-4 mb-4">
+            <h2 className="text-[15px] font-semibold text-ink">Recent activity</h2>
+            <p className="data text-[11px] text-ink-faint">
+              {activity.length} {activity.length === 1 ? 'event' : 'events'}
+            </p>
+          </div>
+
+          <div className="plate overflow-hidden">
+            {loading && activity.length === 0 ? (
+              <div className="p-5 space-y-3">
+                <div className="h-3 w-full bg-muted animate-pulse" />
+                <div className="h-3 w-5/6 bg-muted animate-pulse" />
+                <div className="h-3 w-2/3 bg-muted animate-pulse" />
+              </div>
+            ) : activity.length === 0 ? (
+              <EmptyState
+                icon={ScrollText}
+                title="No activity yet"
+                description="Requests and writes land here as soon as the backend starts serving."
+              />
+            ) : (
+              <ul className="divide-y divide-seam">
+                {activity.map((item) => (
+                  <li
+                    key={item.id}
+                    className="row-seam flex items-center gap-4 px-4 py-3 transition-colors hover:bg-plate-raised/70"
+                    data-level={item.level}
+                  >
+                    <span className="data text-[11px] text-ink-faint w-[136px] flex-shrink-0 truncate">
+                      {item.timestamp?.replace('T', ' ').slice(0, 19)}
+                    </span>
+                    <span className="text-[13px] text-ink truncate flex-1 min-w-0">{item.action}</span>
+                    <span
+                      className="data text-[11px] flex-shrink-0"
+                      style={{ color: levelColor(item.level) }}
+                    >
+                      {item.level}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+
+        <div className="lg:col-span-5 flex flex-col gap-8">
+          <div>
+            <h2 className="text-[15px] font-semibold text-ink mb-4">Project runtime</h2>
+            <dl className="plate divide-y divide-seam">
+              {[
+                { term: 'Project id', value: projectId ?? '—' },
+                { term: 'Backup interval', value: stats?.project?.backup_interval ?? '—' },
+                { term: 'Storage', value: stats?.project?.storage_location ?? 'local' },
+                { term: 'Last backup', value: relativeTime(stats?.last_backup ?? null) },
+              ].map((row) => (
+                <div key={row.term} className="flex items-baseline justify-between gap-4 px-4 py-3">
+                  <dt className="text-[12.5px] text-ink-muted">{row.term}</dt>
+                  <dd className="data text-[12px] text-ink truncate">{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+
+          <div>
+            <h2 className="text-[15px] font-semibold text-ink mb-4">Quick actions</h2>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: 'New table', href: '/database', icon: Table2 },
+                { label: 'Run SQL', href: '/sql-editor', icon: Brackets },
+                { label: 'Create API key', href: '/api-keys', icon: Key },
+                { label: 'View logs', href: '/logs', icon: ScrollText },
+              ].map((action) => (
+                <Link key={action.label} href={action.href} className="block">
+                  <Button variant="outline" className="w-full justify-between h-11">
+                    <span className="flex items-center gap-2">
+                      <action.icon className="w-4 h-4 text-ink-muted" aria-hidden="true" />
+                      {action.label}
+                    </span>
+                    <ArrowRight className="w-3.5 h-3.5 text-ink-faint" aria-hidden="true" />
+                  </Button>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
     </PyroCoreLayout>
   )
 }

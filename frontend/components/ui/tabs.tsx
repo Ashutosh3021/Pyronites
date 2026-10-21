@@ -47,7 +47,7 @@ function TabsList({
   return (
     <BaseTabs.List
       className={cn(
-        "inline-flex h-9 items-center justify-center gap-1 bg-muted p-1 text-muted-foreground",
+        "inline-flex items-center justify-center gap-1 border-b border-seam",
         className
       )}
       {...props}
@@ -67,10 +67,12 @@ function TabsTrigger({
     <BaseTabs.Tab
       value={value}
       className={cn(
-        "inline-flex items-center justify-center whitespace-nowrap px-3 py-1 text-sm font-medium",
+        "relative inline-flex items-center justify-center whitespace-nowrap px-3 py-2.5 text-[13px] font-medium",
         "transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        "text-muted-foreground hover:text-foreground",
-        "data-[selected]:bg-background data-[selected]:text-foreground",
+        "text-ink-muted hover:text-ink",
+        "after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-full after:bg-accent",
+        "after:scale-x-0 after:origin-left after:transition-transform after:duration-300",
+        "data-[selected]:text-ink data-[selected]:after:scale-x-100",
         className
       )}
       {...props}

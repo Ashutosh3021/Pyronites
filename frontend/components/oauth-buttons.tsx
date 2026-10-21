@@ -75,7 +75,7 @@ export function OAuthButtons() {
     return (
       <div className="space-y-3" aria-busy="true" aria-label="Loading sign-in options">
         {[0, 1].map((i) => (
-          <div key={i} className="h-12 w-full bg-muted/60 animate-pulse border border-border" />
+          <div key={i} className="h-12 w-full bg-muted/60 animate-pulse border border-seam" />
         ))}
       </div>
     )
@@ -99,11 +99,11 @@ export function OAuthButtons() {
               signIn(provider.id)
             }}
             className={[
-              'w-full flex items-center justify-center gap-3 px-4 py-3 text-sm font-medium',
+              'w-full flex items-center justify-center gap-3 px-4 py-3 text-[13.5px] font-medium',
               'border transition-colors min-h-[48px]',
               provider.configured
-                ? 'border-border bg-card text-foreground hover:bg-muted'
-                : 'border-border/60 bg-card/40 text-muted-foreground cursor-not-allowed',
+                ? 'border-seam bg-plate text-ink hover:border-accent hover:bg-plate-raised'
+                : 'border-seam/60 bg-plate/40 text-ink-faint cursor-not-allowed',
               busy !== null ? 'opacity-70 pointer-events-none' : '',
             ].join(' ')}
           >

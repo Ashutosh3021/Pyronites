@@ -61,9 +61,9 @@ function SelectTrigger({
     <BaseSelect.Trigger
       className={cn(
         "flex h-9 w-full items-center justify-between gap-2 whitespace-nowrap",
-        "border border-input bg-transparent px-3 py-2 text-sm text-foreground",
-        "transition-colors hover:bg-muted focus-visible:outline-none",
-        "focus-visible:ring-2 focus-visible:ring-ring",
+        "border border-seam bg-plate-raised px-3 py-2 text-[13px] text-ink",
+        "transition-colors hover:border-seam-strong",
+        "focus-visible:outline-none focus-visible:border-accent focus-visible:ring-1 focus-visible:ring-accent",
         "disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}
@@ -71,7 +71,7 @@ function SelectTrigger({
     >
       {children}
       <BaseSelect.Icon>
-        <ChevronDown className="h-4 w-4 opacity-60" />
+        <ChevronDown className="h-3.5 w-3.5 opacity-60" />
       </BaseSelect.Icon>
     </BaseSelect.Trigger>
   )
@@ -79,7 +79,7 @@ function SelectTrigger({
 
 function SelectValue({ placeholder }: { placeholder?: string }) {
   const { value } = React.useContext(SelectCtx)
-  return <span className="font-mono text-xs">{value || placeholder || "Select…"}</span>
+  return <span className="data text-[12px]">{value || placeholder || "Select…"}</span>
 }
 
 function SelectContent({
@@ -95,7 +95,7 @@ function SelectContent({
       <BaseSelect.Positioner align={align} sideOffset={4} className="z-50">
         <BaseSelect.Popup
           className={cn(
-            "max-h-72 min-w-[8rem] overflow-hidden border border-border bg-popover shadow-lg",
+            "max-h-72 min-w-[8rem] overflow-hidden border border-seam bg-popover",
             "transition-opacity duration-100",
             "data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
             className
@@ -120,9 +120,9 @@ function SelectItem({
       value={value}
       className={cn(
         "relative flex cursor-default select-none items-center justify-between gap-2",
-        "px-2 py-1.5 text-xs text-foreground outline-none",
-        "data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground",
-        "data-[selected]:font-semibold",
+        "px-2 py-2 text-[12.5px] text-ink outline-none",
+        "data-[highlighted]:bg-plate-raised data-[highlighted]:text-ink",
+        "data-[selected]:text-accent",
         className
       )}
       {...props}

@@ -48,14 +48,14 @@ function DialogContent({
     <DialogPortal>
       <DialogBackdrop
         className={cn(
-          "fixed inset-0 z-50 bg-black/70 transition-opacity duration-150",
+          "fixed inset-0 z-50 bg-black/75 transition-opacity duration-150",
           "data-[ending-style]:opacity-0 data-[starting-style]:opacity-0"
         )}
       />
       <BaseDialog.Popup
         className={cn(
           "fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2",
-          "max-h-[90vh] overflow-y-auto border border-border bg-card p-6 shadow-lg",
+          "max-h-[90vh] overflow-y-auto border border-seam bg-popover p-6",
           "transition-opacity duration-150",
           "data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
           className
@@ -99,7 +99,7 @@ function DialogTitle({
 }: React.ComponentPropsWithoutRef<typeof BaseDialog.Title>) {
   return (
     <BaseDialog.Title
-      className={cn("text-lg font-semibold tracking-tight text-foreground", className)}
+      className={cn("text-[17px] font-semibold tracking-tight text-ink", className)}
       {...props}
     />
   )
@@ -112,7 +112,7 @@ function DialogDescription({
 }: React.ComponentPropsWithoutRef<typeof BaseDialog.Description>) {
   return (
     <BaseDialog.Description
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn("text-[13px] leading-relaxed text-muted-foreground", className)}
       {...props}
     />
   )
@@ -127,8 +127,8 @@ function DialogClose({
   return (
     <BaseDialog.Close
       className={cn(
-        "absolute right-4 top-4 p-1 text-muted-foreground transition-colors",
-        "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "absolute right-4 top-4 p-1 text-ink-muted transition-colors",
+        "hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         "disabled:pointer-events-none",
         className
       )}

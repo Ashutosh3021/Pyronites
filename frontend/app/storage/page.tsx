@@ -1,11 +1,12 @@
 'use client'
 
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
+import { PageHeader } from '@/components/page-header'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Upload, Download, Trash2, FileIcon, FileText } from 'lucide-react'
 import { apiUrl, getStoredProjectName, PROJECT_CHANGE_EVENT } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { AlertBanner } from '@/components/alert-banner'
 import { EmptyState } from '@/components/empty-state'
@@ -166,97 +167,102 @@ export default function StoragePage() {
 
   return (
     <PyroCoreLayout>
-      <div className="space-y-4 lg:space-y-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl lg:text-2xl font-semibold text-foreground">Storage</h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              Files for <span className="text-foreground font-medium">{projectLabel ?? 'selected project'}</span>
-              {' '}— data is isolated per project.
-            </p>
-          </div>
+      <PageHeader
+        meta="Project files"
+        title="Storage"
+        description={`Files for ${projectLabel ?? 'the selected project'}. Each project has its own bucket, so an upload here never shows up in another project.`}
+        actions={
           <Button onClick={() => setShowUpload(true)}>
-            <Upload className="w-4 h-4 mr-2" /> Upload
+            <Upload className="w-4 h-4" aria-hidden="true" />
+            Upload
           </Button>
+        }
+      />
+
+      {loadErr && <AlertBanner variant="error" message={loadErr} onDismiss={() => setLoadErr(null)} />}
+
+      <dl className="mt-8 grid grid-cols-2 gap-px bg-seam border border-seam">
+        <div className="bg-plate p-5">
+          <dt className="label">Used</dt>
+          <dd className="data mt-3 text-[26px] leading-none text-ink">{formatFileSize(totalSize)}</dd>
         </div>
+        <div className="bg-plate p-5">
+          <dt className="label">Files</dt>
+          <dd className="data mt-3 text-[26px] leading-none text-ink">{files.length}</dd>
+        </div>
+      </dl>
 
-        {loadErr && <AlertBanner variant="error" message={loadErr} onDismiss={() => setLoadErr(null)} />}
-
-        <Card>
-          <CardContent className="p-4 text-sm text-muted-foreground">
-            <span className="text-foreground font-medium">{formatFileSize(totalSize)}</span> used · {files.length} file(s)
-          </CardContent>
-        </Card>
-
-        {loading && files.length === 0 ? (
-          <div className="p-12 text-center text-muted-foreground">Loading…</div>
-        ) : files.length === 0 ? (
-          <Card>
-            <CardContent className="p-0">
-              <EmptyState
-                icon={FileText}
-                title="No files in this project yet"
-                description="Upload a file to get a URL your app can fetch it from."
-                action={{ label: 'Upload file', onClick: () => setShowUpload(true) }}
-              />
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <div className="divide-y divide-border">
-              {files.map((file) => (
-                <div key={file.id} className="flex items-center gap-3 px-4 py-3">
-                  <FileIcon className="w-4 h-4 text-muted-foreground" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate">{file.name}</p>
-                    <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDownload(file)}
-                    disabled={downloading === file.id}
-                    aria-label={`Download ${file.name}`}
-                  >
-                    <Download className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setDeleteConfirm(file.id)}
-                    aria-label={`Delete ${file.name}`}
-                    className="text-error hover:text-error"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+      {loading && files.length === 0 ? (
+        <div className="plate p-12 text-center text-[13px] text-ink-muted">Loading files</div>
+      ) : files.length === 0 ? (
+        <div className="plate mt-6">
+          <EmptyState
+            icon={FileText}
+            title="No files in this project yet"
+            description="Upload a file and it gets a URL your app can fetch it from."
+            action={{ label: 'Upload file', onClick: () => setShowUpload(true) }}
+          />
+        </div>
+      ) : (
+        <Card className="mt-6 overflow-hidden">
+          <ul className="divide-y divide-seam">
+            {files.map((file) => (
+              <li key={file.id} className="flex items-center gap-3 px-4 py-3 hover:bg-plate-raised/60 transition-colors">
+                <FileIcon className="w-4 h-4 text-ink-muted flex-shrink-0" aria-hidden="true" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] text-ink truncate">{file.name}</p>
+                  <p className="data text-[11px] text-ink-faint">{formatFileSize(file.size)}</p>
                 </div>
-              ))}
-            </div>
-          </Card>
-        )}
-      </div>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => handleDownload(file)}
+                  disabled={downloading === file.id}
+                  aria-label={`Download ${file.name}`}
+                >
+                  <Download className="w-3.5 h-3.5" aria-hidden="true" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setDeleteConfirm(file.id)}
+                  aria-label={`Delete ${file.name}`}
+                  className="text-error hover:text-error"
+                >
+                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <Dialog open={showUpload} onOpenChange={(isOpen) => !isOpen && setShowUpload(false)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Upload File</DialogTitle>
-            <DialogDescription>Select a file to upload to your project storage.</DialogDescription>
+            <DialogTitle>Upload a file</DialogTitle>
+            <DialogDescription>
+              The file is written to this project&rsquo;s storage and served from its own URL.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             {uploadErr && <AlertBanner variant="error" message={uploadErr} onDismiss={() => setUploadErr(null)} />}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Select File</label>
+              <label htmlFor="storage-file" className="block text-[13px] font-medium text-ink">
+                File
+              </label>
               <input
+                id="storage-file"
                 type="file"
                 onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-                className="w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                className="w-full text-[13px] text-ink-muted file:mr-4 file:py-2 file:px-4 file:border-0 file:bg-transparent file:text-[12px] file:font-medium file:text-accent hover:file:text-hot"
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowUpload(false)}>Cancel</Button>
             <Button onClick={handleUpload} disabled={!uploadFile || uploading}>
-              {uploading ? 'Uploading…' : 'Upload'}
+              {uploading ? 'Uploading' : 'Upload'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -265,11 +271,15 @@ export default function StoragePage() {
       <Dialog open={!!deleteConfirm} onOpenChange={(isOpen) => !isOpen && setDeleteConfirm(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Delete File</DialogTitle>
-            <DialogDescription>This action cannot be undone. The file will be permanently deleted.</DialogDescription>
+            <DialogTitle>Delete file</DialogTitle>
+            <DialogDescription>
+              The file is removed from this project&rsquo;s storage. There is no undo.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <p className="text-sm text-muted-foreground">Are you sure you want to delete this file?</p>
+            <p className="text-[13px] text-ink-muted">
+              Delete <span className="data text-ink">{files.find((f) => f.id === deleteConfirm)?.name ?? 'this file'}</span>?
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Cancel</Button>

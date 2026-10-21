@@ -41,7 +41,7 @@ export function Tooltip({ label, children, side = 'bottom' }: TooltipProps) {
         <span
           id={id}
           role="tooltip"
-          className={`pointer-events-none absolute ${position} z-50 max-w-64 px-3 py-2 text-xs leading-snug text-foreground bg-popover border border-border shadow-lg whitespace-normal`}
+          className={`pointer-events-none absolute ${position} z-50 max-w-64 px-3 py-2 text-xs leading-snug text-foreground bg-popover border border-border whitespace-normal`}
         >
           {label}
         </span>

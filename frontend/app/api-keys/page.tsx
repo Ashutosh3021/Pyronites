@@ -1,8 +1,9 @@
 'use client'
 
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
+import { PageHeader } from '@/components/page-header'
 import { useState, useEffect, useCallback } from 'react'
-import { Copy, Check, AlertCircle, ChevronDown, ChevronUp, RefreshCw, Key } from 'lucide-react'
+import { Copy, Check, ChevronDown, ChevronUp, RefreshCw, Key, Plus } from 'lucide-react'
 import {
   apiUrl,
   getStoredProjectName,
@@ -194,128 +195,137 @@ export default function APIKeysPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <PyroCoreLayout>
-      <div className="max-w-4xl space-y-6">
-
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl lg:text-2xl font-semibold text-foreground">API Keys</h1>
-            <p className="text-muted-foreground text-sm mt-1">Manage authentication tokens for your API</p>
-          </div>
+      <PageHeader
+        meta="Credentials"
+        title="API keys"
+        description="Keys are scoped to this project. A read key can query it, a write key can change it, and an admin key can do both and manage the project itself."
+        actions={
           <Button onClick={() => setShowCreateForm(true)}>
-            Create API Key
+            <Plus className="w-4 h-4" aria-hidden="true" />
+            Create API key
           </Button>
-        </div>
+        }
+      />
 
-        {/* Loading / error / empty states */}
-        {loading && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <RefreshCw className="w-4 h-4 animate-spin" />
-            Loading keys…
-          </div>
-        )}
-        {!loading && fetchError && <AlertBanner variant="error" message={fetchError} onDismiss={() => setFetchError(null)} />}
-        {!loading && !fetchError && keys.length === 0 && (
+      {/* Loading / error / empty states */}
+      {loading && (
+        <div className="flex items-center gap-2 text-[13px] text-ink-muted">
+          <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />
+          Loading keys
+        </div>
+      )}
+      {!loading && fetchError && <AlertBanner variant="error" message={fetchError} onDismiss={() => setFetchError(null)} />}
+      {!loading && !fetchError && keys.length === 0 && (
+        <div className="plate">
           <EmptyState
             icon={Key}
             title="No API keys yet"
-            description="A key is what lets the pyronites client talk to this project. Create one with the scopes your app needs — read and write is enough for day-to-day use."
+            description="A key is what lets the pyronites client talk to this project. Create one with the scopes your app needs, read and write is enough for day to day use."
             action={{ label: 'Create API key', onClick: () => setShowCreateForm(true) }}
           />
-        )}
+        </div>
+      )}
 
-        {/* Keys list */}
-        {!loading && keys.length > 0 && (
-          <div className="space-y-3">
-            {keys.map((key) => {
-              const isExpanded = expandedKey === key.id
-              return (
-                <Card key={key.id}>
-                  <CardContent className="p-4 lg:p-6">
-                    {/* Name + revoke */}
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-semibold text-foreground">{key.name}</h3>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => { setRevokeTarget(key); setRevokeError(null) }}
-                        className="text-error hover:text-error hover:bg-error/10"
-                      >
-                        Revoke
-                      </Button>
-                    </div>
-
-                    {/* Masked key */}
-                    <div className="flex items-center gap-2 bg-background border border-border p-3 mb-3 rounded-md">
-                      <code className="flex-1 text-sm font-mono text-foreground truncate">{key.masked}</code>
-                    </div>
-
-                    {/* Desktop metadata */}
-                    <div className="hidden lg:grid grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">Scopes</p>
-                        <div className="flex flex-wrap gap-1">
-                          {key.scopes.map((s) => (
-                            <Badge key={s} variant="secondary" className="capitalize">{s}</Badge>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">Created</p>
-                        <p className="font-mono text-xs text-foreground">{fmtDate(key.created_at)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">Last Used</p>
-                        <p className="font-mono text-xs text-foreground">{fmtDate(key.last_used_at)}</p>
-                      </div>
-                    </div>
-
-                    {/* Mobile expand toggle */}
-                    <button
-                      onClick={() => setExpandedKey(isExpanded ? null : key.id)}
-                      className="lg:hidden flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors min-h-[44px]"
+      {/* Keys list */}
+      {!loading && keys.length > 0 && (
+        <div className="space-y-3">
+          {keys.map((key) => {
+            const isExpanded = expandedKey === key.id
+            return (
+              <Card key={key.id} className="plate--lit">
+                <CardContent className="p-4 lg:p-6">
+                  {/* Name + revoke */}
+                  <div className="flex items-start justify-between gap-4 mb-4">
+                    <h2 className="text-[15px] font-semibold text-ink">{key.name}</h2>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setRevokeTarget(key); setRevokeError(null) }}
+                      className="text-error hover:text-error"
                     >
-                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                      {isExpanded ? 'Less' : 'Scopes & dates'}
-                    </button>
-                  </CardContent>
+                      Revoke
+                    </Button>
+                  </div>
 
-                  {/* Mobile expanded */}
-                  {isExpanded && (
-                    <div className="lg:hidden border-t border-border px-4 pb-4 pt-3 bg-muted/10">
-                      <div className="grid grid-cols-3 gap-3 text-sm">
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">Scopes</p>
-                          <div className="flex flex-wrap gap-1">
-                            {key.scopes.map((s) => (
-                              <Badge key={s} variant="secondary" className="capitalize">{s}</Badge>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">Created</p>
-                          <p className="font-mono text-xs text-foreground">{fmtDate(key.created_at)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">Last Used</p>
-                          <p className="font-mono text-xs text-foreground">{fmtDate(key.last_used_at)}</p>
-                        </div>
-                      </div>
+                  {/* Masked key */}
+                  <div className="flex items-center gap-2 bg-plate-raised border border-seam p-3 mb-4">
+                    <code className="flex-1 data text-[12px] text-ink truncate">{key.masked}</code>
+                  </div>
+
+                  {/* Desktop metadata */}
+                  <dl className="hidden lg:grid grid-cols-3 gap-4">
+                    <div>
+                      <dt className="label mb-1.5">Scopes</dt>
+                      <dd className="flex flex-wrap gap-1">
+                        {key.scopes.map((s) => (
+                          <Badge key={s} variant="secondary" className="capitalize">
+                            {s}
+                          </Badge>
+                        ))}
+                      </dd>
                     </div>
-                  )}
-                </Card>
-              )
-            })}
-          </div>
-        )}
-      </div>
+                    <div>
+                      <dt className="label mb-1.5">Created</dt>
+                      <dd className="data text-[12px] text-ink">{fmtDate(key.created_at)}</dd>
+                    </div>
+                    <div>
+                      <dt className="label mb-1.5">Last used</dt>
+                      <dd className="data text-[12px] text-ink">{fmtDate(key.last_used_at)}</dd>
+                    </div>
+                  </dl>
+
+                  {/* Mobile expand toggle */}
+                  <button
+                    onClick={() => setExpandedKey(isExpanded ? null : key.id)}
+                    aria-expanded={isExpanded}
+                    className="lg:hidden flex items-center gap-2 text-[12.5px] text-ink-muted hover:text-ink transition-colors min-h-[44px]"
+                  >
+                    {isExpanded ? (
+                      <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+                    )}
+                    {isExpanded ? 'Hide details' : 'Scopes and dates'}
+                  </button>
+                </CardContent>
+
+                {/* Mobile expanded */}
+                {isExpanded && (
+                  <dl className="lg:hidden border-t border-seam px-4 pb-4 pt-3 grid grid-cols-3 gap-3">
+                    <div>
+                      <dt className="label mb-1.5">Scopes</dt>
+                      <dd className="flex flex-wrap gap-1">
+                        {key.scopes.map((s) => (
+                          <Badge key={s} variant="secondary" className="capitalize">
+                            {s}
+                          </Badge>
+                        ))}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="label mb-1.5">Created</dt>
+                      <dd className="data text-[12px] text-ink">{fmtDate(key.created_at)}</dd>
+                    </div>
+                    <div>
+                      <dt className="label mb-1.5">Last used</dt>
+                      <dd className="data text-[12px] text-ink">{fmtDate(key.last_used_at)}</dd>
+                    </div>
+                  </dl>
+                )}
+              </Card>
+            )
+          })}
+        </div>
+      )}
 
       {/* ── CREATE MODAL ── */}
       <Dialog open={showCreateForm} onOpenChange={(isOpen) => !isOpen && closeCreateModal()}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Create API Key</DialogTitle>
-            <DialogDescription>Generate a new API key for authentication.</DialogDescription>
+            <DialogTitle>Create API key</DialogTitle>
+            <DialogDescription>
+              The raw key is shown once, right after it is generated. Store it before you close this.
+            </DialogDescription>
           </DialogHeader>
 
           {/* Step A: form */}
@@ -324,37 +334,42 @@ export default function APIKeysPage() {
               <div className="space-y-4 py-4">
                 {createError && <AlertBanner variant="error" message={createError} onDismiss={() => setCreateError(null)} />}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Name</label>
+                  <label htmlFor="key-name" className="block text-[13px] font-medium text-ink">
+                    Name
+                  </label>
                   <Input
+                    id="key-name"
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g., Production API"
+                    placeholder="Production API"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Scopes</label>
-                  <div className="space-y-2">
-                    {(['read', 'write', 'admin'] as const).map((scope) => (
-                      <label key={scope} className="flex items-center gap-3 cursor-pointer min-h-[44px]">
-                        <input
-                          type="checkbox"
-                          checked={formData.scopes[scope]}
-                          onChange={(e) =>
-                            setFormData({ ...formData, scopes: { ...formData.scopes, [scope]: e.target.checked } })
-                          }
-                          className="w-4 h-4"
-                        />
-                        <span className="text-sm text-foreground capitalize">{scope}</span>
-                      </label>
-                    ))}
-                  </div>
+                  <fieldset>
+                    <legend className="text-[13px] font-medium text-ink">Scopes</legend>
+                    <div className="space-y-1 mt-1">
+                      {(['read', 'write', 'admin'] as const).map((scope) => (
+                        <label key={scope} className="flex items-center gap-3 cursor-pointer min-h-[40px]">
+                          <input
+                            type="checkbox"
+                            checked={formData.scopes[scope]}
+                            onChange={(e) =>
+                              setFormData({ ...formData, scopes: { ...formData.scopes, [scope]: e.target.checked } })
+                            }
+                            className="w-4 h-4 accent-[var(--accent)]"
+                          />
+                          <span className="text-[13px] text-ink capitalize">{scope}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
                 </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={closeCreateModal}>Cancel</Button>
                 <Button onClick={handleCreate} disabled={creating}>
-                  {creating ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Creating…</> : 'Generate'}
+                  {creating ? 'Generating' : 'Generate'}
                 </Button>
               </DialogFooter>
             </>
@@ -364,12 +379,12 @@ export default function APIKeysPage() {
               <div className="space-y-4 py-4">
                 <AlertBanner
                   variant="warning"
-                  message="Copy this key now — it won't be shown again."
+                  message="Copy this key now. It is not shown again after this dialog closes."
                 />
                 <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">API Key</label>
-                  <div className="flex items-center gap-2 bg-background border border-border p-3 rounded-md">
-                    <code className="flex-1 text-sm font-mono text-foreground break-all">{revealedKey}</code>
+                  <p className="label">API key</p>
+                  <div className="flex items-center gap-2 bg-plate-raised border border-seam p-3">
+                    <code className="flex-1 data text-[12px] text-ink break-all">{revealedKey}</code>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -396,14 +411,15 @@ export default function APIKeysPage() {
       <Dialog open={!!revokeTarget} onOpenChange={(isOpen) => !isOpen && setRevokeTarget(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Revoke API Key</DialogTitle>
+            <DialogTitle>Revoke API key</DialogTitle>
             <DialogDescription>
-              This action cannot be undone. The key will be immediately revoked and any applications using it will lose access.
+              The key stops working the moment you confirm. Any application still using it loses
+              access to this project.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <p className="text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">{revokeTarget?.name}</span> will be permanently revoked.
+            <p className="text-[13px] text-ink-muted">
+              <span className="text-ink font-medium">{revokeTarget?.name}</span> will be revoked.
             </p>
             {revokeError && <AlertBanner variant="error" message={revokeError} onDismiss={() => setRevokeError(null)} />}
           </div>

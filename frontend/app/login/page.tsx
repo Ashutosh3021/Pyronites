@@ -56,8 +56,11 @@ function LoginScreen() {
   return (
     <>
       <div>
-        <h1 className="text-base font-semibold text-foreground">PyroCore</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">Sign in to your dashboard</p>
+        <p className="label">Dashboard access</p>
+        <h2 className="display mt-3 text-[30px]">Sign in</h2>
+        <p className="mt-3 text-[13.5px] leading-relaxed text-ink-muted">
+          This signs you into the control panel of this instance, not into a hosted service.
+        </p>
       </div>
 
       {justReset && (
@@ -68,20 +71,20 @@ function LoginScreen() {
 
       <OAuthButtons />
 
-      <div className="border-t border-border pt-4">
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Signing in with Google or GitHub creates your account and a starter project on
-          first use. If you already signed up with an email and password, use the same email
-          address and your existing projects will be waiting.
+      <div className="border-t border-seam pt-5">
+        <p className="text-[12.5px] leading-relaxed text-ink-muted">
+          Signing in with Google or GitHub creates your account and a starter project on first
+          use. If you already signed up with an email and password, use the same email address
+          and your existing projects will be waiting.
         </p>
       </div>
 
-      <p className="text-xs text-muted-foreground text-center">
-        <Link href="/terms" className="hover:underline" style={{ color: 'var(--pyro-orange)' }}>
+      <p className="text-[12.5px] text-ink-faint">
+        <Link href="/terms" className="link-quiet">
           Terms
         </Link>
-        <span className="mx-2 text-border">·</span>
-        <Link href="/privacy" className="hover:underline" style={{ color: 'var(--pyro-orange)' }}>
+        <span className="mx-2 text-border">/</span>
+        <Link href="/privacy" className="link-quiet">
           Privacy
         </Link>
       </p>
@@ -91,9 +94,9 @@ function LoginScreen() {
 
 export default function LoginPage() {
   return (
-    <AuthShell width="sm">
-      <div className="p-8 space-y-6">
-        <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+    <AuthShell>
+      <div className="space-y-7">
+        <Suspense fallback={<p className="text-[13px] text-muted-foreground">Loading.</p>}>
           <LoginScreen />
         </Suspense>
       </div>

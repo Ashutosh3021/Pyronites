@@ -2,26 +2,23 @@ import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
+/**
+ * Status markers. Small, tracked, and always paired with a real word so the
+ * colour is never the only signal.
+ */
 const badgeVariants = cva(
-  "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  "inline-flex items-center gap-1.5 border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] transition-colors",
   {
     variants: {
       variant: {
-        default:
-          "border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80",
-        secondary:
-          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        destructive:
-          "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
-        outline: "text-foreground",
-        success:
-          "border-transparent bg-success/15 text-success",
-        warning:
-          "border-transparent bg-warning/15 text-warning",
-        error:
-          "border-transparent bg-error/15 text-error",
-        info:
-          "border-transparent bg-info/15 text-info",
+        default: "border-accent/40 bg-accent/10 text-accent",
+        secondary: "border-seam bg-plate-raised text-ink-muted",
+        destructive: "border-error/40 bg-error/10 text-error",
+        outline: "border-seam text-ink-muted",
+        success: "border-success/40 bg-success/10 text-success",
+        warning: "border-warning/40 bg-warning/10 text-warning",
+        error: "border-error/40 bg-error/10 text-error",
+        info: "border-info/40 bg-info/10 text-info",
       },
     },
     defaultVariants: {
@@ -36,7 +33,7 @@ export interface BadgeProps
 
 function Badge({ className, variant, ...props }: BadgeProps) {
   return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+    <div data-slot="badge" className={cn(badgeVariants({ variant }), className)} {...props} />
   )
 }
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ChevronDown, FolderKanban, Plus } from 'lucide-react'
+import { ChevronDown, Plus } from 'lucide-react'
 import {
   fetchProjects,
   fetchCurrentProjectId,
@@ -75,15 +75,17 @@ export function ProjectSwitcher() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2.5 text-sm border border-border bg-background hover:bg-muted/40 transition-colors min-h-[44px]"
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[13px] border border-seam bg-plate-raised hover:border-seam-strong transition-colors min-h-[44px]"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <FolderKanban className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
-        <span className="flex-1 text-left truncate text-foreground font-medium">
-          {currentName}
-        </span>
-        <ChevronDown className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
+        <span
+          className="w-[7px] h-[7px] rotate-45 flex-shrink-0"
+          style={{ background: 'var(--accent)' }}
+          aria-hidden="true"
+        />
+        <span className="flex-1 text-left truncate text-ink font-medium">{currentName}</span>
+        <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-ink-muted" aria-hidden="true" />
       </button>
 
       {open && (
@@ -93,33 +95,39 @@ export function ProjectSwitcher() {
             onClick={() => setOpen(false)}
             aria-hidden
           />
-          <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-card border border-border shadow-lg max-h-64 overflow-auto">
+          <div
+            role="listbox"
+            aria-label="Projects"
+            className="absolute left-0 right-0 top-full mt-1 z-50 bg-popover border border-seam max-h-64 overflow-auto"
+          >
             {projects.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-muted-foreground">No projects yet</p>
+              <p className="px-3 py-2.5 text-[12.5px] text-muted-foreground">No projects yet</p>
             ) : (
               projects.map((p) => (
                 <button
                   key={p.id}
                   type="button"
+                  role="option"
+                  aria-selected={currentId === p.id}
                   onClick={() => select(p)}
                   className={[
-                    'w-full text-left px-3 py-2.5 text-sm min-h-[44px] hover:bg-muted/50 transition-colors',
-                    currentId === p.id ? 'bg-muted text-accent' : 'text-foreground',
+                    'w-full text-left px-3 py-2.5 text-[13px] min-h-[44px] transition-colors',
+                    currentId === p.id
+                      ? 'bg-plate-raised text-accent'
+                      : 'text-ink hover:bg-plate-raised',
                   ].join(' ')}
                 >
                   <div className="font-medium truncate">{p.name}</div>
-                  <div className="text-xs text-muted-foreground font-mono truncate">
-                    {p.slug || p.project_id}
-                  </div>
+                  <div className="data text-[11px] text-ink-faint truncate">{p.slug || p.project_id}</div>
                 </button>
               ))
             )}
             <Link
               href="/new-project"
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2 px-3 py-2.5 text-sm border-t border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 min-h-[44px]"
+              className="flex items-center gap-2 px-3 py-2.5 text-[13px] border-t border-seam text-ink-muted hover:text-ink hover:bg-plate-raised transition-colors min-h-[44px]"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4" aria-hidden="true" />
               New project
             </Link>
           </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
+import { PageHeader } from '@/components/page-header'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Edit, Trash2, Eye, EyeOff, ArrowLeft, Database } from 'lucide-react'
@@ -11,7 +12,6 @@ import {
 } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { AlertBanner } from '@/components/alert-banner'
@@ -136,9 +136,9 @@ export default function DatabaseExplorerPage() {
 
   const renderCell = (value: unknown) => {
     if (value === null || value === undefined)
-      return <span className="text-muted-foreground italic">null</span>
+      return <span className="text-ink-faint italic">null</span>
     if (typeof value === 'object') return <span>{JSON.stringify(value)}</span>
-    return <span className="text-foreground">{String(value)}</span>
+    return <span className="text-ink">{String(value)}</span>
   }
 
   const handleCreateTable = async (
@@ -208,23 +208,28 @@ export default function DatabaseExplorerPage() {
 
   return (
     <PyroCoreLayout>
-      <div className="mb-4">
-        <h1 className="text-xl font-semibold text-foreground">Database</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Tables for{' '}
-          <span className="text-foreground font-medium">{projectLabel ?? 'selected project'}</span>
-          {' '}only — data is isolated per project. Switch projects in the sidebar.
-        </p>
-      </div>
+      <PageHeader
+        meta="Schema and rows"
+        title="Database"
+        description={`Tables for ${projectLabel ?? 'the selected project'} only. Data is isolated per project, so nothing here can reach another project's file.`}
+        actions={
+          <Button onClick={() => setShowNewTable(true)}>
+            <Plus className="w-4 h-4" aria-hidden="true" />
+            New table
+          </Button>
+        }
+      />
 
-      <div className="h-full flex gap-6">
-        <div className={['bg-card border border-border rounded-lg p-4 flex flex-col', 'lg:w-64 lg:flex-shrink-0', showingTableOnMobile ? 'hidden lg:flex' : 'flex w-full lg:w-64'].join(' ')}>
-          <div className="mb-4">
-            <Button onClick={() => setShowNewTable(true)} className="w-full">
-              <Plus className="w-4 h-4 mr-2" /> New Table
-            </Button>
-          </div>
-          <div className="space-y-1 flex-1 overflow-auto">
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Table list */}
+        <div
+          className={[
+            'plate p-4 flex flex-col lg:w-64 lg:flex-shrink-0',
+            showingTableOnMobile ? 'hidden lg:flex' : 'flex w-full lg:w-64',
+          ].join(' ')}
+        >
+          <p className="label mb-3">Tables</p>
+          <div className="space-y-0.5 flex-1 overflow-auto">
             {tables.length === 0 && !loading && (
               <EmptyState
                 compact
@@ -236,73 +241,126 @@ export default function DatabaseExplorerPage() {
               />
             )}
             {tables.map((table) => (
-              <button key={table.name} onClick={() => selectTable(table.name)} className={['w-full px-3 py-3 text-sm text-left min-h-[44px] rounded-md transition-colors', activeTable === table.name ? 'bg-muted text-accent' : 'text-muted-foreground hover:bg-muted/50'].join(' ')}>
-                <div className="font-medium">{table.name}</div>
-                <div className="text-xs text-muted-foreground">{table.rows} rows</div>
+              <button
+                key={table.name}
+                onClick={() => selectTable(table.name)}
+                aria-current={activeTable === table.name ? 'true' : undefined}
+                className={[
+                  'seam-open w-full px-3 py-2.5 text-left min-h-[44px] transition-colors',
+                  activeTable === table.name
+                    ? 'bg-plate-raised text-ink'
+                    : 'text-ink-muted hover:text-ink hover:bg-plate-raised/60',
+                ].join(' ')}
+              >
+                <div className="text-[13px] font-medium truncate">{table.name}</div>
+                <div className="data text-[11px] text-ink-faint">{table.rows} rows</div>
               </button>
             ))}
           </div>
         </div>
 
-        <div className={['flex-1 flex flex-col gap-4 min-w-0', !showingTableOnMobile ? 'hidden lg:flex' : 'flex'].join(' ')}>
+        {/* Table detail */}
+        <div
+          className={[
+            'flex-1 flex flex-col gap-4 min-w-0',
+            !showingTableOnMobile ? 'hidden lg:flex' : 'flex',
+          ].join(' ')}
+        >
           {loadErr && <AlertBanner variant="error" message={loadErr} onDismiss={() => setLoadErr(null)} />}
 
-          <div className="bg-card border border-border rounded-lg p-4">
-            <div className="flex items-center gap-3">
-              <button onClick={() => setSelectedTable(null)} className="lg:hidden p-2 min-w-[44px] min-h-[44px]" aria-label="Back">
-                <ArrowLeft className="w-4 h-4" />
+          <div className="plate px-4 py-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => setSelectedTable(null)}
+                className="lg:hidden p-2 -ml-1 text-ink-muted hover:text-ink min-w-[44px] min-h-[44px] flex items-center justify-center"
+                aria-label="Back to the table list"
+              >
+                <ArrowLeft className="w-4 h-4" aria-hidden="true" />
               </button>
-              <h2 className="text-base font-semibold truncate">Table: <span className="text-accent">{activeTable ?? '—'}</span></h2>
-              <span className="text-sm text-muted-foreground">{rows.length} rows</span>
-              <div className="ml-auto hidden lg:flex items-center gap-2">
+              <h2 className="text-[15px] font-semibold truncate text-ink">
+                {activeTable ?? 'No table selected'}
+              </h2>
+              <span className="data text-[12px] text-ink-faint">{rows.length} rows</span>
+              <div className="ml-auto flex items-center gap-2">
                 <Input
                   type="text"
-                  placeholder="Filter..."
+                  placeholder="Filter rows"
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
-                  className="w-48"
+                  className="w-40 lg:w-48"
+                  aria-label="Filter rows in this table"
                 />
-                <Button variant="ghost" size="icon" onClick={() => setShowColumns(!showColumns)}>
-                  {showColumns ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowColumns(!showColumns)}
+                  aria-label={showColumns ? 'Hide column types' : 'Show column types'}
+                  aria-pressed={showColumns}
+                >
+                  {showColumns ? <Eye className="w-4 h-4" aria-hidden="true" /> : <EyeOff className="w-4 h-4" aria-hidden="true" />}
                 </Button>
                 <Button onClick={() => setShowInsert(true)} disabled={!activeTable}>
-                  Insert Row
+                  Insert row
                 </Button>
               </div>
             </div>
           </div>
 
-          <div className="flex-1 bg-card border border-border rounded-lg overflow-auto">
+          <div className="plate overflow-auto">
             {!activeTable ? (
-              <div className="p-12 text-center text-muted-foreground">Select or create a table.</div>
+              <EmptyState
+                icon={Database}
+                title="Select or create a table"
+                description="Pick a table on the left to read its rows, or create a new one to start."
+              />
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12">#</TableHead>
-                    {showColumns && schema.map((col) => (
-                      <TableHead key={col.name}>
-                        <div className="font-semibold">{col.name}</div>
-                        <div className="font-mono text-muted-foreground text-xs">{col.type}{col.pk ? ' · PK' : ''}</div>
-                      </TableHead>
-                    ))}
-                    <TableHead className="w-24" />
+                    {showColumns &&
+                      schema.map((col) => (
+                        <TableHead key={col.name}>
+                          <div className="text-ink text-[11px] uppercase tracking-[0.1em]">{col.name}</div>
+                          <div className="data text-[10px] text-ink-faint normal-case tracking-normal">
+                            {col.type}
+                            {col.pk ? ' · PK' : ''}
+                          </div>
+                        </TableHead>
+                      ))}
+                    <TableHead className="w-24">
+                      <span className="sr-only">Row actions</span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredRows.map((row, idx) => (
                     <TableRow key={row.id ? String(row.id) : `row-${idx}`}>
-                      <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
-                      {showColumns && schema.map((col) => (
-                        <TableCell key={col.name} className="font-mono text-sm">{renderCell(row[col.name])}</TableCell>
-                      ))}
+                      <TableCell className="data text-[11px] text-ink-faint">{idx + 1}</TableCell>
+                      {showColumns &&
+                        schema.map((col) => (
+                          <TableCell key={col.name} className="data text-[12px]">
+                            {renderCell(row[col.name])}
+                          </TableCell>
+                        ))}
                       <TableCell>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => setEditRow(row)} aria-label="Edit">
-                            <Edit className="w-4 h-4" />
+                        <div className="flex gap-1 justify-end">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setEditRow(row)}
+                            aria-label={`Edit row ${idx + 1}`}
+                          >
+                            <Edit className="w-3.5 h-3.5" aria-hidden="true" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => setDeleteRow(row)} aria-label="Delete" className="text-error hover:text-error">
-                            <Trash2 className="w-4 h-4" />
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setDeleteRow(row)}
+                            aria-label={`Delete row ${idx + 1}`}
+                            className="text-error hover:text-error"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                           </Button>
                         </div>
                       </TableCell>
@@ -314,14 +372,26 @@ export default function DatabaseExplorerPage() {
           </div>
 
           {activeTable && (
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Showing {filteredRows.length} loaded</span>
+            <div className="flex justify-between items-center text-[12px] text-ink-faint">
+              <span className="data">
+                Showing {filteredRows.length} loaded rows
+              </span>
               <div className="flex gap-1">
-                <Button variant="ghost" size="sm" disabled={offset <= 0} onClick={() => loadTable(activeTable, Math.max(0, offset - LIMIT))}>
-                  ← Prev
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={offset <= 0}
+                  onClick={() => loadTable(activeTable, Math.max(0, offset - LIMIT))}
+                >
+                  Prev
                 </Button>
-                <Button variant="ghost" size="sm" disabled={rows.length < LIMIT} onClick={() => loadTable(activeTable, offset + LIMIT)}>
-                  Next →
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={rows.length < LIMIT}
+                  onClick={() => loadTable(activeTable, offset + LIMIT)}
+                >
+                  Next
                 </Button>
               </div>
             </div>
@@ -335,15 +405,15 @@ export default function DatabaseExplorerPage() {
         onCreate={handleCreateTable}
         onDone={(name) => { setShowNewTable(false); loadTables().then(() => selectTable(name)) }}
       />
-      
+
       {showInsert && activeTable && (
-        <RowModal title="Insert Row" tableName={activeTable} schema={schema} initial={{}} open={showInsert} onClose={() => setShowInsert(false)} onSubmit={async (t, _id, row) => handleInsertRow(t, row)} onDone={() => { setShowInsert(false); loadTable(activeTable, offset) }} />
+        <RowModal title="Insert row" tableName={activeTable} schema={schema} initial={{}} open={showInsert} onClose={() => setShowInsert(false)} onSubmit={async (t, _id, row) => handleInsertRow(t, row)} onDone={() => { setShowInsert(false); loadTable(activeTable, offset) }} />
       )}
-      
+
       {editRow && activeTable && (
-        <RowModal title="Edit Row" tableName={activeTable} schema={schema} initial={editRow} open={!!editRow} onClose={() => setEditRow(null)} onSubmit={handleEditRow} onDone={() => { setEditRow(null); loadTable(activeTable, offset) }} />
+        <RowModal title="Edit row" tableName={activeTable} schema={schema} initial={editRow} open={!!editRow} onClose={() => setEditRow(null)} onSubmit={handleEditRow} onDone={() => { setEditRow(null); loadTable(activeTable, offset) }} />
       )}
-      
+
       {deleteRow && activeTable && (
         <DeleteModal tableName={activeTable} row={deleteRow} open={!!deleteRow} onClose={() => setDeleteRow(null)} onDelete={handleDeleteRow} onDone={() => { setDeleteRow(null); loadTable(activeTable, offset) }} />
       )}
@@ -399,13 +469,13 @@ function RowModal({ title, tableName, schema, initial, open, onClose, onSubmit, 
           {err && <AlertBanner variant="error" message={err} onDismiss={() => setErr(null)} />}
           {schema.map((col) => (
             <div key={col.name} className="space-y-1.5">
-              <label className="text-sm font-medium">
-                {col.name} <span className="text-muted-foreground text-xs">{col.type}</span>
+              <label className="flex items-baseline gap-2 text-[13px] font-medium text-ink">
+                {col.name} <span className="data text-[11px] text-ink-faint">{col.type}</span>
               </label>
               <Input
                 value={values[col.name] ?? ''}
                 onChange={(e) => setValues((v) => ({ ...v, [col.name]: e.target.value }))}
-                className="font-mono"
+                className="data text-[12px]"
               />
             </div>
           ))}
@@ -441,9 +511,9 @@ function DeleteModal({ tableName, row, open, onClose, onDelete, onDone }: {
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Delete Row</DialogTitle>
+          <DialogTitle>Delete row</DialogTitle>
           <DialogDescription>
-            This action cannot be undone. The row will be permanently deleted from {tableName}.
+            This cannot be undone. The row is removed from {tableName} for good.
           </DialogDescription>
         </DialogHeader>
         <div className="py-4">

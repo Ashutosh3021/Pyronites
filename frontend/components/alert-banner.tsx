@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { AlertCircle, CheckCircle2, AlertTriangle, Info, X } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -12,26 +12,31 @@ interface AlertBannerProps {
   className?: string
 }
 
+/**
+ * The only error mechanism in the product. A plate with a lit left seam in the
+ * signal colour, so severity is legible without relying on colour alone (the
+ * icon and the wording carry it too).
+ */
 const variantConfig = {
   error: {
     icon: AlertCircle,
-    containerClass: "bg-error/10 border border-error/30 text-error",
-    iconClass: "text-error",
+    seam: "var(--error)",
+    text: "text-error",
   },
   success: {
     icon: CheckCircle2,
-    containerClass: "bg-success/10 border border-success/30 text-success",
-    iconClass: "text-success",
+    seam: "var(--success)",
+    text: "text-success",
   },
   warning: {
     icon: AlertTriangle,
-    containerClass: "bg-warning/10 border border-warning/30 text-warning",
-    iconClass: "text-warning",
+    seam: "var(--warning)",
+    text: "text-warning",
   },
   info: {
     icon: Info,
-    containerClass: "bg-info/10 border border-info/30 text-info",
-    iconClass: "text-info",
+    seam: "var(--info)",
+    text: "text-info",
   },
 }
 
@@ -43,17 +48,20 @@ export function AlertBanner({ variant, message, onDismiss, className }: AlertBan
     <div
       role="alert"
       className={cn(
-        "flex items-start gap-3 p-4 text-sm",
-        config.containerClass,
+        "relative flex items-start gap-3 border border-seam bg-plate px-4 py-3 text-[13px] leading-relaxed text-ink",
         className
       )}
+      style={{ boxShadow: `inset 2px 0 0 0 ${config.seam}` }}
     >
-      <Icon className={cn("w-5 h-5 flex-shrink-0 mt-0.5", config.iconClass)} />
+      <Icon className={cn("w-4 h-4 flex-shrink-0 mt-0.5", config.text)} aria-hidden="true" />
       <p className="flex-1">{message}</p>
       {onDismiss && (
         <button
           onClick={onDismiss}
-          className={cn("p-1 hover:opacity-70 transition-opacity", config.iconClass)}
+          className={cn(
+            "p-1 -mr-1 -mt-0.5 transition-colors hover:text-ink min-w-[28px] min-h-[28px] flex items-center justify-center",
+            config.text
+          )}
           aria-label="Dismiss"
         >
           <X className="w-4 h-4" />

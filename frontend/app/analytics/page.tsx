@@ -1,6 +1,7 @@
 'use client'
 
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
+import { PageHeader } from '@/components/page-header'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Database, HardDrive, KeyRound, Clock, Activity } from 'lucide-react'
 import {
@@ -20,7 +21,7 @@ import { AlertBanner } from '@/components/alert-banner'
 import { EmptyState } from '@/components/empty-state'
 import { apiUrl, API_BASE, getStoredProjectId, PROJECT_CHANGE_EVENT } from '@/lib/api'
 import type { Stats, LogEntry } from '@/lib/types'
-import { formatBytes, relativeTime, levelDotClass } from '@/lib/utils'
+import { formatBytes, relativeTime } from '@/lib/utils'
 
 // ─── Stat card ────────────────────────────────────────────────────────────────
 function StatCard({
@@ -35,16 +36,14 @@ function StatCard({
   icon: React.ComponentType<{ className?: string }>
 }) {
   return (
-    <Card>
-      <CardContent className="p-4 lg:p-5 flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <Icon className="w-4 h-4 text-muted-foreground" />
-          <p className="text-xs text-muted-foreground">{label}</p>
-        </div>
-        <p className="text-2xl font-semibold text-foreground">{value}</p>
-        {subtext && <p className="text-xs text-muted-foreground mt-0.5">{subtext}</p>}
-      </CardContent>
-    </Card>
+    <div className="bg-plate p-4 lg:p-5 flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <Icon className="w-3.5 h-3.5 text-accent" aria-hidden="true" />
+        <p className="label">{label}</p>
+      </div>
+      <p className="data text-[26px] leading-none text-ink">{value}</p>
+      {subtext && <p className="data text-[11px] text-ink-faint">{subtext}</p>}
+    </div>
   )
 }
 
@@ -91,12 +90,12 @@ function MetricTile({
   tone?: 'error'
 }) {
   return (
-    <div className="border border-border p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
+    <div className="bg-plate-raised border border-seam p-3">
+      <p className="label">{label}</p>
       <p
         className={[
-          'mt-1 text-lg font-semibold',
-          tone === 'error' ? 'text-error' : 'text-foreground',
+          'data mt-2 text-[17px] leading-none',
+          tone === 'error' ? 'text-error' : 'text-ink',
         ].join(' ')}
       >
         {value}
@@ -322,175 +321,172 @@ export default function AnalyticsPage() {
 
   return (
     <PyroCoreLayout>
-      <div className="max-w-6xl space-y-6 lg:space-y-8">
-        <div>
-          <h1 className="text-xl lg:text-2xl font-semibold text-foreground">Analytics</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Live project metrics and activity — sourced directly from the backend
-          </p>
-        </div>
+      <PageHeader
+        meta="Measured traffic"
+        title="Analytics"
+        description="Counts, latency and errors recorded at the API layer of this project. The window can be changed; the numbers come from the server, not from the browser."
+      />
 
-        {loadErr && <AlertBanner variant="error" message={loadErr} onDismiss={() => setLoadErr(null)} />}
+      {loadErr && <AlertBanner variant="error" message={loadErr} onDismiss={() => setLoadErr(null)} />}
 
-        {/* ── Real stat cards (from /api/stats) ── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-          <StatCard
-            label="Tables"
-            value={stats ? String(stats.table_count) : '—'}
-            subtext="user tables in this project"
-            icon={Database}
-          />
-          <StatCard
-            label="Stored Files"
-            value={stats ? String(stats.file_count) : '—'}
-            subtext="uploaded via storage API"
-            icon={HardDrive}
-          />
-          <StatCard
-            label="API Keys"
-            value={stats ? String(stats.key_count) : '—'}
-            subtext="active keys (unrevoked)"
-            icon={KeyRound}
-          />
-          <StatCard
-            label="Database Size"
-            value={stats ? formatBytes(stats.db_size_bytes) : '—'}
-            subtext={stats ? `Last backup ${relativeTime(stats.last_backup)}` : '—'}
-            icon={Clock}
-          />
-        </div>
+      {/* ── Real stat cards (from /api/stats) ── */}
+      <dl className="mt-8 grid grid-cols-2 lg:grid-cols-4 gap-px bg-seam border border-seam">
+        <StatCard
+          label="Tables"
+          value={stats ? String(stats.table_count) : '—'}
+          subtext="user tables in this project"
+          icon={Database}
+        />
+        <StatCard
+          label="Stored files"
+          value={stats ? String(stats.file_count) : '—'}
+          subtext="uploaded via storage API"
+          icon={HardDrive}
+        />
+        <StatCard
+          label="API keys"
+          value={stats ? String(stats.key_count) : '—'}
+          subtext="active keys (unrevoked)"
+          icon={KeyRound}
+        />
+        <StatCard
+          label="Database size"
+          value={stats ? formatBytes(stats.db_size_bytes) : '—'}
+          subtext={stats ? `Last backup ${relativeTime(stats.last_backup)}` : '—'}
+          icon={Clock}
+        />
+      </dl>
 
-        {/* ── Traffic over time (from /api/projects/{id}/metrics) ── */}
-        <Card>
-          <div className="px-4 lg:px-5 py-4 border-b border-border flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-muted-foreground" />
-              <h2 className="text-sm font-semibold text-foreground">Traffic</h2>
-            </div>
-            <div className="ml-auto flex items-center gap-1">
-              {(['1h', '6h', '24h', '7d'] as const).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRange(r)}
-                  aria-pressed={range === r}
-                  className={[
-                    'px-2.5 py-1 text-xs font-medium border transition-colors min-h-[32px]',
-                    range === r
-                      ? 'border-accent bg-accent text-accent-foreground'
-                      : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground',
-                  ].join(' ')}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
+      {/* ── Traffic over time (from /api/projects/{id}/metrics) ── */}
+      <Card className="mt-8">
+        <div className="px-4 lg:px-5 py-4 border-b border-seam flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Activity className="w-4 h-4 text-accent" aria-hidden="true" />
+            <h2 className="text-[15px] font-semibold text-ink">Traffic</h2>
           </div>
-          <CardContent className="p-4 lg:p-5 space-y-5">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-              <MetricTile label="Requests" value={metricsData?.totals.requests ?? '—'} />
-              <MetricTile
-                label="Error rate"
-                value={metricsData ? `${metricsData.totals.error_rate}%` : '—'}
-                tone={metricsData && metricsData.totals.error_rate > 5 ? 'error' : undefined}
-              />
-              <MetricTile
-                label="p95 latency"
-                value={metricsData?.totals.p95_ms != null ? `${metricsData.totals.p95_ms} ms` : '—'}
-              />
-              <MetricTile
-                label="Server errors"
-                value={metricsData?.totals.server_errors ?? '—'}
-                tone={metricsData && metricsData.totals.server_errors > 0 ? 'error' : undefined}
-              />
-            </div>
-
-            <TrafficChart
-              data={metricsData?.points ?? []}
-              loading={metricsLoading}
-              spanSeconds={metricsData?.range_seconds ?? RANGE_SECONDS[range]}
+          <div className="ml-auto flex items-center gap-1" role="group" aria-label="Time window">
+            {(['1h', '6h', '24h', '7d'] as const).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRange(r)}
+                aria-pressed={range === r}
+                className={[
+                  'data px-2.5 py-1 text-[12px] border transition-colors min-h-[32px]',
+                  range === r
+                    ? 'border-accent bg-accent/15 text-accent'
+                    : 'border-seam text-ink-muted hover:border-seam-strong hover:text-ink',
+                ].join(' ')}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+        <CardContent className="p-4 lg:p-5 space-y-5">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+            <MetricTile label="Requests" value={metricsData?.totals.requests ?? '—'} />
+            <MetricTile
+              label="Error rate"
+              value={metricsData ? `${metricsData.totals.error_rate}%` : '—'}
+              tone={metricsData && metricsData.totals.error_rate > 5 ? 'error' : undefined}
             />
-
-            <p className="text-xs text-muted-foreground">
-              {metricsData && metricsData.totals.requests === 0
-                ? 'No project traffic recorded in this window yet. Charts fill in as requests arrive.'
-                : `Measured at the API layer. Buckets are ${Math.round((metricsData?.bucket_seconds ?? 0) / 60)} minute(s) wide.`}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* ── Project + storage overview ── */}
-        <Card>
-          <CardContent className="p-4 lg:p-5">
-            <h2 className="text-sm font-semibold text-foreground mb-4">Project Overview</h2>
-            {stats?.project ? (
-              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">
-                <div className="flex justify-between gap-4 border-b border-border pb-2">
-                  <dt className="text-muted-foreground">Project</dt>
-                  <dd className="text-foreground font-medium text-right">
-                    {stats.project.project_name}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-4 border-b border-border pb-2">
-                  <dt className="text-muted-foreground">Project ID</dt>
-                  <dd className="text-foreground font-mono text-xs">{stats.project.project_id}</dd>
-                </div>
-                <div className="flex justify-between gap-4 border-b border-border pb-2">
-                  <dt className="text-muted-foreground">Backup Interval</dt>
-                  <dd className="text-foreground font-medium capitalize">
-                    {stats.project.backup_interval ?? '1hour'}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-4 border-b border-border pb-2">
-                  <dt className="text-muted-foreground">Created</dt>
-                  <dd className="text-foreground font-mono text-xs">
-                    {stats.project.created_at
-                      ? new Date(stats.project.created_at).toLocaleString()
-                      : '—'}
-                  </dd>
-                </div>
-              </dl>
-            ) : (
-              <p className="text-sm text-muted-foreground">No project data available.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ── Live activity feed (from /api/logs) ── */}
-        <Card>
-          <div className="px-4 lg:px-5 py-4 border-b border-border flex items-center gap-2">
-            <Activity className="w-4 h-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold text-foreground">Recent Activity</h2>
-            <span className="text-xs text-muted-foreground">(auto-refreshes every 5s)</span>
+            <MetricTile
+              label="p95 latency"
+              value={metricsData?.totals.p95_ms != null ? `${metricsData.totals.p95_ms} ms` : '—'}
+            />
+            <MetricTile
+              label="Server errors"
+              value={metricsData?.totals.server_errors ?? '—'}
+              tone={metricsData && metricsData.totals.server_errors > 0 ? 'error' : undefined}
+            />
           </div>
 
-          {logs.length === 0 ? (
-            <div className="p-12 text-center text-muted-foreground">
-              {loadErr ? 'No activity available.' : 'No recent activity'}
-            </div>
-          ) : (
-            <div className="divide-y divide-border">
-              {logs.slice(0, 25).map((log) => (
-                <div key={log.id} className="flex items-center gap-3 px-4 lg:px-5 py-3 min-h-[52px]">
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${levelDotClass(log.level)}`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground truncate">{log.action}</p>
-                  </div>
-                  <span className="text-xs font-mono text-muted-foreground flex-shrink-0 hidden sm:inline">
-                    {log.timestamp?.replace('T', ' ').slice(0, 19)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
+          <TrafficChart
+            data={metricsData?.points ?? []}
+            loading={metricsLoading}
+            spanSeconds={metricsData?.range_seconds ?? RANGE_SECONDS[range]}
+          />
 
-        <p className="text-xs text-muted-foreground">
-          Note: request-volume, per-endpoint latency, and error-rate breakdowns are not
-          tracked by the backend yet. The metrics above reflect the actual state of your
-          project.
-        </p>
-      </div>
+          <p className="text-[12px] text-ink-faint">
+            {metricsData && metricsData.totals.requests === 0
+              ? 'No project traffic recorded in this window yet. The charts fill in as requests arrive.'
+              : `Measured at the API layer. Buckets are ${Math.round((metricsData?.bucket_seconds ?? 0) / 60)} minute(s) wide.`}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* ── Project + storage overview ── */}
+      <Card className="mt-6">
+        <CardContent className="p-4 lg:p-5">
+          <h2 className="text-[15px] font-semibold text-ink mb-4">Project</h2>
+          {stats?.project ? (
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+              <div className="flex justify-between gap-4 border-b border-seam pb-2">
+                <dt className="text-[13px] text-ink-muted">Project</dt>
+                <dd className="text-[13px] text-ink font-medium text-right">
+                  {stats.project.project_name}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4 border-b border-seam pb-2">
+                <dt className="text-[13px] text-ink-muted">Project id</dt>
+                <dd className="data text-[12px] text-ink">{stats.project.project_id}</dd>
+              </div>
+              <div className="flex justify-between gap-4 border-b border-seam pb-2">
+                <dt className="text-[13px] text-ink-muted">Backup interval</dt>
+                <dd className="text-[13px] text-ink capitalize">{stats.project.backup_interval ?? '1hour'}</dd>
+              </div>
+              <div className="flex justify-between gap-4 border-b border-seam pb-2">
+                <dt className="text-[13px] text-ink-muted">Created</dt>
+                <dd className="data text-[12px] text-ink">
+                  {stats.project.created_at ? new Date(stats.project.created_at).toLocaleString() : '—'}
+                </dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="text-[13px] text-ink-muted">No project data available.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Live activity feed (from /api/logs) ── */}
+      <Card className="mt-6 overflow-hidden">
+        <div className="px-4 lg:px-5 py-4 border-b border-seam flex items-center gap-2">
+          <Activity className="w-4 h-4 text-accent" aria-hidden="true" />
+          <h2 className="text-[15px] font-semibold text-ink">Recent activity</h2>
+          <span className="data text-[11px] text-ink-faint ml-auto">refreshes every 5s</span>
+        </div>
+
+        {logs.length === 0 ? (
+          <EmptyState
+            compact
+            icon={Activity}
+            title={loadErr ? 'No activity available' : 'No recent activity'}
+            description="Events appear here as the container handles requests."
+          />
+        ) : (
+          <ul className="divide-y divide-seam">
+            {logs.slice(0, 25).map((log) => (
+              <li
+                key={log.id}
+                className="row-seam flex items-center gap-3 px-4 lg:px-5 py-3 min-h-[52px] hover:bg-plate-raised/60 transition-colors"
+                data-level={log.level}
+              >
+                <p className="text-[13px] text-ink truncate flex-1 min-w-0">{log.action}</p>
+                <span className="data text-[11px] text-ink-faint flex-shrink-0 hidden sm:inline">
+                  {log.timestamp?.replace('T', ' ').slice(0, 19)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <p className="mt-6 text-[12px] text-ink-faint max-w-[70ch]">
+        Every figure here is recorded by the backend as it serves requests: one row per request with
+        its duration and status code, rolled up into the window you picked. Nothing is sampled in the
+        browser and nothing is estimated.
+      </p>
     </PyroCoreLayout>
   )
 }

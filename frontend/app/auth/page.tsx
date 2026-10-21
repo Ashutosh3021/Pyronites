@@ -1,14 +1,16 @@
 'use client'
 
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
+import { PageHeader } from '@/components/page-header'
+import { EmptyState } from '@/components/empty-state'
 import { useState, useEffect, useCallback } from 'react'
-import { Lock, Unlock, Trash2 } from 'lucide-react'
+import { Lock, Unlock, Trash2, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { AlertBanner } from '@/components/alert-banner'
 import { apiUrl } from '@/lib/api'
 import type { User, Session, RawUser, RawSession } from '@/lib/types'
@@ -127,153 +129,155 @@ export default function AuthenticationPage() {
 
   return (
     <PyroCoreLayout>
-      <div className="max-w-6xl space-y-6">
-        <div>
-          <h1 className="text-xl lg:text-2xl font-semibold text-foreground">Authentication</h1>
-          <p className="text-muted-foreground text-sm mt-1">Dashboard accounts &amp; active sessions — global across all projects, not project data</p>
-        </div>
+      <PageHeader
+        meta="People and sessions"
+        title="Authentication"
+        description="Dashboard accounts and live sessions. These belong to the instance, not to a project, so they span every project in it."
+      />
 
-        {loadErr && <AlertBanner variant="error" message={loadErr} onDismiss={() => setLoadErr(null)} />}
-        {actionErr && <AlertBanner variant="error" message={actionErr} onDismiss={() => setActionErr(null)} />}
+      {loadErr && <AlertBanner variant="error" message={loadErr} onDismiss={() => setLoadErr(null)} />}
+      {actionErr && <AlertBanner variant="error" message={actionErr} onDismiss={() => setActionErr(null)} />}
 
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
-          {[
-            { label: 'Total Users', value: String(users.length) },
-            { label: 'Active Now', value: String(activeCount) },
-            { label: 'Sessions', value: String(sessions.length) },
-          ].map((stat) => (
-            <Card key={stat.label}>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground mb-1">{stat.label}</p>
-                <p className="text-2xl font-semibold text-foreground">{stat.value}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+      <dl className="mt-8 grid grid-cols-2 lg:grid-cols-3 gap-px bg-seam border border-seam">
+        {[
+          { label: 'Accounts', value: String(users.length) },
+          { label: 'Enabled', value: String(activeCount) },
+          { label: 'Live sessions', value: String(sessions.length) },
+        ].map((stat) => (
+          <div key={stat.label} className="bg-plate p-5">
+            <dt className="label">{stat.label}</dt>
+            <dd className="data mt-3 text-[26px] leading-none text-ink">{stat.value}</dd>
+          </div>
+        ))}
+      </dl>
 
-        <Tabs defaultValue="users">
-          <TabsList>
-            <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="sessions">Sessions</TabsTrigger>
-          </TabsList>
+      <Tabs defaultValue="users" className="mt-10">
+        <TabsList>
+          <TabsTrigger value="users">Accounts</TabsTrigger>
+          <TabsTrigger value="sessions">Sessions</TabsTrigger>
+        </TabsList>
 
-          <TabsContent value="users">
-            <Card>
-              <div className="overflow-hidden">
-                {users.length === 0 ? (
-                  <div className="p-12 text-center text-muted-foreground">
-                    {loading ? 'Loading…' : 'No users yet.'}
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Created</TableHead>
-                        <TableHead>Last Sign-In</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {users.map((user) => (
-                        <TableRow key={user.id}>
-                          <TableCell className="font-mono">{user.email}</TableCell>
-                          <TableCell className="font-mono text-muted-foreground">{user.created}</TableCell>
-                          <TableCell className="font-mono text-muted-foreground">{user.lastSignIn}</TableCell>
-                          <TableCell>
-                            <Badge variant={user.status === 'active' ? 'success' : 'secondary'}>
-                              {user.status === 'active' ? 'Active' : 'Disabled'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => toggleActive(user)}
-                                disabled={busy}
-                                aria-label={user.status === 'active' ? 'Disable user' : 'Enable user'}
-                              >
-                                {user.status === 'active' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setConfirmDelete(user)}
-                                disabled={busy}
-                                aria-label="Delete user"
-                                className="text-error hover:text-error"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </div>
-            </Card>
-          </TabsContent>
+        <TabsContent value="users">
+          <Card className="overflow-hidden">
+            {users.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title={loading ? 'Loading accounts' : 'No accounts yet'}
+                description="An account appears here after the first sign-in on this instance."
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Last sign-in</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell className="data text-[12px] text-ink">{user.email}</TableCell>
+                      <TableCell className="data text-[12px] text-ink-muted">{user.created}</TableCell>
+                      <TableCell className="data text-[12px] text-ink-muted">{user.lastSignIn}</TableCell>
+                      <TableCell>
+                        <Badge variant={user.status === 'active' ? 'success' : 'secondary'}>
+                          {user.status === 'active' ? 'Active' : 'Disabled'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => toggleActive(user)}
+                            disabled={busy}
+                            aria-label={user.status === 'active' ? `Disable ${user.email}` : `Enable ${user.email}`}
+                          >
+                            {user.status === 'active' ? (
+                              <Lock className="w-3.5 h-3.5" aria-hidden="true" />
+                            ) : (
+                              <Unlock className="w-3.5 h-3.5" aria-hidden="true" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setConfirmDelete(user)}
+                            disabled={busy}
+                            aria-label={`Delete ${user.email}`}
+                            className="text-error hover:text-error"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </Card>
+        </TabsContent>
 
-          <TabsContent value="sessions">
-            <Card>
-              <div className="overflow-hidden">
-                {sessions.length === 0 ? (
-                  <div className="p-12 text-center text-muted-foreground">
-                    {loading ? 'Loading…' : 'No active sessions'}
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>User Email</TableHead>
-                        <TableHead>Created</TableHead>
-                        <TableHead>Expires</TableHead>
-                        <TableHead className="text-right">Action</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sessions.map((session) => (
-                        <TableRow key={session.id}>
-                          <TableCell className="font-mono">{session.userEmail}</TableCell>
-                          <TableCell className="font-mono text-muted-foreground">{session.created}</TableCell>
-                          <TableCell className="font-mono text-muted-foreground">{session.expires}</TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => revokeSession(session.id)}
-                              disabled={busy}
-                              className="text-error hover:text-error hover:bg-error/10"
-                            >
-                              Revoke
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </div>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
+        <TabsContent value="sessions">
+          <Card className="overflow-hidden">
+            {sessions.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title={loading ? 'Loading sessions' : 'No live sessions'}
+                description="Sessions are created when someone signs in and expire on their own."
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Account</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Expires</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sessions.map((session) => (
+                    <TableRow key={session.id}>
+                      <TableCell className="data text-[12px] text-ink">{session.userEmail}</TableCell>
+                      <TableCell className="data text-[12px] text-ink-muted">{session.created}</TableCell>
+                      <TableCell className="data text-[12px] text-ink-muted">{session.expires}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => revokeSession(session.id)}
+                          disabled={busy}
+                          className="text-error hover:text-error"
+                        >
+                          Revoke
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={!!confirmDelete} onOpenChange={(isOpen) => !isOpen && setConfirmDelete(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Delete User</DialogTitle>
+            <DialogTitle>Delete account</DialogTitle>
             <DialogDescription>
-              This action cannot be undone. The user and their sessions will be permanently deleted.
+              This cannot be undone. The account and its sessions are removed from the instance.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <p className="text-sm text-muted-foreground">
-              Permanently delete <span className="font-semibold text-foreground">{confirmDelete?.email}</span>?
+            <p className="text-[13px] text-ink-muted">
+              Permanently delete{' '}
+              <span className="data text-ink">{confirmDelete?.email}</span>?
             </p>
           </div>
           <DialogFooter>
@@ -283,7 +287,7 @@ export default function AuthenticationPage() {
               onClick={() => confirmDelete && doDeleteUser(confirmDelete)}
               disabled={busy}
             >
-              {busy ? 'Deleting…' : 'Delete'}
+              {busy ? 'Deleting' : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>
