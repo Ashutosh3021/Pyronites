@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 from pyronites.auth import AuthClient
 from pyronites.config import ClientConfig, load_config
@@ -38,6 +38,44 @@ class PyronitesClient:
         result = self._http.request("GET", "/tables")
         return result if isinstance(result, list) else []
 
+    def create_table(
+        self,
+        table: str,
+        columns: Sequence[Dict[str, Any]],
+        primary_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create a table. Requires a key with the ``admin`` scope.
+
+        Args:
+            table: Table name (``^[A-Za-z_][A-Za-z0-9_]*$``, not reserved).
+            columns: ``[{"name": "id", "type": "TEXT"}, ...]``.
+            primary_key: Name of the primary key column. When it is a TEXT
+                column the backend generates a uuid for rows inserted without
+                one.
+
+        Column types: ``TEXT INTEGER REAL BLOB NUMERIC BOOLEAN DATETIME DATE
+        JSON``.
+        """
+        body: Dict[str, Any] = {"table": table, "columns": list(columns)}
+        if primary_key:
+            body["primary_key"] = primary_key
+        return self._http.request(  # type: ignore[return-value]
+            "POST", "/tables", json=body,
+        )
+
+    def drop_table(self, table: str, confirm_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Drop a table and all its data. Requires the ``admin`` scope.
+
+        The backend asks for the table name as confirmation, so it defaults to
+        the table being dropped.
+        """
+        return self._http.request(  # type: ignore[return-value]
+            "DELETE", f"/tables/{table}",
+            json={"confirm_name": confirm_name or table},
+        )
+
     def sql(self, query: str) -> dict:
         """Execute raw SQL (admin-scoped key required)."""
         return self._http.request(  # type: ignore[return-value]
@@ -66,8 +104,9 @@ class PyronitesClient:
             )
         rows = self._local.all_rows(table)
         count = 0
+        key_column = self._http.primary_key(table) or "id"
         for row in rows:
-            row_id = row.get("id")
+            row_id = row.get(key_column)
             if not row_id:
                 self._http.request("POST", f"/tables/{table}", json=row)
                 count += 1
@@ -75,7 +114,7 @@ class PyronitesClient:
             try:
                 self._http.request(
                     "PATCH", f"/tables/{table}/{row_id}",
-                    json={k: v for k, v in row.items() if k != "id"},
+                    json={k: v for k, v in row.items() if k != key_column},
                 )
                 count += 1
             except ApiError as e:
@@ -106,13 +145,21 @@ def create_client(
     url: Optional[str] = None,
     key: Optional[str] = None,
     timeout: float = 30.0,
+    project_id: Optional[str] = None,
     local_tables: Optional[Sequence[str]] = None,
     remote_tables: Optional[Sequence[str]] = None,
     cache_tables: Optional[Sequence[str]] = None,
     local_db_path: Optional[str] = None,
 ) -> PyronitesClient:
+    """
+    Create a client.
+
+    ``project_id`` scopes every table/storage/sql call to that project. When
+    it is omitted the client falls back to ``PYRONITES_PROJECT_ID`` and, if
+    that is unset too, to the legacy unscoped endpoints.
+    """
     config = load_config(
-        url=url, key=key, timeout=timeout,
+        url=url, key=key, timeout=timeout, project_id=project_id,
         local_tables=local_tables,
         remote_tables=remote_tables,
         cache_tables=cache_tables,

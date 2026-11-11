@@ -1,5 +1,8 @@
 """Unit tests for HTTP transport error mapping and retries."""
 
+import threading
+import time
+
 import httpx
 import pytest
 from unittest.mock import MagicMock, patch
@@ -190,7 +193,13 @@ def test_429_retry_exhausted():
     t.close()
 
 
-def test_request_deduplication():
+def test_sequential_requests_are_not_served_from_a_cache():
+    """A completed request must never be replayed.
+
+    Caching the response of a GET means a ``select()`` that ran before a write
+    keeps returning the pre-write rows — the client would show stale data
+    forever.
+    """
     t = HttpTransport(
         ClientConfig(url="https://example.com", key="k", timeout=5),
         max_retries=2,
@@ -205,5 +214,52 @@ def test_request_deduplication():
         second = t.request("GET", "/tables/notes")
     assert first == {"ok": True}
     assert second == {"ok": True}
+    assert mock_req.call_count == 2
+    t.close()
+
+
+def test_concurrent_identical_requests_are_coalesced():
+    """Two callers racing on the same request share one HTTP call."""
+    t = HttpTransport(
+        ClientConfig(url="https://example.com", key="k", timeout=5),
+        max_retries=2,
+        backoff_base=0.01,
+    )
+    ok = MagicMock()
+    ok.status_code = 200
+    ok.content = b'{"ok": true}'
+    ok.json.return_value = {"ok": True}
+
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_request(*_args, **_kwargs):
+        started.set()
+        release.wait(5)
+        return ok
+
+    results: list = []
+    errors: list = []
+
+    def worker() -> None:
+        try:
+            results.append(t.request("GET", "/tables/notes"))
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    with patch.object(t._client, "request", side_effect=slow_request) as mock_req:
+        first_thread = threading.Thread(target=worker)
+        first_thread.start()
+        assert started.wait(5), "the first request never reached the transport"
+        second_thread = threading.Thread(target=worker)
+        second_thread.start()
+        # Give the second thread time to join the in-flight request.
+        time.sleep(0.25)
+        release.set()
+        first_thread.join(timeout=10)
+        second_thread.join(timeout=10)
+
+    assert not errors, errors
     assert mock_req.call_count == 1
+    assert len(results) == 2
     t.close()

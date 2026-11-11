@@ -41,6 +41,9 @@ build-backend = "hatchling.build"
 packages = ["cli", "backend"]
 
 [tool.pytest.ini_options]
-testpaths = ["backend/tests", "cli/tests"]
-pythonpath = ["."]
+# The client package lives in its own directory so it can be published to PyPI
+# on its own.  "pyronites" is on the path so `import pyronites` resolves to
+# pyronites/pyronites/ (the real package) rather than the outer directory.
+testpaths = ["backend/tests", "cli/tests", "pyronites/tests"]
+pythonpath = [".", "pyronites"]
 asyncio_mode = "auto"

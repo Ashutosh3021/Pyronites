@@ -22,6 +22,43 @@ interface TableInfo { name: string; rows: number }
 interface ColumnInfo { name: string; type: string; pk: boolean }
 interface Row { [key: string]: unknown }
 
+/**
+ * Pull a human-readable message out of an error response body.
+ *
+ * The backend emits `{code, message}` at the top level, but FastAPI's own
+ * 404/405/422 handlers use `{detail: ...}` — sometimes a string, sometimes a
+ * list of field errors. Reading only `body.message` turned those into a
+ * useless "Failed to …" with no hint about what went wrong.
+ */
+function errorMessage(body: any, fallback: string): string {
+  const detail = body?.detail
+  if (Array.isArray(detail)) {
+    const first = detail[0]
+    const msg = first?.msg ?? first?.message
+    if (msg) return String(msg).replace(/^Value error,\s*/, '')
+  }
+  if (detail && typeof detail === 'object') {
+    const msg = detail.message ?? detail.msg
+    if (msg) return String(msg)
+  }
+  if (typeof detail === 'string' && detail) return detail
+  if (body?.message) return String(body.message)
+  if (body?.error) return String(body.error)
+  return fallback
+}
+
+/**
+ * The column that identifies a row: the declared primary key, falling back to
+ * `id`. The backend resolves the same key, so both sides agree on which
+ * column the `{id}` path segment refers to.
+ */
+function primaryKeyColumn(schema: ColumnInfo[]): string | null {
+  const pk = schema.find((c) => c.pk)
+  if (pk) return pk.name
+  if (schema.some((c) => c.name.toLowerCase() === 'id')) return 'id'
+  return null
+}
+
 export default function DatabaseExplorerPage() {
   const router = useRouter()
   const [tables, setTables] = useState<TableInfo[]>([])
@@ -42,6 +79,7 @@ export default function DatabaseExplorerPage() {
   const loadReqRef = useRef(0)
 
   const activeTable = selectedTable ?? tables[0]?.name ?? null
+  const keyColumn = useMemo(() => primaryKeyColumn(schema), [schema])
 
   const loadTables = useCallback(async () => {
     const reqId = ++loadReqRef.current
@@ -154,13 +192,7 @@ export default function DatabaseExplorerPage() {
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      const detail = body?.detail
-      const message =
-        (Array.isArray(detail) ? detail[0]?.msg : undefined) ??
-        body?.message ??
-        detail?.message ??
-        'Failed to create table.'
-      throw new Error(String(message).replace(/^Value error,\s*/, ''))
+      throw new Error(errorMessage(body, 'Failed to create table.'))
     }
   }
 
@@ -173,7 +205,7 @@ export default function DatabaseExplorerPage() {
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body?.message ?? 'Failed to insert row.')
+      throw new Error(errorMessage(body, 'Failed to insert row.'))
     }
   }
 
@@ -189,7 +221,7 @@ export default function DatabaseExplorerPage() {
     )
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body?.message ?? 'Failed to update row.')
+      throw new Error(errorMessage(body, 'Failed to update row.'))
     }
   }
 
@@ -200,7 +232,7 @@ export default function DatabaseExplorerPage() {
     )
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new Error(body?.message ?? 'Failed to delete row.')
+      throw new Error(errorMessage(body, 'Failed to delete row.'))
     }
   }
 
@@ -335,7 +367,7 @@ export default function DatabaseExplorerPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredRows.map((row, idx) => (
-                    <TableRow key={row.id ? String(row.id) : `row-${idx}`}>
+                    <TableRow key={keyColumn && row[keyColumn] != null ? String(row[keyColumn]) : `row-${idx}`}>
                       <TableCell className="data text-[11px] text-ink-faint">{idx + 1}</TableCell>
                       {showColumns &&
                         schema.map((col) => (
@@ -407,22 +439,23 @@ export default function DatabaseExplorerPage() {
       />
 
       {showInsert && activeTable && (
-        <RowModal title="Insert row" tableName={activeTable} schema={schema} initial={{}} open={showInsert} onClose={() => setShowInsert(false)} onSubmit={async (t, _id, row) => handleInsertRow(t, row)} onDone={() => { setShowInsert(false); loadTable(activeTable, offset) }} />
+        <RowModal mode="insert" title="Insert row" tableName={activeTable} schema={schema} keyColumn={keyColumn} initial={{}} open={showInsert} onClose={() => setShowInsert(false)} onSubmit={async (t, _id, row) => handleInsertRow(t, row)} onDone={() => { setShowInsert(false); loadTable(activeTable, offset) }} />
       )}
 
       {editRow && activeTable && (
-        <RowModal title="Edit row" tableName={activeTable} schema={schema} initial={editRow} open={!!editRow} onClose={() => setEditRow(null)} onSubmit={handleEditRow} onDone={() => { setEditRow(null); loadTable(activeTable, offset) }} />
+        <RowModal mode="edit" title="Edit row" tableName={activeTable} schema={schema} keyColumn={keyColumn} initial={editRow} open={!!editRow} onClose={() => setEditRow(null)} onSubmit={handleEditRow} onDone={() => { setEditRow(null); loadTable(activeTable, offset) }} />
       )}
 
       {deleteRow && activeTable && (
-        <DeleteModal tableName={activeTable} row={deleteRow} open={!!deleteRow} onClose={() => setDeleteRow(null)} onDelete={handleDeleteRow} onDone={() => { setDeleteRow(null); loadTable(activeTable, offset) }} />
+        <DeleteModal tableName={activeTable} row={deleteRow} keyColumn={keyColumn} open={!!deleteRow} onClose={() => setDeleteRow(null)} onDelete={handleDeleteRow} onDone={() => { setDeleteRow(null); loadTable(activeTable, offset) }} />
       )}
     </PyroCoreLayout>
   )
 }
 
-function RowModal({ title, tableName, schema, initial, open, onClose, onSubmit, onDone }: {
-  title: string; tableName: string; schema: ColumnInfo[]; initial: Row
+function RowModal({ mode, title, tableName, schema, keyColumn, initial, open, onClose, onSubmit, onDone }: {
+  mode: 'insert' | 'edit'
+  title: string; tableName: string; schema: ColumnInfo[]; keyColumn: string | null; initial: Row
   open: boolean
   onClose: () => void
   onSubmit: (t: string, id: string, row: Row) => Promise<void>
@@ -443,7 +476,6 @@ function RowModal({ title, tableName, schema, initial, open, onClose, onSubmit, 
     const row: Row = {}
     for (const col of schema) {
       const raw = values[col.name]
-      if (raw === '' && col.name === 'id') continue
       if (raw === '') continue
       if (col.type === 'INTEGER') row[col.name] = Number(raw)
       else if (col.type === 'REAL' || col.type === 'NUMERIC') row[col.name] = Number(raw)
@@ -452,8 +484,15 @@ function RowModal({ title, tableName, schema, initial, open, onClose, onSubmit, 
     }
     setSaving(true); setErr(null)
     try {
-      if (title === 'Edit Row') await onSubmit(tableName, String(initial['id'] ?? ''), row)
-      else await onSubmit(tableName, '', row)
+      if (mode === 'edit') {
+        // The key column is immutable — it is what addresses the row.
+        if (keyColumn) delete row[keyColumn]
+        const keyValue = keyColumn ? initial[keyColumn] : undefined
+        if (keyValue == null) throw new Error('This row has no key value to update.')
+        await onSubmit(tableName, String(keyValue), row)
+      } else {
+        await onSubmit(tableName, '', row)
+      }
       onDone()
     } catch (e) { setErr(e instanceof Error ? e.message : 'Failed') }
     finally { setSaving(false) }
@@ -475,6 +514,8 @@ function RowModal({ title, tableName, schema, initial, open, onClose, onSubmit, 
               <Input
                 value={values[col.name] ?? ''}
                 onChange={(e) => setValues((v) => ({ ...v, [col.name]: e.target.value }))}
+                readOnly={mode === 'edit' && keyColumn === col.name}
+                aria-readonly={mode === 'edit' && keyColumn === col.name}
                 className="data text-[12px]"
               />
             </div>
@@ -491,16 +532,27 @@ function RowModal({ title, tableName, schema, initial, open, onClose, onSubmit, 
   )
 }
 
-function DeleteModal({ tableName, row, open, onClose, onDelete, onDone }: {
-  tableName: string; row: Row; open: boolean; onClose: () => void
+function DeleteModal({ tableName, row, keyColumn, open, onClose, onDelete, onDone }: {
+  tableName: string; row: Row; keyColumn: string | null; open: boolean; onClose: () => void
   onDelete: (t: string, id: string) => Promise<void>; onDone: () => void
 }) {
   const [err, setErr] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const idVal = row['id'] != null ? String(row['id']) : null
+  // The backend addresses rows by the table's primary key — not necessarily a
+  // column literally named "id". Resolve the same column here.
+  const keyValue = keyColumn ? row[keyColumn] : undefined
+  const idVal = keyValue != null ? String(keyValue) : null
 
   const submit = async () => {
-    if (idVal == null) { setErr('Row has no id.'); return }
+    if (idVal == null) {
+      setErr(
+        keyColumn
+          ? `This row has no ${keyColumn} value to delete.`
+          : 'This table has no primary key, so a single row cannot be deleted. '
+            + 'Add a primary key to the table.',
+      )
+      return
+    }
     setSaving(true); setErr(null)
     try { await onDelete(tableName, idVal); onDone() }
     catch (e) { setErr(e instanceof Error ? e.message : 'Failed') }
@@ -519,7 +571,7 @@ function DeleteModal({ tableName, row, open, onClose, onDelete, onDone }: {
         <div className="py-4">
           {err && <AlertBanner variant="error" message={err} onDismiss={() => setErr(null)} />}
           <p className="text-sm text-muted-foreground">
-            Delete id=<span className="font-mono text-foreground">{idVal ?? '—'}</span> from {tableName}?
+            Delete {keyColumn ?? 'id'}=<span className="font-mono text-foreground">{idVal ?? '—'}</span> from {tableName}?
           </p>
         </div>
         <DialogFooter>

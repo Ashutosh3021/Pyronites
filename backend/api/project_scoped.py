@@ -37,6 +37,7 @@ from backend.auth.api_keys import (
     revoke_api_key,
 )
 from backend.core.backup import backup_now, list_backups
+from backend.core.connect_prompt import build_connect_prompt, user_email
 from backend.core.db import Database, DatabaseError, DatabaseIntegrityError
 from backend.api.tables import (
     get_column_types,
@@ -44,6 +45,14 @@ from backend.api.tables import (
     deserialize_row,
 )
 from backend.core.logring import record_event
+from backend.core.rows import (
+    RowKeyError,
+    delete_row,
+    fetch_row,
+    optional_row_key,
+    resolve_row_key,
+    update_row,
+)
 from backend.core.schema_rules import CreateTableBody as _SharedCreateTableBody, build_create_table_ddl
 from backend.core import metrics as metricsmod
 from backend.core.storage import (
@@ -76,6 +85,22 @@ def _ctx_meta(ctx: Dict[str, Any]) -> Database:
 
 def _ctx_auth(ctx: Dict[str, Any]) -> Dict[str, Any]:
     return ctx["auth"]
+
+
+def _row_key(db: Database, table: str) -> str:
+    """
+    Resolve the column that addresses a single row in ``table``.
+
+    Raises a 400 naming the fix when the table has no primary key and no
+    ``id`` column — a bare 500 would tell the user nothing.
+    """
+    try:
+        return resolve_row_key(db, table)
+    except RowKeyError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(code="bad_request", message=str(e)).model_dump(),
+        )
 
 
 def _ctx_project(ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -329,16 +354,23 @@ async def get_table_row(
     require_scopes(_ctx_auth(ctx), {"read"})
     db = _ctx_db(ctx)
     valid_table = validate_table(table, get_allowed_tables(db))
-    cursor = db.execute(f"SELECT * FROM {valid_table} WHERE id = ?", (id,))
-    row = cursor.fetchone()
-    if not row:
+    key_column = _row_key(db, valid_table)
+    try:
+        row = fetch_row(db, valid_table, key_column, id)
+    except DatabaseError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                code="bad_request", message=f"Could not read row: {e}"
+            ).model_dump(),
+        )
+    if row is None:
         raise HTTPException(
             status_code=404,
             detail=ErrorResponse(code="not_found", message="Row not found").model_dump(),
         )
-    columns = [desc[0] for desc in cursor.description]
     col_types = get_column_types(db, valid_table)
-    d = deserialize_row(dict(zip(columns, row)), col_types)
+    d = deserialize_row(row, col_types)
     for c in list(d.keys()):
         if c.lower() in _REDACT_COLS:
             d[c] = "<redacted>"
@@ -433,10 +465,12 @@ async def create_table_row(
     for col in data.keys():
         validate_column(col, allowed_columns)
 
-    if "id" in allowed_columns and "id" not in data:
-        id_type = col_types.get("id", "")
-        if id_type != "INTEGER":
-            data = {**data, "id": str(uuid.uuid4())}
+    # Auto-generate a text row key (e.g. a TEXT primary key named "uuid")
+    # when the caller did not supply one. INTEGER keys are left to SQLite.
+    key_column = optional_row_key(db, valid_table)
+    if key_column and key_column not in data:
+        if col_types.get(key_column, "") != "INTEGER":
+            data = {**data, key_column: str(uuid.uuid4())}
 
     prepared = prepare_row_for_write(data, col_types)
     columns = list(prepared.keys())
@@ -490,13 +524,9 @@ async def update_table_row(
     for col in data.keys():
         validate_column(col, allowed_columns)
     prepared = prepare_row_for_write(data, col_types)
-    set_clauses = ", ".join([f"{col} = ?" for col in prepared.keys()])
-    values = list(prepared.values()) + [id]
+    key_column = _row_key(db, valid_table)
     try:
-        db.execute(
-            f"UPDATE {valid_table} SET {set_clauses} WHERE id = ?",
-            tuple(values),
-        )
+        changed = update_row(db, valid_table, key_column, id, prepared)
     except DatabaseIntegrityError as e:
         raise HTTPException(
             status_code=409,
@@ -507,15 +537,18 @@ async def update_table_row(
             status_code=400,
             detail=ErrorResponse(code="bad_request", message=f"Update failed: {e}").model_dump(),
         )
-    cursor = db.execute(f"SELECT * FROM {valid_table} WHERE id = ?", (id,))
-    row = cursor.fetchone()
-    if not row:
+    if not changed:
         raise HTTPException(
             status_code=404,
             detail=ErrorResponse(code="not_found", message="Row not found").model_dump(),
         )
-    columns = [desc[0] for desc in cursor.description]
-    return deserialize_row(dict(zip(columns, row)), col_types)
+    row = fetch_row(db, valid_table, key_column, id)
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(code="not_found", message="Row not found").model_dump(),
+        )
+    return deserialize_row(row, col_types)
 
 
 @router.delete("/tables/{table}/{id}")
@@ -527,13 +560,20 @@ async def delete_table_row(
     require_scopes(_ctx_auth(ctx), {"write"})
     db = _ctx_db(ctx)
     valid_table = validate_table(table, get_allowed_tables(db))
-    cursor = db.execute(f"SELECT id FROM {valid_table} WHERE id = ?", (id,))
-    if not cursor.fetchone():
+    key_column = _row_key(db, valid_table)
+    try:
+        deleted = delete_row(db, valid_table, key_column, id)
+    except DatabaseError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(code="bad_request", message=f"Delete failed: {e}").model_dump(),
+        )
+    if not deleted:
         raise HTTPException(
             status_code=404,
             detail=ErrorResponse(code="not_found", message="Row not found").model_dump(),
         )
-    db.execute(f"DELETE FROM {valid_table} WHERE id = ?", (id,))
+    record_event("info", f"Row deleted from {valid_table}")
     return {"message": "Row deleted"}
 
 
@@ -905,6 +945,62 @@ async def revoke_key(
         )
     record_event("warning", f"API key revoked: {key_id}")
     return {"message": "API key revoked"}
+
+
+# ── connection prompt (project-scoped) ──────────────────────────────────────
+
+def _safe_base_url(candidate: Optional[str]) -> Optional[str]:
+    """Accept only an absolute http(s) URL — the value ends up in a prompt."""
+    if not candidate:
+        return None
+    url = candidate.strip().rstrip("/")
+    if not url.startswith(("http://", "https://")):
+        return None
+    if any(ch.isspace() for ch in url):
+        return None
+    return url
+
+
+@router.get("/connect-prompt")
+async def connect_prompt(
+    request: Request,
+    base_url: Optional[str] = Query(None, max_length=300),
+    ctx: Dict[str, Any] = Depends(get_project_context),
+):
+    """
+    Return the project-scoped connection prompt.
+
+    The dashboard exports this text so a user can paste it into an agent and
+    have the project wired to the database end to end. The API key field is
+    left blank — the user fills it with a key they created.
+    """
+    require_scopes(_ctx_auth(ctx), {"read"})
+    project = _ctx_project(ctx)
+    auth = _ctx_auth(ctx)
+    meta = _ctx_meta(ctx)
+
+    email = user_email(meta, auth.get("user_id"))
+    resolved_base = (
+        _safe_base_url(base_url)
+        or _safe_base_url(str(request.base_url))
+        or ""
+    )
+    slug = _slug(project)
+    prompt = build_connect_prompt(
+        backend_url=resolved_base,
+        email=email,
+        project_name=project.get("name") or slug,
+        project_slug=slug,
+        project_id=project["id"],
+    )
+    return {
+        "prompt": prompt,
+        "backend_url": resolved_base,
+        "email": email,
+        "project_id": project["id"],
+        "project_slug": slug,
+        "project_name": project.get("name") or slug,
+    }
 
 
 # ── stats ────────────────────────────────────────────────────────────────────

@@ -3,19 +3,22 @@
 import { PyroCoreLayout } from '@/components/pyrocore-layout'
 import { PageHeader } from '@/components/page-header'
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { Copy, Check, ChevronDown, ChevronUp, RefreshCw, Key, Plus } from 'lucide-react'
 import {
   apiUrl,
   getStoredProjectName,
   PROJECT_CHANGE_EVENT,
 } from '@/lib/api'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { AlertBanner } from '@/components/alert-banner'
 import { EmptyState } from '@/components/empty-state'
+import { cn } from '@/lib/utils'
+
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -316,6 +319,24 @@ export default function APIKeysPage() {
             )
           })}
         </div>
+      )}
+
+      {/* ── CONNECT CALLOUT ── */}
+      {!loading && !fetchError && (
+        <Card className="plate--lit mt-4">
+          <CardContent className="p-4 lg:p-5 flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-0">
+              <h2 className="text-[14px] font-semibold text-ink">Wire an app to this project</h2>
+              <p className="text-[12.5px] text-ink-muted mt-1">
+                Export a project-scoped connection prompt and paste it into your coding agent. It
+                carries the project details and the steps to install, wire and verify the client.
+              </p>
+            </div>
+            <Link href="/connect" className={cn(buttonVariants({ variant: 'outline' }), 'shrink-0')}>
+              Connect your app
+            </Link>
+          </CardContent>
+        </Card>
       )}
 
       {/* ── CREATE MODAL ── */}

@@ -20,6 +20,7 @@ class ClientConfig:
     url: str
     key: Optional[str]
     timeout: float = 30.0
+    project_id: Optional[str] = None
     local_tables: FrozenSet[str] = field(default_factory=frozenset)
     remote_tables: FrozenSet[str] = field(default_factory=frozenset)
     cache_tables: FrozenSet[str] = field(default_factory=frozenset)
@@ -51,6 +52,7 @@ def load_config(
     url: Optional[str] = None,
     key: Optional[str] = None,
     timeout: float = 30.0,
+    project_id: Optional[str] = None,
     local_tables: Optional[Sequence[str]] = None,
     remote_tables: Optional[Sequence[str]] = None,
     cache_tables: Optional[Sequence[str]] = None,
@@ -58,6 +60,9 @@ def load_config(
 ) -> ClientConfig:
     resolved_url = url if url is not None else os.environ.get("PYRONITES_URL")
     resolved_key = key if key is not None else os.environ.get("PYRONITES_KEY")
+    resolved_project = (
+        project_id if project_id is not None else os.environ.get("PYRONITES_PROJECT_ID")
+    )
 
     if not resolved_url:
         raise ApiError(
@@ -73,6 +78,7 @@ def load_config(
         url=_normalize_url(resolved_url),
         key=resolved_key or None,
         timeout=timeout,
+        project_id=(resolved_project or "").strip() or None,
         local_tables=_to_frozenset(local_tables),
         remote_tables=_to_frozenset(remote_tables),
         cache_tables=_to_frozenset(cache_tables),

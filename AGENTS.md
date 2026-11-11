@@ -36,6 +36,18 @@ If a user's working directory happens to be this checkout, that does not change 
 
 Ask, and never invent: the backend URL, the email, the password (via env var or prompt, not a shell command), the **`project_id`**, and whether an **`admin`-scoped** API key exists. Confirm the `project_id` back to the user before creating tables — a wrong id silently writes to the wrong database.
 
+The dashboard exports these values as a **connection prompt** (`/connect` in the
+dashboard, `GET /api/projects/{id}/connect-prompt` on the backend). It is a
+block of `PYRONITES_*` lines plus wiring instructions, and it is what the
+`pyronites-wiring` skill consumes. Prefer the exported prompt over hand-written
+instructions — it carries the project slug, the project id and the account
+email, which are exactly the values that must never be guessed.
+
+The skill itself lives in `SKILL/SKILL.md` (mirrored to
+`~/.opencode/skills/pyronites-wiring/SKILL.md`). It and the prompt template in
+`backend/core/connect_prompt.py` describe the same contract — change one, change
+the other.
+
 ## Conventions
 
 **Backend**
@@ -44,6 +56,15 @@ Ask, and never invent: the backend URL, the email, the password (via env var or 
 - Env vars that tests need to override are read **at request time** through a small `_get_*()` helper, not at import.
 - Schema changes go in a new numbered `backend/migrations/NNNN_*.sql`. Migrations apply lexicographically at startup.
 - Error responses use `ErrorResponse(code=..., message=...)` from `backend/api/schemas.py`. The user-facing message should name the fix.
+- A row is addressed by the table's **primary key**, resolved from `PRAGMA table_info` in `backend/core/rows.py`. Never hard-code a column named `id`.
+
+**Client (`pyronites/`)**
+- `create_client(..., project_id=...)` scopes every table/storage/SQL call to
+  `/api/projects/{project_id}/...`. Keep the project id plumbed through —
+  without it the client falls back to the legacy unscoped plane, which
+  project-scoped keys are not allowed to use.
+- `update()` and `delete()` address a row by the primary key. The key is
+  resolved from `/tables/{name}/schema` and cached per table.
 
 **Frontend**
 - Tailwind v4, CSS-first. All tokens live in `app/globals.css`. There is no `tailwind.config.js`.
@@ -55,7 +76,7 @@ Ask, and never invent: the backend URL, the email, the password (via env var or 
 ## Verification
 
 ```bash
-python -m pytest                              # backend + cli
+python -m pytest                              # backend + cli + client
 cd frontend && npx tsc --noEmit && npm run build
 ```
 

@@ -21,6 +21,7 @@ Requires **Python 3.10+**.
 ```bash
 export PYRONITES_URL="https://your-backend.example.com"
 export PYRONITES_KEY="pyro_live_..."
+export PYRONITES_PROJECT_ID="3f2b…"   # optional — scopes every call to one project
 ```
 
 ```python
@@ -54,12 +55,35 @@ client.table("settings").insert({"theme": "dark"})
 client.pull("catalog")
 ```
 
+## Project scoping
+
+PyroCore gives every project its own database. Pass the project id and the
+client rewrites every table, storage and SQL call to
+`/api/projects/{project_id}/...`, so a project-scoped key can never reach
+another project's data.
+
+```python
+client = create_client(
+    url="https://your-backend.example.com",
+    key="pyro_live_...",
+    project_id="3f2b…",
+)
+```
+
+The same value can come from `PYRONITES_PROJECT_ID`. The dashboard exports a
+ready-made connection prompt under **Connect** — it carries the backend URL,
+your email, the project slug and id, and the API key to paste in.
+
+Rows are addressed by the table's **primary key**, which is not always named
+`id`. `update()` and `delete()` resolve it from the table schema; if the
+filter column does not match, the error names the real key.
+
 ## Config
 
 | Source | Variables / args |
 |--------|------------------|
-| Env | `PYRONITES_URL`, `PYRONITES_KEY`, optional `PYRONITES_LOCAL_DB` |
-| Constructor | `create_client(url=..., key=..., timeout=30, local_tables=..., cache_tables=..., remote_tables=..., local_db_path=...)` |
+| Env | `PYRONITES_URL`, `PYRONITES_KEY`, optional `PYRONITES_PROJECT_ID`, `PYRONITES_LOCAL_DB` |
+| Constructor | `create_client(url=..., key=..., timeout=30, project_id=..., local_tables=..., cache_tables=..., remote_tables=..., local_db_path=...)` |
 
 Args override env. Missing URL raises a clear error at create time.
 

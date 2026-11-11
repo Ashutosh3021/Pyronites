@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import threading
 import time
 from typing import Any, Dict, Optional, Set, Tuple
 
@@ -15,6 +16,25 @@ _RETRYABLE_STATUS: Set[int] = {502, 503, 504}
 _DEFAULT_MAX_RETRIES = 2
 _DEFAULT_BACKOFF_BASE = 1.0
 _MAX_RETRY_AFTER_SECONDS = 120.0
+
+# Paths that belong to a project's data plane.  When a project id is
+# configured, these are rewritten to ``/api/projects/{project_id}/...`` so the
+# request is guaranteed to land in that project's own database.  Auth and the
+# project registry are tenancy-blind and stay unscoped.
+_SCOPED_PREFIXES: Tuple[str, ...] = ("/tables", "/storage", "/sql", "/api/keys")
+
+
+def scope_path(path: str, project_id: Optional[str]) -> str:
+    """Return the project-scoped form of ``path`` when a project id is set."""
+    if not project_id:
+        return path
+    if not path.startswith("/"):
+        path = "/" + path
+    if path.startswith("/api/projects/"):
+        return path
+    if not path.startswith(_SCOPED_PREFIXES):
+        return path
+    return f"/api/projects/{project_id}{path}"
 
 
 def _parse_retry_after(response: httpx.Response) -> Optional[float]:
@@ -31,6 +51,17 @@ def _parse_retry_after(response: httpx.Response) -> Optional[float]:
     except ValueError:
         pass
     return None
+
+
+class _InFlight:
+    """A request that is currently on the wire, shared with concurrent callers."""
+
+    __slots__ = ("event", "result", "error")
+
+    def __init__(self) -> None:
+        self.event = threading.Event()
+        self.result: Any = None
+        self.error: Optional[BaseException] = None
 
 
 class HttpTransport:
@@ -55,7 +86,9 @@ class HttpTransport:
             timeout=config.timeout,
             follow_redirects=True,
         )
-        self._inflight: Dict[str, Tuple[Any, bool]] = {}
+        self._inflight: Dict[str, _InFlight] = {}
+        self._inflight_lock = threading.Lock()
+        self._pk_cache: Dict[str, Optional[str]] = {}
 
     @property
     def config(self) -> ClientConfig:
@@ -70,6 +103,29 @@ class HttpTransport:
         raw = f"{method.upper()}:{path}:{sorted((params or {}).items())}"
         return hashlib.sha256(raw.encode()).hexdigest()
 
+    def primary_key(self, table: str) -> Optional[str]:
+        """
+        Return the column that addresses a single row of ``table``.
+
+        The backend resolves the row key from the table schema, so the client
+        must use the same column. Results are cached per table — the schema of
+        a table rarely changes during a process's lifetime.
+        """
+        if table in self._pk_cache:
+            return self._pk_cache[table]
+        path = scope_path(f"/tables/{table}/schema", self._config.project_id)
+        result = self.request("GET", path)
+        key: Optional[str] = None
+        if isinstance(result, list):
+            columns = [c for c in result if isinstance(c, dict)]
+            primary = next((c for c in columns if c.get("pk")), None)
+            if primary and primary.get("name"):
+                key = str(primary["name"])
+            elif any(str(c.get("name", "")).lower() == "id" for c in columns):
+                key = "id"
+        self._pk_cache[table] = key
+        return key
+
     def request(
         self,
         method: str,
@@ -82,26 +138,44 @@ class HttpTransport:
     ) -> Any:
         """Perform a request with conservative retries on transient failures.
 
-        Identical in-flight requests are coalesced so burst traffic does not
-        double up on the same endpoint.
+        Identical *concurrent* requests are coalesced so burst traffic does not
+        double up on the same endpoint.  A completed request is never replayed
+        from a cache: a ``select`` that ran before a write must not return the
+        pre-write rows on the next call.
         """
         if not path.startswith("/"):
             path = "/" + path
+        path = scope_path(path, self._config.project_id)
 
         key = self._request_key(method, path, params)
-        if key in self._inflight:
-            future, done = self._inflight[key]
-            if done and future:
-                return future[0]
+        with self._inflight_lock:
+            entry = self._inflight.get(key)
+            if entry is None:
+                entry = _InFlight()
+                self._inflight[key] = entry
+                owner = True
+            else:
+                owner = False
 
-        future: list[Any] = []
-        self._inflight[key] = (future, False)
+        if not owner:
+            # Somebody else is already making this exact call — wait for them.
+            entry.event.wait(self._config.timeout)
+            if entry.error is not None:
+                raise entry.error
+            return entry.result
+
         try:
             result = self._do_request(method, path, json=json, params=params, files=files, data=data)
-            future.append(result)
+            entry.result = result
             return result
+        except BaseException as exc:  # noqa: BLE001 — re-raised below
+            entry.error = exc
+            raise
         finally:
-            self._inflight[key] = (future, True)
+            entry.event.set()
+            with self._inflight_lock:
+                if self._inflight.get(key) is entry:
+                    del self._inflight[key]
 
     def _do_request(
         self,

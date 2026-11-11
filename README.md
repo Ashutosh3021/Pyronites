@@ -11,9 +11,10 @@ Platforms like Supabase and Firebase are excellent — until you cross a free-ti
 
 - **SQLite as the storage engine** — a single embedded database file, zero hosting cost, ACID-compliant, SQL-native. WAL mode handles concurrent access safely out of the box.
 - **CLI-first workflow** — init a project, manage schema/migrations, and connect frameworks from the terminal.
-- **Dashboard (Web App / PWA)** — a Supabase-style visual layer: table explorer, SQL editor, auth management, storage, logs, and settings.
+- **Dashboard (Web App / PWA)** — a Supabase-style visual layer: table explorer, SQL editor, auth management, storage, app wiring, logs, and settings.
 - **REST API** — auto-generated from your schema, so any framework can talk to your backend with plain HTTP calls. No mandatory SDK.
 - **Official Python client** — `pip install pyronites` for a Supabase-style API against your backend.
+- **Agent skill for wiring** — [`SKILL/SKILL.md`](SKILL/SKILL.md) takes an app from "no database" to a verified connection against your project.
 - **PostgreSQL compatibility as a future goal** — SQLite today, with a clear migration path once a project outgrows single-node scale.
 
 ## Who this is for
@@ -85,6 +86,42 @@ Package docs and API contract: [`pyronites/README.md`](pyronites/README.md) and 
 
 PyPI: https://pypi.org/project/pyronites/
 
+Connecting an app to a project? Use the [wiring skill](#wire-your-app-with-the-skill-recommended) instead of setting the environment variables by hand.
+
+---
+
+## Wire your app with the skill (recommended)
+
+[`SKILL/SKILL.md`](SKILL/SKILL.md) is an agent skill that connects an
+application to your backend end to end. It installs the client, writes your
+`.env`, creates the tables the app needs, runs a real read/write round-trip
+against your project, and stops to ask when something is ambiguous.
+
+**1. Copy the skill into your agent's skills directory**
+
+```bash
+mkdir -p ~/.opencode/skills/pyronites-wiring
+cp SKILL/SKILL.md ~/.opencode/skills/pyronites-wiring/SKILL.md
+```
+
+Claude Code reads the same file from `~/.claude/skills/pyronites-wiring/SKILL.md`.
+
+**2. Export the connection prompt from the dashboard**
+
+Open your project in the dashboard → **Connect** → copy the prompt. It carries
+your backend URL, account email, project slug and project id, plus one field
+for the API key. Paste a key into that field (or press *Generate key*) before
+copying.
+
+**3. Paste the prompt into your agent**
+
+The agent reads the prompt, wires the client to that exact project, and
+verifies the connection before it reports success.
+
+Prefer this over hand-written setup steps: the prompt is the only source of
+the project id and slug, and the skill never guesses them. A wrong project id
+writes to the wrong database.
+
 ---
 
 ## 5-minute local quick start
@@ -118,7 +155,14 @@ Open http://localhost:3000 → sign up → create a table → start building.
 
 ### 3. Talk to the API from your app
 
-**Option A — Python client (recommended)**
+**Option A — the wiring skill (recommended)**
+
+See [Wire your app with the skill](#wire-your-app-with-the-skill-recommended).
+Copy `SKILL/SKILL.md` into your agent, export the connection prompt from the
+dashboard, and paste it — the agent wires the client to the right project and
+verifies the connection for you.
+
+**Option B — Python client**
 
 ```bash
 pip install pyronites
@@ -132,7 +176,7 @@ client = create_client()
 print(list(client.table("your_table").select().limit(10)))
 ```
 
-**Option B — plain HTTP**
+**Option C — plain HTTP**
 
 ```bash
 curl -H "Authorization: Bearer pyro_live_..." \
@@ -172,9 +216,10 @@ For real (non-demo) data on free tier, enable **S3/R2 sync** (see docs/DEPLOY.md
 
 | Component | Description |
 |---|---|
+| **Wiring skill** | `SKILL/SKILL.md` — connects an app to a project and verifies the connection |
 | **Python client** | `pip install pyronites` — tables, auth, storage, local/cache policy |
 | **CLI / Python package** | Create/manage projects, schema & migrations, connect apps |
-| **Dashboard** | Table explorer, SQL editor, auth, API keys, storage, logs, settings |
+| **Dashboard** | Table explorer, SQL editor, auth, API keys, storage, connect, logs, settings |
 | **Core engine** | SQLite (WAL) + REST API + session auth + file storage + backups |
 
 ## Design Principles

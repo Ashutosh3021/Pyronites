@@ -8,7 +8,7 @@ The platform has three layers:
 ┌─────────────────────────────────────────────────┐
 │                   Dashboard (Web/PWA)             │
 │   Table explorer · SQL editor · Auth · Storage ·  │
-│   API keys · Settings · Logs                      │
+│   API keys · Connect · Settings · Logs             │
 └───────────────────────┬───────────────────────────┘
                          │  REST API
 ┌───────────────────────┴───────────────────────────┐
@@ -86,6 +86,7 @@ Frameworks (Next.js, Python apps, Prisma, Vercel deployments) talk to the **Core
 - No mandatory client SDK for v1 — any framework can call these endpoints with plain HTTP. A thin JS/Python convenience SDK is a v2+ wrapper around this same API, not a separate system.
 - **JSON columns:** On write (`POST` / `PATCH`), a JSON-typed column accepts a JSON object, array, boolean, number, or a pre-encoded JSON string. Objects/arrays are serialized with `json.dumps` before binding to SQLite. On read, stored JSON strings are deserialized back to objects/arrays in the response body. Sending an object/array to a non-JSON column is rejected with `400` (`code: invalid_value`).
 - **Atomic row writes:** `POST /tables/:table` and `PATCH /tables/:table/:id` are all-or-nothing for the request body. Every field is validated and coerced before any SQL runs; if any field is invalid, the whole request fails with a 4xx `{code, message}` that names the offending column — no partial row is written. There is no partial-success contract for multi-field inserts/updates.
+- **Row keys are the table's primary key,** not a column literally named `id`. `GET`/`PATCH`/`DELETE /tables/:table/:id` resolve the key from `PRAGMA table_info` (declared primary key first, then an `id` column) and use it in the `WHERE` clause. A table with neither a primary key nor an `id` column cannot address a single row: the request is rejected with `400` and a message naming the fix, rather than failing with an opaque `500`. The dashboard resolves the same key from `/tables/:table/schema`, so the two always agree on which column the `{id}` path segment refers to.
 
 
 ---

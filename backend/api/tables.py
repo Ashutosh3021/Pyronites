@@ -25,6 +25,14 @@ from backend.api.schemas import ErrorResponse, MAX_ID_LEN
 from backend.api.auth_deps import resolve_auth, require_scopes, enforce_legacy_plane_key
 from backend.api.project_deps import get_db, auth_db
 from backend.core.logring import record_event
+from backend.core.rows import (
+    RowKeyError,
+    delete_row,
+    fetch_row,
+    optional_row_key,
+    resolve_row_key,
+    update_row,
+)
 from backend.core.schema_rules import CreateTableBody as _CreateTableBody, build_create_table_ddl
 
 logger = logging.getLogger(__name__)
@@ -170,6 +178,22 @@ def deserialize_row(row: Dict[str, Any], col_types: Dict[str, str]) -> Dict[str,
     return out
 
 
+def _row_key(db: Database, table: str) -> str:
+    """
+    Resolve the column that addresses a single row in ``table``.
+
+    Raises a 400 naming the fix when the table has no primary key and no
+    ``id`` column — a bare 500 would tell the user nothing.
+    """
+    try:
+        return resolve_row_key(db, table)
+    except RowKeyError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(code="bad_request", message=str(e)).model_dump(),
+        )
+
+
 # Table/column validation is defined once in backend/core/schema_rules.py and
 # shared with the project-scoped plane, so a framework table added by a
 # migration cannot be shadowable from only one of the two routes.
@@ -241,16 +265,23 @@ async def list_table_rows(
 async def get_table_row(table: str, id: str, request: Request, db: Database = Depends(get_db)):
     require_scopes(_auth(request, db), {"read"})
     valid_table = validate_table(table, get_allowed_tables(db))
-    cursor = db.execute(f"SELECT * FROM {valid_table} WHERE id = ?", (id,))
-    row = cursor.fetchone()
-    if not row:
+    key_column = _row_key(db, valid_table)
+    try:
+        row = fetch_row(db, valid_table, key_column, id)
+    except DatabaseError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(
+                code="bad_request", message=f"Could not read row: {e}"
+            ).model_dump(),
+        )
+    if row is None:
         raise HTTPException(
             status_code=404,
             detail=ErrorResponse(code="not_found", message="Row not found").model_dump(),
         )
-    columns = [desc[0] for desc in cursor.description]
     col_types = get_column_types(db, valid_table)
-    return deserialize_row(dict(zip(columns, row)), col_types)
+    return deserialize_row(row, col_types)
 
 
 @router.post("")
@@ -330,10 +361,12 @@ async def create_table_row(
     for col in data.keys():
         validate_column(col, allowed_columns)
 
-    if "id" in allowed_columns and "id" not in data:
-        id_type = col_types.get("id", "")
-        if id_type != "INTEGER":
-            data = {**data, "id": str(uuid.uuid4())}
+    # Auto-generate a text row key (e.g. a TEXT primary key named "uuid")
+    # when the caller did not supply one. INTEGER keys are left to SQLite.
+    key_column = optional_row_key(db, valid_table)
+    if key_column and key_column not in data:
+        if col_types.get(key_column, "") != "INTEGER":
+            data = {**data, key_column: str(uuid.uuid4())}
 
     # Atomic: coerce all fields first; any invalid field rejects the whole row
     prepared = prepare_row_for_write(data, col_types)
@@ -381,10 +414,9 @@ async def update_table_row(
         validate_column(col, allowed_columns)
     # Atomic: coerce all fields first; any invalid field rejects the whole patch
     prepared = prepare_row_for_write(data, col_types)
-    set_clauses = ", ".join([f"{col} = ?" for col in prepared.keys()])
-    values = list(prepared.values()) + [id]
+    key_column = _row_key(db, valid_table)
     try:
-        db.execute(f"UPDATE {valid_table} SET {set_clauses} WHERE id = ?", tuple(values))
+        changed = update_row(db, valid_table, key_column, id, prepared)
     except DatabaseIntegrityError as e:
         raise HTTPException(
             status_code=409,
@@ -395,26 +427,36 @@ async def update_table_row(
             status_code=400,
             detail=ErrorResponse(code="bad_request", message=f"Update failed: {e}").model_dump(),
         )
-    cursor = db.execute(f"SELECT * FROM {valid_table} WHERE id = ?", (id,))
-    row = cursor.fetchone()
-    if not row:
+    if not changed:
         raise HTTPException(
             status_code=404,
             detail=ErrorResponse(code="not_found", message="Row not found").model_dump(),
         )
-    columns = [desc[0] for desc in cursor.description]
-    return deserialize_row(dict(zip(columns, row)), col_types)
+    row = fetch_row(db, valid_table, key_column, id)
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorResponse(code="not_found", message="Row not found").model_dump(),
+        )
+    return deserialize_row(row, col_types)
 
 
 @router.delete("/{table}/{id}")
 async def delete_table_row(table: str, id: str, request: Request, db: Database = Depends(get_db)):
     require_scopes(_auth(request, db), {"write"})
     valid_table = validate_table(table, get_allowed_tables(db))
-    cursor = db.execute(f"SELECT id FROM {valid_table} WHERE id = ?", (id,))
-    if not cursor.fetchone():
+    key_column = _row_key(db, valid_table)
+    try:
+        deleted = delete_row(db, valid_table, key_column, id)
+    except DatabaseError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=ErrorResponse(code="bad_request", message=f"Delete failed: {e}").model_dump(),
+        )
+    if not deleted:
         raise HTTPException(
             status_code=404,
             detail=ErrorResponse(code="not_found", message="Row not found").model_dump(),
         )
-    db.execute(f"DELETE FROM {valid_table} WHERE id = ?", (id,))
+    record_event("info", f"Row deleted from {valid_table}")
     return {"message": "Row deleted"}

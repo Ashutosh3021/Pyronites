@@ -4,6 +4,17 @@ All notable changes to the **pyronites** client package are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/). Versioning follows [SemVer](https://semver.org/).
 
+## [1.4.0] — 2026-11-11
+
+### Added
+- `create_client(..., project_id=...)` and the `PYRONITES_PROJECT_ID` environment variable. When a project id is set, every table, storage and SQL call is rewritten to `/api/projects/{project_id}/...`, so a project-scoped API key can never reach another project's data.
+- `client.create_table(table, columns, primary_key)` and `client.drop_table(table)` — admin-scoped table management without reaching for private attributes.
+
+### Fixed
+- `update()` and `delete()` address a row by the table's **primary key**, which is not always named `id`. The key column is resolved from `/tables/{name}/schema` and the error message names the real key when the filter column does not match.
+- `update()` no longer writes the primary key column, so a patch can no longer change a row's identity.
+- `push()` resolves the row key the same way instead of assuming an `id` column.
+
 ## [1.2.1] — 2026-09-28
 
 ### Fixed

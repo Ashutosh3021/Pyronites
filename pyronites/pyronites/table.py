@@ -169,31 +169,97 @@ class TableQuery:
         )
         return result if isinstance(result, list) else []
 
-    def _execute_update(self) -> Dict[str, Any]:
-        if self._filter_column != "id" or self._filter_value is None:
+    def _row_key(self) -> str:
+        """
+        Resolve the column this row is addressed by.
+
+        The backend addresses rows by the table's primary key, which is not
+        necessarily a column named ``id``. The filter column must be that
+        key — filtering on any other column would silently delete the wrong
+        row, so it is rejected with a message naming the real key.
+        """
+        if self._filter_column is None or self._filter_value is None:
             raise ApiError(
-                'update() currently requires .eq("id", value) '
-                "because the backend only supports update-by-id."
+                'update() requires .eq("id", value) — or .eq("<primary key>", value) '
+                "when the table uses a different key column."
             )
-        assert self._update_data is not None
+
+        column = self._filter_column
+        if column.lower() == "id":
+            return column
+        try:
+            primary = self._http.primary_key(self._name)
+        except ApiError:
+            primary = None
+        if primary and column == primary:
+            return column
+        if primary:
+            raise ApiError(
+                f'{self._name!r} is addressed by its primary key {primary!r}. '
+                f'Use .eq("{primary}", value) instead of .eq("{column}", value).'
+            )
+        raise ApiError(
+            f'Could not resolve the primary key of {self._name!r}. '
+            f'Use .eq("id", value) if the table has an "id" column.'
+        )
+
+    def _execute_update(self) -> Dict[str, Any]:
+        if self._filter_column is None or self._filter_value is None:
+            raise ApiError(
+                'update() requires .eq("id", value) — or .eq("<primary key>", value) '
+                "when the table uses a different key column."
+            )
         row_id = self._filter_value
 
         if self._policy == POLICY_LOCAL:
+            if self._filter_column.lower() != "id":
+                raise ApiError(
+                    'Local-only tables are keyed by "id". '
+                    'Use .eq("id", value) for local and cached tables.'
+                )
             return self._require_local().update(self._name, row_id, self._update_data)
 
+        key_column = self._row_key()
+        assert self._update_data is not None
+        payload = {
+            k: v for k, v in self._update_data.items() if k != key_column
+        }
         result = self._http.request(
-            "PATCH", f"/tables/{self._name}/{row_id}", json=self._update_data,
+            "PATCH", f"/tables/{self._name}/{row_id}", json=payload,
         )  # type: ignore[return-value]
         if self._policy == POLICY_CACHE and self._local is not None and isinstance(result, dict):
             self._local.insert(self._name, result)
         return result
 
     def _execute_delete(self) -> Any:
-        if self._filter_column != "id" or self._filter_value is None:
+        if self._filter_column is None or self._filter_value is None:
             raise ApiError(
-                'delete() currently requires .eq("id", value) '
-                "because the backend only supports delete-by-id."
+                'update()/delete() require .eq("id", value) — or '
+                '.eq("<primary key>", value) when the table uses a different key column.'
             )
+
+        row_id = self._filter_value
+
+        if self._policy == POLICY_LOCAL:
+            if self._filter_column.lower() != "id":
+                raise ApiError(
+                    'Local-only tables are keyed by "id". '
+                    'Use .eq("id", value) for local and cached tables.'
+                )
+            return self._require_local().delete(self._name, row_id)
+
+        self._row_key()
+        result = self._http.request("DELETE", f"/tables/{self._name}/{row_id}")
+        if self._policy == POLICY_CACHE and self._local is not None:
+            try:
+                self._local.delete(self._name, row_id)
+            except ApiError:
+                pass
+        return result
+
+
+    def _execute_delete(self) -> Any:
+        key_column = self._row_key()
         row_id = self._filter_value
 
         if self._policy == POLICY_LOCAL:

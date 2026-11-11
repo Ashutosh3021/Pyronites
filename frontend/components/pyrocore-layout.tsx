@@ -15,6 +15,7 @@ import {
   Menu,
   X,
   LogOut,
+  Plug,
 } from 'lucide-react'
 import { ProjectSwitcher } from '@/components/project-switcher'
 import { CoreMark } from '@/components/brand'
@@ -39,6 +40,7 @@ const navItems = [
   { href: '/sql-editor', icon: Code, label: 'SQL editor' },
   { href: '/auth', icon: Users, label: 'Authentication' },
   { href: '/api-keys', icon: Key, label: 'API keys' },
+  { href: '/connect', icon: Plug, label: 'Connect' },
   { href: '/storage', icon: FileText, label: 'Storage' },
   { href: '/analytics', icon: TrendingUp, label: 'Analytics' },
   { href: '/logs', icon: BarChart3, label: 'Logs' },
