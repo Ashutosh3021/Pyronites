@@ -102,7 +102,7 @@ function SelectContent({
           )}
           {...props}
         >
-          <BaseSelect.List className="max-h-72 overflow-y-auto p-1">{children}</BaseSelect.List>
+          <BaseSelect.List data-lenis-prevent className="max-h-72 overflow-y-auto p-1">{children}</BaseSelect.List>
         </BaseSelect.Popup>
       </BaseSelect.Positioner>
     </BaseSelect.Portal>

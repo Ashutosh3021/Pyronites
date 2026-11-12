@@ -53,6 +53,7 @@ function DialogContent({
         )}
       />
       <BaseDialog.Popup
+        data-lenis-prevent
         className={cn(
           "fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2",
           "max-h-[90vh] overflow-y-auto border border-seam bg-popover p-6",

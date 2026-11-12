@@ -261,7 +261,7 @@ export default function DatabaseExplorerPage() {
           ].join(' ')}
         >
           <p className="label mb-3">Tables</p>
-          <div className="space-y-0.5 flex-1 overflow-auto">
+          <div className="space-y-0.5 flex-1 overflow-auto" data-lenis-prevent>
             {tables.length === 0 && !loading && (
               <EmptyState
                 compact
@@ -338,7 +338,7 @@ export default function DatabaseExplorerPage() {
             </div>
           </div>
 
-          <div className="plate overflow-auto">
+          <div className="plate overflow-auto" data-lenis-prevent>
             {!activeTable ? (
               <EmptyState
                 icon={Database}

@@ -106,7 +106,7 @@ export default function LogsPage() {
       <div className="mt-6 space-y-4 lg:space-y-6">
         <Card>
           <CardContent className="p-3 lg:p-4 flex flex-col sm:flex-row gap-3">
-            <div className="flex gap-1.5 overflow-x-auto flex-shrink-0 pb-0.5 sm:pb-0" role="group" aria-label="Filter by level">
+            <div className="flex gap-1.5 overflow-x-auto flex-shrink-0 pb-0.5 sm:pb-0" data-lenis-prevent role="group" aria-label="Filter by level">
               {['all', 'info', 'warning', 'error', 'success'].map((level) => (
                 <Button
                   key={level}

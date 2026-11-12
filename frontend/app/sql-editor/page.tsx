@@ -166,6 +166,7 @@ export default function SQLEditorPage() {
                   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleRun()
                 }}
                 aria-label="SQL query"
+                data-lenis-prevent
                 className="flex-1 px-4 py-4 bg-transparent text-ink font-mono text-[13px] leading-6 resize-none focus:outline-none"
                 spellCheck={false}
               />
@@ -211,7 +212,7 @@ export default function SQLEditorPage() {
                     </span>
                   </div>
                   {result.columns.length > 0 ? (
-                    <div className="overflow-auto" style={{ maxHeight: '40vh' }}>
+                    <div className="overflow-auto" data-lenis-prevent style={{ maxHeight: '40vh' }}>
                       <table className="min-w-full border-collapse">
                         <thead className="bg-plate-raised/60 sticky top-0">
                           <tr>

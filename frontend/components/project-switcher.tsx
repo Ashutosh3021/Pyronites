@@ -98,6 +98,7 @@ export function ProjectSwitcher() {
           <div
             role="listbox"
             aria-label="Projects"
+            data-lenis-prevent
             className="absolute left-0 right-0 top-full mt-1 z-50 bg-popover border border-seam max-h-64 overflow-auto"
           >
             {projects.length === 0 ? (

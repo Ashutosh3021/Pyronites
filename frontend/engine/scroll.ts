@@ -24,6 +24,11 @@ export function initScroll() {
     wheelMultiplier: 1,
     touchMultiplier: 1.2,
     anchors: true,
+    // Lenis owns every wheel/touch gesture on the document and, by default,
+    // scrolls the page with it — which leaves a dropdown, a select list or a
+    // dialog body unable to scroll its own overflow. Nested scroll lets the
+    // engine defer to whatever scrollable element is under the pointer.
+    allowNestedScroll: true,
   });
   lenis.on('scroll', (l: Lenis) => {
     state.y = l.scroll;
